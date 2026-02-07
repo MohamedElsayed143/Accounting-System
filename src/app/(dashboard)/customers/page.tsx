@@ -66,7 +66,7 @@ export default function CustomersPage() {
 
   const filterOptions = [
     {
-      label: "Country",
+      label: "الدولة",
       value: "country",
       options: uniqueCountries.map((country) => ({
         label: country,
@@ -127,33 +127,35 @@ export default function CustomersPage() {
   };
 
   const handleDelete = (id: string) => {
-    setCustomers((prev) => prev.filter((c) => c.id !== id));
+    if (confirm("هل أنت متأكد من حذف هذا العميل؟")) {
+      setCustomers((prev) => prev.filter((c) => c.id !== id));
+    }
   };
 
   return (
     <>
-      <Navbar title="Customers" />
+      <Navbar title="العملاء" />
       <div className="flex-1 space-y-6 p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-2xl font-bold tracking-tight">
-              Customer Management
+            <h2 className="text-2xl font-bold tracking-tight bg-gradient-to-l from-foreground to-foreground/70 bg-clip-text text-transparent">
+              إدارة العملاء
             </h2>
-            <p className="text-muted-foreground">
-              Manage your customers and their information
+            <p className="text-muted-foreground font-medium">
+              إدارة عملائك ومعلوماتهم
             </p>
           </div>
-          <Button onClick={openCreateModal}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Customer
+          <Button onClick={openCreateModal} className="gap-2 shadow-md hover:shadow-lg transition-all">
+            <Plus className="h-4 w-4" />
+            <span className="font-medium">إضافة عميل</span>
           </Button>
         </div>
 
-        <Card>
+        <Card className="shadow-sm">
           <CardContent className="p-6">
             <div className="space-y-4">
               <DataTableToolbar
-                searchPlaceholder="Search customers..."
+                searchPlaceholder="ابحث عن عميل..."
                 searchValue={searchQuery}
                 onSearchChange={(value) => {
                   setSearchQuery(value);
@@ -166,70 +168,82 @@ export default function CustomersPage() {
 
               {paginatedCustomers.length > 0 ? (
                 <>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Name</TableHead>
-                        <TableHead>Contact</TableHead>
-                        <TableHead>Location</TableHead>
-                        <TableHead>Total Purchases</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {paginatedCustomers.map((customer) => (
-                        <TableRow key={customer.id}>
-                          <TableCell>
-                            <div className="font-medium">{customer.name}</div>
-                            {customer.taxId && (
-                              <div className="text-xs text-muted-foreground">
-                                Tax ID: {customer.taxId}
-                              </div>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex flex-col gap-1">
-                              <div className="flex items-center gap-1 text-sm">
-                                <Mail className="h-3 w-3 text-muted-foreground" />
-                                {customer.email}
-                              </div>
-                              <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                                <Phone className="h-3 w-3" />
-                                {customer.phone}
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-1">
-                              <MapPin className="h-3 w-3 text-muted-foreground" />
-                              {customer.city}, {customer.country}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            ${customer.totalPurchases.toLocaleString()}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex justify-end gap-2">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => openEditModal(customer)}
-                              >
-                                <Pencil className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleDelete(customer.id)}
-                              >
-                                <Trash2 className="h-4 w-4 text-destructive" />
-                              </Button>
-                            </div>
-                          </TableCell>
+                  <div className="rounded-lg border overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-muted/50 hover:bg-muted/50">
+                          <TableHead className="font-bold text-right">الاسم</TableHead>
+                          <TableHead className="font-bold text-right">معلومات الاتصال</TableHead>
+                          <TableHead className="font-bold text-right">الموقع</TableHead>
+                          <TableHead className="font-bold text-right">إجمالي المشتريات</TableHead>
+                          <TableHead className="font-bold text-left">الإجراءات</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {paginatedCustomers.map((customer, index) => (
+                          <TableRow 
+                            key={customer.id}
+                            className={index % 2 === 0 ? "bg-muted/20 hover:bg-muted/40" : "hover:bg-muted/20"}
+                          >
+                            <TableCell>
+                              <div className="font-bold text-primary">{customer.name}</div>
+                              {customer.taxId && (
+                                <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                                  <span className="font-medium">الرقم الضريبي:</span>
+                                  <span>{customer.taxId}</span>
+                                </div>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex flex-col gap-2">
+                                <div className="flex items-center gap-2 text-sm">
+                                  <Mail className="h-3.5 w-3.5 text-primary" />
+                                  <span className="font-medium">{customer.email}</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                  <Phone className="h-3.5 w-3.5" />
+                                  <span>{customer.phone}</span>
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <MapPin className="h-3.5 w-3.5 text-primary" />
+                                <span className="font-medium">{customer.city}, {customer.country}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <span className="font-bold text-lg">
+                                {customer.totalPurchases.toLocaleString('ar-SA')} ر.س
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-left">
+                              <div className="flex justify-start gap-2">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => openEditModal(customer)}
+                                  className="hover:bg-primary/10 transition-all"
+                                  title="تعديل"
+                                >
+                                  <Pencil className="h-4 w-4 text-primary" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleDelete(customer.id)}
+                                  className="hover:bg-destructive/10 transition-all"
+                                  title="حذف"
+                                >
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
 
                   <PaginationControls
                     currentPage={currentPage}
@@ -241,10 +255,10 @@ export default function CustomersPage() {
                 </>
               ) : (
                 <EmptyState
-                  title="No customers found"
-                  description="Try adjusting your search or filters to find what you're looking for."
+                  title="لم يتم العثور على عملاء"
+                  description="حاول تعديل البحث أو الفلاتر، أو قم بإضافة عميل جديد."
                   action={{
-                    label: "Add Customer",
+                    label: "إضافة عميل",
                     onClick: openCreateModal,
                   }}
                 />
@@ -256,30 +270,31 @@ export default function CustomersPage() {
         <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
           <DialogContent className="sm:max-w-[500px]">
             <DialogHeader>
-              <DialogTitle>
-                {editingCustomer ? "Edit Customer" : "Add New Customer"}
+              <DialogTitle className="text-xl font-bold">
+                {editingCustomer ? "تعديل العميل" : "إضافة عميل جديد"}
               </DialogTitle>
               <DialogDescription>
                 {editingCustomer
-                  ? "Update the customer information below."
-                  : "Fill in the details to create a new customer."}
+                  ? "قم بتحديث معلومات العميل أدناه."
+                  : "املأ التفاصيل لإنشاء عميل جديد."}
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
               <div className="grid gap-2">
-                <Label htmlFor="name">Name</Label>
+                <Label htmlFor="name" className="font-bold">الاسم</Label>
                 <Input
                   id="name"
                   value={formData.name || ""}
                   onChange={(e) =>
                     setFormData((prev) => ({ ...prev, name: e.target.value }))
                   }
-                  placeholder="Company Name"
+                  placeholder="اسم الشركة"
+                  dir="rtl"
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
-                  <Label htmlFor="email">Email</Label>
+                  <Label htmlFor="email" className="font-bold">البريد الإلكتروني</Label>
                   <Input
                     id="email"
                     type="email"
@@ -288,45 +303,49 @@ export default function CustomersPage() {
                       setFormData((prev) => ({ ...prev, email: e.target.value }))
                     }
                     placeholder="email@example.com"
+                    dir="ltr"
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="phone">Phone</Label>
+                  <Label htmlFor="phone" className="font-bold">رقم الهاتف</Label>
                   <Input
                     id="phone"
                     value={formData.phone || ""}
                     onChange={(e) =>
                       setFormData((prev) => ({ ...prev, phone: e.target.value }))
                     }
-                    placeholder="+1 (555) 000-0000"
+                    placeholder="+966 50 000 0000"
+                    dir="ltr"
                   />
                 </div>
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="address">Address</Label>
+                <Label htmlFor="address" className="font-bold">العنوان</Label>
                 <Input
                   id="address"
                   value={formData.address || ""}
                   onChange={(e) =>
                     setFormData((prev) => ({ ...prev, address: e.target.value }))
                   }
-                  placeholder="Street address"
+                  placeholder="عنوان الشارع"
+                  dir="rtl"
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
-                  <Label htmlFor="city">City</Label>
+                  <Label htmlFor="city" className="font-bold">المدينة</Label>
                   <Input
                     id="city"
                     value={formData.city || ""}
                     onChange={(e) =>
                       setFormData((prev) => ({ ...prev, city: e.target.value }))
                     }
-                    placeholder="City"
+                    placeholder="المدينة"
+                    dir="rtl"
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="country">Country</Label>
+                  <Label htmlFor="country" className="font-bold">الدولة</Label>
                   <Input
                     id="country"
                     value={formData.country || ""}
@@ -336,28 +355,30 @@ export default function CustomersPage() {
                         country: e.target.value,
                       }))
                     }
-                    placeholder="Country"
+                    placeholder="الدولة"
+                    dir="rtl"
                   />
                 </div>
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="taxId">Tax ID (Optional)</Label>
+                <Label htmlFor="taxId" className="font-bold">الرقم الضريبي (اختياري)</Label>
                 <Input
                   id="taxId"
                   value={formData.taxId || ""}
                   onChange={(e) =>
                     setFormData((prev) => ({ ...prev, taxId: e.target.value }))
                   }
-                  placeholder="Tax ID"
+                  placeholder="الرقم الضريبي"
+                  dir="ltr"
                 />
               </div>
             </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsModalOpen(false)}>
-                Cancel
+            <DialogFooter className="gap-2">
+              <Button variant="outline" onClick={() => setIsModalOpen(false)} className="font-medium">
+                إلغاء
               </Button>
-              <Button onClick={handleSave}>
-                {editingCustomer ? "Save Changes" : "Add Customer"}
+              <Button onClick={handleSave} className="font-medium">
+                {editingCustomer ? "حفظ التغييرات" : "إضافة عميل"}
               </Button>
             </DialogFooter>
           </DialogContent>

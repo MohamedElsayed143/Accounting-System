@@ -32,7 +32,7 @@ interface DataTableToolbarProps {
 }
 
 export function DataTableToolbar({
-  searchPlaceholder = "Search...",
+  searchPlaceholder = "ابحث...",
   searchValue,
   onSearchChange,
   filterOptions = [],
@@ -52,13 +52,14 @@ export function DataTableToolbar({
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="relative flex-1 max-w-sm">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           type="search"
           placeholder={searchPlaceholder}
           value={searchValue}
           onChange={(e) => onSearchChange(e.target.value)}
-          className="h-10 pl-9 bg-background"
+          className="h-10 pr-9 pl-4 bg-background focus-visible:ring-2 focus-visible:ring-primary/50 transition-all"
+          dir="rtl"
         />
       </div>
 
@@ -66,37 +67,41 @@ export function DataTableToolbar({
         {filterOptions.length > 0 && (
           <Popover open={isFilterOpen} onOpenChange={setIsFilterOpen}>
             <PopoverTrigger asChild>
-              <Button variant="outline" size="sm" className="h-10">
-                <Filter className="mr-2 h-4 w-4" />
-                Filters
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="h-10 gap-2 hover:bg-primary/10 transition-all"
+              >
+                <Filter className="h-4 w-4" />
+                <span className="font-medium">التصفية</span>
                 {activeFilterCount > 0 && (
                   <Badge
                     variant="secondary"
-                    className="ml-2 h-5 w-5 rounded-full p-0 flex items-center justify-center"
+                    className="h-5 w-5 rounded-full p-0 flex items-center justify-center bg-primary text-primary-foreground font-bold text-xs"
                   >
                     {activeFilterCount}
                   </Badge>
                 )}
               </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-72" align="end">
+            <PopoverContent className="w-72" align="end" dir="rtl">
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-medium text-sm">Filters</h4>
+                <div className="flex items-center justify-between border-b pb-3">
+                  <h4 className="font-bold text-sm">خيارات التصفية</h4>
                   {activeFilterCount > 0 && (
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-8 px-2 text-xs"
+                      className="h-8 px-3 text-xs hover:bg-destructive/10 hover:text-destructive transition-all"
                       onClick={clearFilters}
                     >
-                      Clear all
+                      مسح الكل
                     </Button>
                   )}
                 </div>
                 {filterOptions.map((filter) => (
                   <div key={filter.value} className="space-y-2">
-                    <label className="text-sm text-muted-foreground">
+                    <label className="text-sm text-muted-foreground font-medium">
                       {filter.label}
                     </label>
                     <Select
@@ -104,9 +109,10 @@ export function DataTableToolbar({
                       onValueChange={(value) =>
                         onFilterChange?.(filter.value, value || undefined)
                       }
+                      dir="rtl"
                     >
-                      <SelectTrigger className="h-9">
-                        <SelectValue placeholder={`Select ${filter.label}`} />
+                      <SelectTrigger className="h-9 hover:bg-muted/50 transition-all">
+                        <SelectValue placeholder={`اختر ${filter.label}`} />
                       </SelectTrigger>
                       <SelectContent>
                         {filter.options.map((option) => (
@@ -124,7 +130,7 @@ export function DataTableToolbar({
         )}
 
         {activeFilterCount > 0 && (
-          <div className="hidden sm:flex items-center gap-2">
+          <div className="hidden sm:flex items-center gap-2 flex-wrap">
             {Object.entries(activeFilters).map(([key, value]) => {
               if (!value) return null;
               const filterOption = filterOptions.find((f) => f.value === key);
@@ -135,13 +141,13 @@ export function DataTableToolbar({
                 <Badge
                   key={key}
                   variant="secondary"
-                  className="h-7 gap-1 pr-1"
+                  className="h-7 gap-2 pl-1 pr-3 bg-primary/10 text-primary hover:bg-primary/20 transition-all border border-primary/20 font-medium"
                 >
-                  {option?.label || value}
+                  <span>{option?.label || value}</span>
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-5 w-5 p-0 hover:bg-transparent"
+                    className="h-5 w-5 p-0 hover:bg-destructive/20 rounded-full transition-all"
                     onClick={() => onFilterChange?.(key, undefined)}
                   >
                     <X className="h-3 w-3" />

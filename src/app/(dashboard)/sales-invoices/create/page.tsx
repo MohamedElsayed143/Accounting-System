@@ -1,21 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Plus, Trash2 } from "lucide-react";
+import { ArrowRight, Plus, Trash2, UserPlus, Save, Calculator } from "lucide-react";
 import Link from "next/link";
+import { toast } from "sonner"; 
 import { Navbar } from "@/components/layout/navbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -25,27 +19,58 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
-import { customers } from "@/mock-data";
-import { InvoiceItem } from "@/types";
+
+// يتم استيراد البيانات، وفي حالة عدم وجود داتا بيز حالياً ستكون المصفوفة فارغة
+import { customers } from "@/mock-data"; 
+
+interface InvoiceItem {
+  id: string;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  taxRate: number; // خانة الضريبة المضافة لكل صنف
+  total: number;
+}
 
 export default function CreateSalesInvoicePage() {
   const router = useRouter();
-  const [customerId, setCustomerId] = useState("");
-  const [dueDate, setDueDate] = useState("");
+
+  // 1. حالات الحالة (States)
+  const [invoiceDate, setInvoiceDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [customerQuery, setCustomerQuery] = useState<string>(""); 
+  const [customerInfo, setCustomerInfo] = useState({ name: "لم يحدد", address: "غير معروف", phone: "-" });
   const [items, setItems] = useState<InvoiceItem[]>([
-    { id: "1", description: "", quantity: 1, unitPrice: 0, total: 0 },
+    { id: "1", description: "", quantity: 0, unitPrice: 0, taxRate: 14, total: 0 },
   ]);
 
+  // 2. منطق البحث عن العميل (بالكود أو الاسم)
+  useEffect(() => {
+    if (!customerQuery.trim()) {
+      setCustomerInfo({ name: "لم يحدد", address: "غير معروف", phone: "-" });
+      return;
+    }
+
+    const found = customers.find(c => 
+      c.id.toString() === customerQuery || 
+      c.name.includes(customerQuery)
+    );
+
+    if (found) {
+      setCustomerInfo({
+        name: found.name,
+        address: found.address || "غير محدد",
+        phone: found.phone || "غير محدد"
+      });
+    } else {
+      setCustomerInfo({ name: "عميل جديد / غير مسجل", address: "-", phone: "-" });
+    }
+  }, [customerQuery]);
+
+  // 3. إدارة العناصر
   const addItem = () => {
     setItems((prev) => [
       ...prev,
-      {
-        id: String(Date.now()),
-        description: "",
-        quantity: 1,
-        unitPrice: 0,
-        total: 0,
-      },
+      { id: String(Date.now()), description: "", quantity: 0, unitPrice: 0, taxRate: 0, total: 0 },
     ]);
   };
 
@@ -55,18 +80,22 @@ export default function CreateSalesInvoicePage() {
     }
   };
 
-  const updateItem = (
-    id: string,
-    field: keyof InvoiceItem,
-    value: string | number
-  ) => {
+  const updateItem = (id: string, field: keyof InvoiceItem, value: string | number) => {
     setItems((prev) =>
       prev.map((item) => {
         if (item.id === id) {
-          const updated = { ...item, [field]: value };
-          if (field === "quantity" || field === "unitPrice") {
-            updated.total = updated.quantity * updated.unitPrice;
+          // التأكد من أن القيم الرقمية لا تقل عن 0
+          let finalValue = value;
+          if (field === "quantity" || field === "unitPrice" || field === "taxRate") {
+            finalValue = Math.max(0, Number(value));
           }
+
+          const updated = { ...item, [field]: finalValue };
+          
+          const basePrice = Number(updated.quantity) * Number(updated.unitPrice);
+          const taxValue = basePrice * (Number(updated.taxRate) / 100);
+          updated.total = basePrice + taxValue;
+          
           return updated;
         }
         return item;
@@ -74,188 +103,222 @@ export default function CreateSalesInvoicePage() {
     );
   };
 
-  const subtotal = items.reduce((sum, item) => sum + item.total, 0);
-  const taxRate = 0.1;
-  const tax = subtotal * taxRate;
-  const total = subtotal + tax;
+  // 4. الحسابات الإجمالية للفاتورة
+  const subtotal = useMemo(() => items.reduce((sum, item) => sum + (Number(item.quantity) * Number(item.unitPrice)), 0), [items]);
+  const totalTax = useMemo(() => items.reduce((sum, item) => sum + (Number(item.quantity) * Number(item.unitPrice) * (Number(item.taxRate) / 100)), 0), [items]);
+  const grandTotal = subtotal + totalTax;
+
+  // دالة تفريغ الفاتورة (Reset)
+  const handleReset = () => {
+    setCustomerQuery("");
+    setCustomerInfo({ name: "لم يحدد", address: "غير معروف", phone: "-" });
+    setInvoiceDate(new Date().toISOString().split('T')[0]);
+    setItems([{ id: "1", description: "", quantity: 0, unitPrice: 0, taxRate: 0, total: 0 }]);
+    toast.info("تم إلغاء الفاتورة وتفريغ البيانات");
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (grandTotal === 0) {
+      toast.error("لا يمكن حفظ فاتورة فارغة");
+      return;
+    }
+    toast.success("تم حفظ فاتورة البيع بنجاح");
     router.push("/sales-invoices");
   };
 
   return (
     <>
-      <Navbar title="Create Sales Invoice" />
-      <div className="flex-1 space-y-6 p-6">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" asChild>
-            <Link href="/sales-invoices">
-              <ArrowLeft className="h-4 w-4" />
-            </Link>
-          </Button>
-          <div>
-            <h2 className="text-2xl font-bold tracking-tight">
-              Create Sales Invoice
-            </h2>
-            <p className="text-muted-foreground">
-              Fill in the details to create a new sales invoice
-            </p>
+      <Navbar title="فاتورة مبيعات جديدة" />
+      <div className="flex-1 space-y-6 p-6 bg-slate-50/50 min-h-screen" dir="rtl">
+        
+        {/* Header */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <Button variant="outline" size="icon" asChild className="rounded-full shadow-sm">
+              <Link href="/sales-invoices"><ArrowRight className="h-4 w-4" /></Link>
+            </Button>
+            <div>
+              <h2 className="text-3xl font-black text-slate-800 tracking-tight">إنشاء فاتورة مبيعات</h2>
+              <p className="text-muted-foreground font-medium">نظام إدارة مبيعات مصنع الطوب</p>
+            </div>
           </div>
+          <Button variant="outline" className="gap-2 border-primary text-primary hover:bg-primary/5 shadow-sm" asChild>
+            <Link href="/customers/new"><UserPlus className="h-4 w-4" /> تعريف عميل جديد</Link>
+          </Button>
         </div>
 
-        <form onSubmit={handleSubmit}>
-          <div className="grid gap-6 lg:grid-cols-3">
-            <div className="lg:col-span-2 space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Customer Details</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="customer">Customer</Label>
-                      <Select value={customerId} onValueChange={setCustomerId}>
-                        <SelectTrigger id="customer">
-                          <SelectValue placeholder="Select customer" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {customers.map((customer) => (
-                            <SelectItem key={customer.id} value={customer.id}>
-                              {customer.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="dueDate">Due Date</Label>
-                      <Input
-                        id="dueDate"
-                        type="date"
-                        value={dueDate}
-                        onChange={(e) => setDueDate(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+        <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-4">
+          
+          <div className="lg:col-span-3 space-y-6">
+            {/* Customer Details */}
+            <Card className="border-none shadow-sm overflow-hidden">
+              <CardHeader className="bg-white border-b py-4">
+                <CardTitle className="text-base font-bold flex items-center gap-2">
+                  <div className="w-2 h-6 bg-primary rounded-full" /> بيانات العميل الأساسية
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="grid gap-6 md:grid-cols-4 pt-6 bg-white">
+                <div className="space-y-2 md:col-span-1">
+                  <Label className="text-slate-600 font-semibold">بحث (كود / اسم)</Label>
+                  <Input 
+                    placeholder="اكتب الكود أو الاسم..."
+                    value={customerQuery}
+                    onChange={(e) => setCustomerQuery(e.target.value)}
+                    className="bg-slate-50 border-slate-200 focus:ring-primary"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-slate-600">اسم العميل</Label>
+                  <Input value={customerInfo.name} disabled className="bg-muted/30 font-bold" />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-slate-600">رقم الهاتف</Label>
+                  <Input value={customerInfo.phone} disabled className="bg-muted/30" />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-slate-600">تاريخ الفاتورة</Label>
+                  <Input 
+                    type="date" 
+                    value={invoiceDate} 
+                    onChange={(e) => setInvoiceDate(e.target.value)}
+                    className="bg-slate-50 border-slate-200"
+                  />
+                </div>
+              </CardContent>
+            </Card>
 
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between">
-                  <CardTitle>Invoice Items</CardTitle>
-                  <Button type="button" variant="outline" size="sm" onClick={addItem}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add Item
-                  </Button>
-                </CardHeader>
-                <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-[40%]">Description</TableHead>
-                        <TableHead>Quantity</TableHead>
-                        <TableHead>Unit Price</TableHead>
-                        <TableHead>Total</TableHead>
-                        <TableHead className="w-[50px]"></TableHead>
+            {/* Items Table */}
+            <Card className="border-none shadow-sm overflow-hidden">
+              <CardHeader className="flex flex-row items-center justify-between bg-white border-b py-4">
+                <CardTitle className="text-base font-bold flex items-center gap-2">
+                  <div className="w-2 h-6 bg-orange-500 rounded-full" /> تفاصيل الأصناف والضريبة
+                </CardTitle>
+                <Button type="button" onClick={addItem} size="sm" className="bg-orange-600 hover:bg-orange-700 gap-2 shadow-md">
+                  <Plus className="h-4 w-4" /> إضافة صنف
+                </Button>
+              </CardHeader>
+              <CardContent className="p-0 bg-white">
+                <Table>
+                  <TableHeader className="bg-slate-50">
+                    <TableRow>
+                      <TableHead className="text-right font-bold text-slate-700">الصنف</TableHead>
+                      <TableHead className="text-right font-bold text-slate-700 w-24">الكمية</TableHead>
+                      <TableHead className="text-right font-bold text-slate-700 w-28">السعر</TableHead>
+                      <TableHead className="text-right font-bold text-slate-700 w-24">الضريبة %</TableHead>
+                      <TableHead className="text-right font-bold text-slate-700 w-32">الإجمالي</TableHead>
+                      <TableHead className="w-12"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {items.map((item) => (
+                      <TableRow key={item.id} className="hover:bg-slate-50/50 transition-colors">
+                        <TableCell>
+                          <Input
+                            placeholder="مثال: طوب أحمر مفرغ"
+                            value={item.description}
+                            onChange={(e) => updateItem(item.id, "description", e.target.value)}
+                            className="border-none focus-visible:ring-1 shadow-none bg-transparent"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            value={item.quantity}
+                            onChange={(e) => updateItem(item.id, "quantity", Number(e.target.value))}
+                            className="bg-slate-50 border-slate-200"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            value={item.unitPrice}
+                            onChange={(e) => updateItem(item.id, "unitPrice", Number(e.target.value))}
+                            className="bg-slate-50 border-slate-200"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            value={item.taxRate}
+                            onChange={(e) => updateItem(item.id, "taxRate", Number(e.target.value))}
+                            className="bg-orange-50 border-orange-200 text-orange-700 font-bold"
+                          />
+                        </TableCell>
+                        <TableCell className="font-bold text-primary">
+                          {item.total.toLocaleString()} ج.م
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removeItem(item.id)}
+                            disabled={items.length === 1}
+                            className="text-red-400 hover:text-red-600 hover:bg-red-50"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
                       </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {items.map((item) => (
-                        <TableRow key={item.id}>
-                          <TableCell>
-                            <Input
-                              placeholder="Item description"
-                              value={item.description}
-                              onChange={(e) =>
-                                updateItem(item.id, "description", e.target.value)
-                              }
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              type="number"
-                              min="1"
-                              value={item.quantity}
-                              onChange={(e) =>
-                                updateItem(
-                                  item.id,
-                                  "quantity",
-                                  parseInt(e.target.value) || 0
-                                )
-                              }
-                              className="w-20"
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={item.unitPrice}
-                              onChange={(e) =>
-                                updateItem(
-                                  item.id,
-                                  "unitPrice",
-                                  parseFloat(e.target.value) || 0
-                                )
-                              }
-                              className="w-28"
-                            />
-                          </TableCell>
-                          <TableCell className="font-medium">
-                            ${item.total.toFixed(2)}
-                          </TableCell>
-                          <TableCell>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => removeItem(item.id)}
-                              disabled={items.length === 1}
-                            >
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-            </div>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </div>
 
-            <div className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Summary</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Subtotal</span>
-                    <span>${subtotal.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Tax (10%)</span>
-                    <span>${tax.toFixed(2)}</span>
-                  </div>
-                  <Separator />
-                  <div className="flex justify-between font-medium">
-                    <span>Total</span>
-                    <span className="text-lg">${total.toFixed(2)}</span>
-                  </div>
-                </CardContent>
-              </Card>
+          {/* Summary Sidebar */}
+          <div className="space-y-6">
+            <Card className="border-none shadow-xl bg-slate-900 text-white overflow-hidden">
+              <CardHeader className="border-b border-white/10 py-4">
+                <CardTitle className="text-lg flex items-center gap-2 font-bold">
+                  <Calculator className="h-5 w-5 text-orange-400" /> ملخص الفاتورة
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-6 space-y-4">
+                <div className="flex justify-between items-center text-slate-400">
+                  <span className="text-sm">الإجمالي (قبل الضريبة):</span>
+                  <span className="font-mono text-white">{subtotal.toLocaleString()} ج.م</span>
+                </div>
+                <div className="flex justify-between items-center text-slate-400">
+                  <span className="text-sm">إجمالي الضرائب:</span>
+                  <span className="font-mono text-orange-400">+{totalTax.toLocaleString()} ج.م</span>
+                </div>
+                <Separator className="bg-white/10" />
+                <div className="flex flex-col gap-1 pt-2">
+                  <span className="text-xs text-slate-400 font-medium">صافي المطلوب سداده:</span>
+                  <span className="text-3xl font-black text-green-400 leading-none">
+                    {grandTotal.toLocaleString()} <span className="text-sm">ج.م</span>
+                  </span>
+                </div>
 
-              <div className="flex flex-col gap-3">
-                <Button type="submit" className="w-full">
-                  Create Invoice
-                </Button>
-                <Button type="button" variant="outline" className="w-full" asChild>
-                  <Link href="/sales-invoices">Cancel</Link>
-                </Button>
-              </div>
-            </div>
+                {/* أزرار التحكم */}
+                <div className="space-y-3 pt-6">
+                  <Button 
+                    type="submit" 
+                    className="w-full bg-green-600 hover:bg-green-700 text-white shadow-lg gap-2 font-bold py-6 text-lg transition-all active:scale-95"
+                  >
+                    <Save className="h-5 w-5" /> حفظ الفاتورة
+                  </Button>
+                  
+                  <Button 
+                    type="button" 
+                    onClick={handleReset}
+                    variant="ghost"
+                    className="w-full text-slate-400 hover:text-red-400 hover:bg-red-400/10 gap-2 font-medium transition-colors"
+                  >
+                    <Trash2 className="h-4 w-4" /> إلغاء وتفريغ الفاتورة
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-none shadow-sm bg-white p-4">
+              <p className="text-xs text-muted-foreground text-center italic leading-relaxed">
+                * جميع الحسابات تتم تلقائياً بناءً على الكمية وسعر الوحدة المضاف لكل صنف.
+              </p>
+            </Card>
           </div>
         </form>
       </div>
