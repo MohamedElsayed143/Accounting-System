@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { Plus, Pencil, Trash2, Mail, Phone, MapPin } from "lucide-react";
+import { useState, useMemo, useEffect } from "react";
+import { Plus, Pencil, Trash2, Phone, MapPin, Hash, User, Search, UserPlus, Edit3, AlertTriangle } from "lucide-react";
 import { Navbar } from "@/components/layout/navbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -21,6 +21,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -28,361 +38,485 @@ import {
   EmptyState,
   PaginationControls,
 } from "@/components/shared";
-import { customers as initialCustomers } from "@/mock-data";
-import { Customer } from "@/types";
+import { toast } from "sonner";
+
+/* ✅ استيراد الـ Server Actions */
+import {
+  getCustomers,
+  saveCustomer,
+  deleteCustomerAction,
+} from "./actions";
+
+interface Customer {
+  id: number;
+  name: string;
+  code: number;
+  phone: string | null;
+  address: string | null;
+}
 
 const ITEMS_PER_PAGE = 8;
 
 export default function CustomersPage() {
-  const [customers, setCustomers] = useState<Customer[]>(initialCustomers);
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [filters, setFilters] = useState<Record<string, string>>({});
   const [currentPage, setCurrentPage] = useState(1);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
-  const [formData, setFormData] = useState<Partial<Customer>>({});
+  const [deleteCustomer, setDeleteCustomer] = useState<Customer | null>(null);
+
+  const [formData, setFormData] = useState({
+    code: 0,
+    name: "",
+    phone: "",
+    address: "",
+  });
+
+  const [codeError, setCodeError] = useState<string>("");
+
+  /* =========================
+     ✅ تحميل العملاء من DB
+  ========================= */
+  const loadCustomers = async () => {
+    const data = await getCustomers();
+    setCustomers(data);
+  };
+
+  useEffect(() => {
+    loadCustomers();
+  }, []);
+
+  /* ========================= */
+
+  const generateNextCode = () => {
+    if (customers.length === 0) return 1;
+    const maxCode = Math.max(...customers.map((c) => c.code));
+    return maxCode + 1;
+  };
 
   const filteredCustomers = useMemo(() => {
-    return customers.filter((customer) => {
-      const matchesSearch =
+    return customers.filter(
+      (customer) =>
         customer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        customer.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        customer.city.toLowerCase().includes(searchQuery.toLowerCase());
-
-      const matchesCountry =
-        !filters.country || customer.country === filters.country;
-
-      return matchesSearch && matchesCountry;
-    });
-  }, [customers, searchQuery, filters]);
+        customer.code.toString().includes(searchQuery)
+    );
+  }, [customers, searchQuery]);
 
   const totalPages = Math.ceil(filteredCustomers.length / ITEMS_PER_PAGE);
+
   const paginatedCustomers = filteredCustomers.slice(
     (currentPage - 1) * ITEMS_PER_PAGE,
     currentPage * ITEMS_PER_PAGE
   );
 
-  const uniqueCountries = [...new Set(customers.map((c) => c.country))];
-
-  const filterOptions = [
-    {
-      label: "الدولة",
-      value: "country",
-      options: uniqueCountries.map((country) => ({
-        label: country,
-        value: country,
-      })),
-    },
-  ];
-
-  const handleFilterChange = (key: string, value: string | undefined) => {
-    setFilters((prev) => {
-      const newFilters = { ...prev };
-      if (value) {
-        newFilters[key] = value;
-      } else {
-        delete newFilters[key];
-      }
-      return newFilters;
-    });
-    setCurrentPage(1);
-  };
-
+  /* =========================
+     فتح المودال
+  ========================= */
   const openCreateModal = () => {
     setEditingCustomer(null);
-    setFormData({});
+    setFormData({
+      code: generateNextCode(),
+      name: "",
+      phone: "",
+      address: "",
+    });
+    setCodeError("");
     setIsModalOpen(true);
   };
 
   const openEditModal = (customer: Customer) => {
     setEditingCustomer(customer);
-    setFormData(customer);
+    setFormData({
+      code: customer.code,
+      name: customer.name,
+      phone: customer.phone || "",
+      address: customer.address || "",
+    });
+    setCodeError("");
     setIsModalOpen(true);
   };
 
-  const handleSave = () => {
-    if (editingCustomer) {
-      setCustomers((prev) =>
-        prev.map((c) =>
-          c.id === editingCustomer.id ? { ...c, ...formData } : c
-        )
+  /* =========================
+     ✅ الحفظ في DB مع معالجة الأخطاء
+  ========================= */
+  const handleSave = async () => {
+    try {
+      if (!formData.name || !formData.code) {
+        toast.error("الاسم والكود مطلوبان", {
+          description: "يرجى ملء جميع الحقول المطلوبة قبل الحفظ",
+          duration: 4000,
+        });
+        return;
+      }
+
+      // ✅ فحص الكود المكرر محلياً
+      const codeExists = customers.some(
+        (customer) =>
+          customer.code === Number(formData.code) &&
+          customer.id !== editingCustomer?.id
       );
-    } else {
-      const newCustomer: Customer = {
-        id: `cust-${Date.now()}`,
-        name: formData.name || "",
-        email: formData.email || "",
-        phone: formData.phone || "",
-        address: formData.address || "",
-        city: formData.city || "",
-        country: formData.country || "",
-        taxId: formData.taxId,
-        totalPurchases: 0,
-        createdAt: new Date().toISOString().split("T")[0],
-      };
-      setCustomers((prev) => [newCustomer, ...prev]);
+
+      if (codeExists) {
+        setCodeError(`الكود ${formData.code} مستخدم بالفعل، يرجى اختيار كود مختلف.`);
+        return;
+      }
+
+      await saveCustomer({
+        id: editingCustomer?.id,
+        name: formData.name,
+        code: Number(formData.code),
+        phone: formData.phone,
+        address: formData.address,
+      });
+
+      await loadCustomers();
+
+      toast.success(
+        editingCustomer ? "تم التحديث بنجاح" : "تمت الإضافة بنجاح",
+        {
+          description: editingCustomer
+            ? `تم تحديث بيانات ${formData.name} بنجاح`
+            : `تمت إضافة العميل ${formData.name} إلى قاعدة البيانات`,
+          duration: 3000,
+        }
+      );
+
+      setIsModalOpen(false);
+    } catch (err) {
+      // ✅ Server Actions بترمي objects مش Error instances عادية
+      const errorMessage =
+        err instanceof Error
+          ? err.message
+          : typeof err === "object" && err !== null && "message" in err
+          ? String((err as { message: unknown }).message)
+          : "حدث خطأ أثناء الحفظ";
+
+      toast.error("فشل في حفظ البيانات", {
+        description: errorMessage,
+        duration: 5000,
+        icon: <AlertTriangle className="h-5 w-5" />,
+      });
     }
-    setIsModalOpen(false);
-    setFormData({});
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm("هل أنت متأكد من حذف هذا العميل؟")) {
-      setCustomers((prev) => prev.filter((c) => c.id !== id));
+  /* =========================
+     ✅ الحذف من DB مع تأكيد
+  ========================= */
+  const handleDelete = async () => {
+    if (!deleteCustomer) return;
+
+    try {
+      await deleteCustomerAction(deleteCustomer.id);
+      await loadCustomers();
+
+      toast.success("تم الحذف بنجاح", {
+        description: `تم حذف العميل "${deleteCustomer.name}" من قاعدة البيانات`,
+        duration: 3000,
+      });
+
+      setDeleteCustomer(null);
+    } catch (err) {
+      toast.error("فشل في الحذف", {
+        description: "حدث خطأ أثناء محاولة حذف العميل. يرجى المحاولة مرة أخرى.",
+        duration: 4000,
+      });
     }
   };
+
+  /* ========================= */
 
   return (
     <>
       <Navbar title="العملاء" />
-      <div className="flex-1 space-y-6 p-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+
+      <div className="flex-1 space-y-6 p-6 bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900" dir="rtl">
+        <div className="flex justify-between items-center">
           <div>
-            <h2 className="text-2xl font-bold tracking-tight bg-gradient-to-l from-foreground to-foreground/70 bg-clip-text text-transparent">
+            <h2 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
               إدارة العملاء
             </h2>
-            <p className="text-muted-foreground font-medium">
-              إدارة عملائك ومعلوماتهم
+            <p className="text-sm text-muted-foreground mt-1">
+              إدارة وتنظيم قاعدة بيانات العملاء
             </p>
           </div>
-          <Button onClick={openCreateModal} className="gap-2 shadow-md hover:shadow-lg transition-all">
-            <Plus className="h-4 w-4" />
-            <span className="font-medium">إضافة عميل</span>
+
+          <Button 
+            onClick={openCreateModal} 
+            className="gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-lg hover:shadow-xl transition-all duration-200"
+          >
+            <UserPlus className="h-4 w-4" />
+            إضافة عميل جديد
           </Button>
         </div>
 
-        <Card className="shadow-sm">
-          <CardContent className="p-6">
-            <div className="space-y-4">
-              <DataTableToolbar
-                searchPlaceholder="ابحث عن عميل..."
-                searchValue={searchQuery}
-                onSearchChange={(value) => {
-                  setSearchQuery(value);
+        <Card className="border-none shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm">
+          <CardContent className="p-6 space-y-4">
+            <div className="relative">
+              <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="ابحث عن عميل بالاسم أو الكود..."
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
                   setCurrentPage(1);
                 }}
-                filterOptions={filterOptions}
-                activeFilters={filters}
-                onFilterChange={handleFilterChange}
+                className="pr-10 border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-blue-500 transition-all"
               />
-
-              {paginatedCustomers.length > 0 ? (
-                <>
-                  <div className="rounded-lg border overflow-hidden">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="bg-muted/50 hover:bg-muted/50">
-                          <TableHead className="font-bold text-right">الاسم</TableHead>
-                          <TableHead className="font-bold text-right">معلومات الاتصال</TableHead>
-                          <TableHead className="font-bold text-right">الموقع</TableHead>
-                          <TableHead className="font-bold text-right">إجمالي المشتريات</TableHead>
-                          <TableHead className="font-bold text-left">الإجراءات</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {paginatedCustomers.map((customer, index) => (
-                          <TableRow 
-                            key={customer.id}
-                            className={index % 2 === 0 ? "bg-muted/20 hover:bg-muted/40" : "hover:bg-muted/20"}
-                          >
-                            <TableCell>
-                              <div className="font-bold text-primary">{customer.name}</div>
-                              {customer.taxId && (
-                                <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                                  <span className="font-medium">الرقم الضريبي:</span>
-                                  <span>{customer.taxId}</span>
-                                </div>
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex flex-col gap-2">
-                                <div className="flex items-center gap-2 text-sm">
-                                  <Mail className="h-3.5 w-3.5 text-primary" />
-                                  <span className="font-medium">{customer.email}</span>
-                                </div>
-                                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                  <Phone className="h-3.5 w-3.5" />
-                                  <span>{customer.phone}</span>
-                                </div>
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-2">
-                                <MapPin className="h-3.5 w-3.5 text-primary" />
-                                <span className="font-medium">{customer.city}, {customer.country}</span>
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <span className="font-bold text-lg">
-                                {customer.totalPurchases.toLocaleString('ar-SA')} ر.س
-                              </span>
-                            </TableCell>
-                            <TableCell className="text-left">
-                              <div className="flex justify-start gap-2">
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => openEditModal(customer)}
-                                  className="hover:bg-primary/10 transition-all"
-                                  title="تعديل"
-                                >
-                                  <Pencil className="h-4 w-4 text-primary" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => handleDelete(customer.id)}
-                                  className="hover:bg-destructive/10 transition-all"
-                                  title="حذف"
-                                >
-                                  <Trash2 className="h-4 w-4 text-destructive" />
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-
-                  <PaginationControls
-                    currentPage={currentPage}
-                    totalPages={totalPages}
-                    onPageChange={setCurrentPage}
-                    totalItems={filteredCustomers.length}
-                    itemsPerPage={ITEMS_PER_PAGE}
-                  />
-                </>
-              ) : (
-                <EmptyState
-                  title="لم يتم العثور على عملاء"
-                  description="حاول تعديل البحث أو الفلاتر، أو قم بإضافة عميل جديد."
-                  action={{
-                    label: "إضافة عميل",
-                    onClick: openCreateModal,
-                  }}
-                />
-              )}
             </div>
+
+            {paginatedCustomers.length ? (
+              <>
+                <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-850 hover:from-slate-100 hover:to-slate-150">
+                        <TableHead className="font-bold">
+                          <div className="flex items-center gap-2">
+                            <Hash className="h-4 w-4" />
+                            الكود
+                          </div>
+                        </TableHead>
+                        <TableHead className="font-bold">
+                          <div className="flex items-center gap-2">
+                            <User className="h-4 w-4" />
+                            الاسم
+                          </div>
+                        </TableHead>
+                        <TableHead className="font-bold">
+                          <div className="flex items-center gap-2">
+                            <Phone className="h-4 w-4" />
+                            الهاتف
+                          </div>
+                        </TableHead>
+                        <TableHead className="font-bold">
+                          <div className="flex items-center gap-2">
+                            <MapPin className="h-4 w-4" />
+                            العنوان
+                          </div>
+                        </TableHead>
+                        <TableHead className="font-bold text-center">الإجراءات</TableHead>
+                      </TableRow>
+                    </TableHeader>
+
+                    <TableBody>
+                      {paginatedCustomers.map((c) => (
+                        <TableRow 
+                          key={c.id}
+                          className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+                        >
+                          <TableCell className="font-mono font-semibold text-blue-600 dark:text-blue-400">
+                            #{c.code}
+                          </TableCell>
+                          <TableCell className="font-medium">{c.name}</TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {c.phone || "-"}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {c.address || "-"}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex gap-2 justify-center">
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => openEditModal(c)}
+                                className="h-9 w-9 hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-950 transition-all"
+                              >
+                                <Edit3 className="h-4 w-4" />
+                              </Button>
+
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => setDeleteCustomer(c)}
+                                className="h-9 w-9 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950 transition-all"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                <PaginationControls
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  onPageChange={setCurrentPage}
+                  totalItems={filteredCustomers.length}
+                  itemsPerPage={ITEMS_PER_PAGE}
+                />
+              </>
+            ) : (
+              <EmptyState 
+                title="لا يوجد عملاء بعد" 
+              />
+            )}
           </CardContent>
         </Card>
 
+        {/* ================= Modal الإضافة والتعديل ================= */}
         <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-          <DialogContent className="sm:max-w-[500px]">
+          <DialogContent dir="rtl" className="sm:max-w-[500px]">
             <DialogHeader>
-              <DialogTitle className="text-xl font-bold">
-                {editingCustomer ? "تعديل العميل" : "إضافة عميل جديد"}
+              <DialogTitle className="text-2xl font-bold flex items-center gap-2">
+                {editingCustomer ? (
+                  <>
+                    <Edit3 className="h-5 w-5 text-blue-600" />
+                    تعديل بيانات العميل
+                  </>
+                ) : (
+                  <>
+                    <UserPlus className="h-5 w-5 text-purple-600" />
+                    إضافة عميل جديد
+                  </>
+                )}
               </DialogTitle>
-              <DialogDescription>
-                {editingCustomer
-                  ? "قم بتحديث معلومات العميل أدناه."
-                  : "املأ التفاصيل لإنشاء عميل جديد."}
+              <DialogDescription className="text-base">
+                {editingCustomer 
+                  ? "قم بتعديل المعلومات المطلوبة وحفظ التغييرات"
+                  : "أدخل بيانات العميل الجديد"
+                }
               </DialogDescription>
             </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="grid gap-2">
-                <Label htmlFor="name" className="font-bold">الاسم</Label>
+
+            <div className="grid gap-5 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="code" className="flex items-center gap-2 text-sm font-medium">
+                  <Hash className="h-4 w-4 text-blue-600" />
+                  كود العميل
+                </Label>
+                <Input
+                  id="code"
+                  type="number"
+                  value={formData.code}
+                  onChange={(e) => {
+                    setFormData((p) => ({ ...p, code: Number(e.target.value) }));
+                    setCodeError("");
+                  }}
+                  placeholder="أدخل الكود"
+                  className={`focus:ring-2 ${
+                    codeError
+                      ? "border-red-500 focus:ring-red-500 focus-visible:ring-red-500"
+                      : "focus:ring-blue-500"
+                  }`}
+                />
+                {codeError && (
+                  <p className="text-sm text-red-500 flex items-center gap-1">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                    {codeError}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="name" className="flex items-center gap-2 text-sm font-medium">
+                  <User className="h-4 w-4 text-purple-600" />
+                  اسم العميل <span className="text-red-500">*</span>
+                </Label>
                 <Input
                   id="name"
-                  value={formData.name || ""}
+                  value={formData.name}
                   onChange={(e) =>
-                    setFormData((prev) => ({ ...prev, name: e.target.value }))
+                    setFormData((p) => ({ ...p, name: e.target.value }))
                   }
-                  placeholder="اسم الشركة"
-                  dir="rtl"
+                  placeholder="أدخل الاسم"
+                  className="focus:ring-2 focus:ring-purple-500"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="email" className="font-bold">البريد الإلكتروني</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={formData.email || ""}
-                    onChange={(e) =>
-                      setFormData((prev) => ({ ...prev, email: e.target.value }))
-                    }
-                    placeholder="email@example.com"
-                    dir="ltr"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="phone" className="font-bold">رقم الهاتف</Label>
-                  <Input
-                    id="phone"
-                    value={formData.phone || ""}
-                    onChange={(e) =>
-                      setFormData((prev) => ({ ...prev, phone: e.target.value }))
-                    }
-                    placeholder="+966 50 000 0000"
-                    dir="ltr"
-                  />
-                </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="phone" className="flex items-center gap-2 text-sm font-medium">
+                  <Phone className="h-4 w-4 text-green-600" />
+                  رقم الهاتف
+                </Label>
+                <Input
+                  id="phone"
+                  value={formData.phone}
+                  onChange={(e) =>
+                    setFormData((p) => ({ ...p, phone: e.target.value }))
+                  }
+                  placeholder="أدخل رقم الهاتف"
+                  className="focus:ring-2 focus:ring-green-500"
+                />
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="address" className="font-bold">العنوان</Label>
+
+              <div className="space-y-2">
+                <Label htmlFor="address" className="flex items-center gap-2 text-sm font-medium">
+                  <MapPin className="h-4 w-4 text-orange-600" />
+                  العنوان
+                </Label>
                 <Input
                   id="address"
-                  value={formData.address || ""}
+                  value={formData.address}
                   onChange={(e) =>
-                    setFormData((prev) => ({ ...prev, address: e.target.value }))
+                    setFormData((p) => ({ ...p, address: e.target.value }))
                   }
-                  placeholder="عنوان الشارع"
-                  dir="rtl"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="city" className="font-bold">المدينة</Label>
-                  <Input
-                    id="city"
-                    value={formData.city || ""}
-                    onChange={(e) =>
-                      setFormData((prev) => ({ ...prev, city: e.target.value }))
-                    }
-                    placeholder="المدينة"
-                    dir="rtl"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="country" className="font-bold">الدولة</Label>
-                  <Input
-                    id="country"
-                    value={formData.country || ""}
-                    onChange={(e) =>
-                      setFormData((prev) => ({
-                        ...prev,
-                        country: e.target.value,
-                      }))
-                    }
-                    placeholder="الدولة"
-                    dir="rtl"
-                  />
-                </div>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="taxId" className="font-bold">الرقم الضريبي (اختياري)</Label>
-                <Input
-                  id="taxId"
-                  value={formData.taxId || ""}
-                  onChange={(e) =>
-                    setFormData((prev) => ({ ...prev, taxId: e.target.value }))
-                  }
-                  placeholder="الرقم الضريبي"
-                  dir="ltr"
+                  placeholder="أدخل العنوان"
+                  className="focus:ring-2 focus:ring-orange-500"
                 />
               </div>
             </div>
+
             <DialogFooter className="gap-2">
-              <Button variant="outline" onClick={() => setIsModalOpen(false)} className="font-medium">
-                إلغاء
+              <Button 
+                onClick={handleSave}
+                className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+              >
+                {editingCustomer ? "حفظ التعديلات" : "إضافة العميل"}
               </Button>
-              <Button onClick={handleSave} className="font-medium">
-                {editingCustomer ? "حفظ التغييرات" : "إضافة عميل"}
+              <Button 
+                variant="outline" 
+                onClick={() => setIsModalOpen(false)}
+                className="hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                إلغاء
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* ================= Modal تأكيد الحذف ================= */}
+        <AlertDialog open={!!deleteCustomer} onOpenChange={() => setDeleteCustomer(null)}>
+          <AlertDialogContent dir="rtl" className="sm:max-w-[425px]">
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2 text-xl">
+                <div className="h-10 w-10 rounded-full bg-red-100 dark:bg-red-900/20 flex items-center justify-center">
+                  <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-500" />
+                </div>
+                تأكيد حذف العميل
+              </AlertDialogTitle>
+              <AlertDialogDescription className="text-base pt-2">
+                {deleteCustomer && (
+                  <>
+                    هل أنت متأكد من حذف العميل{" "}
+                    <span className="font-bold text-foreground">{deleteCustomer.name}</span>
+                    {" "}(الكود: #{deleteCustomer.code})؟
+                    <div className="mt-3 p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-lg">
+                      <p className="text-sm text-red-800 dark:text-red-400">
+                        ⚠️ هذا الإجراء لا يمكن التراجع عنه. سيتم حذف جميع بيانات هذا العميل نهائياً.
+                      </p>
+                    </div>
+                  </>
+                )}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter className="gap-2 sm:gap-2">
+              <AlertDialogCancel className="mt-0">
+                إلغاء
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleDelete}
+                className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+              >
+                <Trash2 className="h-4 w-4 ml-2" />
+                تأكيد الحذف
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </>
   );

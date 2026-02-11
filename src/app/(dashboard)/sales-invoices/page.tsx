@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { Plus, Eye, Trash2 } from "lucide-react";
 import { Navbar } from "@/components/layout/navbar";
@@ -18,23 +18,57 @@ import {
   DataTableToolbar,
   EmptyState,
   PaginationControls,
-  StatusBadge,
 } from "@/components/shared";
-import { salesInvoices as initialInvoices } from "@/mock-data";
-import { SalesInvoice } from "@/types";
+import { getSalesInvoices, deleteSalesInvoice } from "./actions";
+
+// ─── نوع الفاتورة ─────────────────────────────────────────────────────────────
+interface InvoiceRow {
+  id: number;
+  invoiceNumber: number;
+  customerName: string;
+  invoiceDate: Date | string;
+  total: number;
+  status: "cash" | "credit" | "pending";
+}
 
 const ITEMS_PER_PAGE = 8;
 
+// ─── شارة الحالة ──────────────────────────────────────────────────────────────
+function StatusBadge({ status }: { status: InvoiceRow["status"] }) {
+  const map: Record<InvoiceRow["status"], { label: string; className: string }> = {
+    cash:    { label: "نقدي",  className: "bg-green-100 text-green-700 border-green-200"   },
+    credit:  { label: "أجل",   className: "bg-blue-100 text-blue-700 border-blue-200"     },
+    pending: { label: "معلقة", className: "bg-yellow-100 text-yellow-700 border-yellow-200" },
+  };
+  const { label, className } = map[status] ?? map.pending;
+  return (
+    <span
+      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${className}`}
+    >
+      {label}
+    </span>
+  );
+}
+
 export default function SalesInvoicesPage() {
-  const [invoices, setInvoices] = useState<SalesInvoice[]>(initialInvoices);
+  const [invoices, setInvoices] = useState<InvoiceRow[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [filters, setFilters] = useState<Record<string, string>>({});
   const [currentPage, setCurrentPage] = useState(1);
 
+  // ─── جلب الفواتير من قاعدة البيانات ──────────────────────────────────────
+  useEffect(() => {
+    getSalesInvoices()
+      .then((data) => setInvoices(data as InvoiceRow[]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  // ─── فلترة وبحث ──────────────────────────────────────────────────────────
   const filteredInvoices = useMemo(() => {
     return invoices.filter((invoice) => {
       const matchesSearch =
-        invoice.invoiceNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        invoice.invoiceNumber.toString().includes(searchQuery) ||
         invoice.customerName.toLowerCase().includes(searchQuery.toLowerCase());
 
       const matchesStatus =
@@ -55,10 +89,9 @@ export default function SalesInvoicesPage() {
       label: "الحالة",
       value: "status",
       options: [
-        { label: "مدفوعة", value: "paid" },
-        { label: "غير مدفوعة", value: "unpaid" },
-        { label: "متأخرة", value: "overdue" },
-        { label: "مدفوعة جزئياً", value: "partial" },
+        { label: "نقدي",   value: "cash"    },
+        { label: "أجل",    value: "credit"  },
+        { label: "معلقة",  value: "pending" },
       ],
     },
   ];
@@ -76,10 +109,11 @@ export default function SalesInvoicesPage() {
     setCurrentPage(1);
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm("هل أنت متأكد من حذف هذه الفاتورة؟")) {
-      setInvoices((prev) => prev.filter((i) => i.id !== id));
-    }
+  // ─── حذف فاتورة ──────────────────────────────────────────────────────────
+  const handleDelete = async (id: number) => {
+    if (!confirm("هل أنت متأكد من حذف هذه الفاتورة؟")) return;
+    await deleteSalesInvoice(id);
+    setInvoices((prev) => prev.filter((i) => i.id !== id));
   };
 
   return (
@@ -118,57 +152,79 @@ export default function SalesInvoicesPage() {
                 onFilterChange={handleFilterChange}
               />
 
-              {paginatedInvoices.length > 0 ? (
+              {loading ? (
+                <div className="flex items-center justify-center py-16">
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+                    <p className="text-sm text-muted-foreground font-medium">
+                      جاري تحميل الفواتير...
+                    </p>
+                  </div>
+                </div>
+              ) : paginatedInvoices.length > 0 ? (
                 <>
                   <div className="rounded-lg border overflow-hidden">
                     <Table>
                       <TableHeader>
                         <TableRow className="bg-muted/50 hover:bg-muted/50">
-                          <TableHead className="font-bold text-right">رقم الفاتورة</TableHead>
-                          <TableHead className="font-bold text-right">العميل</TableHead>
-                          <TableHead className="font-bold text-right">التاريخ</TableHead>
-                          <TableHead className="font-bold text-right">تاريخ الاستحقاق</TableHead>
-                          <TableHead className="font-bold text-right">المبلغ</TableHead>
-                          <TableHead className="font-bold text-right">الحالة</TableHead>
-                          <TableHead className="font-bold text-left">الإجراءات</TableHead>
+                          <TableHead className="font-bold text-center">
+                            رقم الفاتورة
+                          </TableHead>
+                          <TableHead className="font-bold text-center">
+                            العميل
+                          </TableHead>
+                          <TableHead className="font-bold text-center">
+                            التاريخ
+                          </TableHead>
+                          <TableHead className="font-bold text-center">
+                            المبلغ
+                          </TableHead>
+                          <TableHead className="font-bold text-center">
+                            الحالة
+                          </TableHead>
+                          <TableHead className="font-bold text-center">
+                            الإجراءات
+                          </TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {paginatedInvoices.map((invoice, index) => (
-                          <TableRow 
+                          <TableRow
                             key={invoice.id}
-                            className={index % 2 === 0 ? "bg-muted/20 hover:bg-muted/40" : "hover:bg-muted/20"}
+                            className={
+                              index % 2 === 0
+                                ? "bg-muted/20 hover:bg-muted/40"
+                                : "hover:bg-muted/20"
+                            }
                           >
-                            <TableCell className="font-bold text-primary">
-                              {invoice.invoiceNumber}
+                            <TableCell className="font-bold text-primary text-center">
+                              #{invoice.invoiceNumber}
                             </TableCell>
-                            <TableCell className="font-medium">
+                            <TableCell className="font-medium text-center">
                               {invoice.customerName}
                             </TableCell>
-                            <TableCell className="text-muted-foreground font-medium">
-                              {new Date(invoice.createdAt).toLocaleDateString('ar-SA', {
-                                year: 'numeric',
-                                month: 'long',
-                                day: 'numeric'
-                              })}
+                            <TableCell className="text-muted-foreground font-medium text-center">
+                              {new Date(invoice.invoiceDate).toLocaleDateString(
+                                "ar-EG",
+                                {
+                                  year: "numeric",
+                                  month: "long",
+                                  day: "numeric",
+                                }
+                              )}
                             </TableCell>
-                            <TableCell className="text-muted-foreground font-medium">
-                              {new Date(invoice.dueDate).toLocaleDateString('ar-SA', {
-                                year: 'numeric',
-                                month: 'long',
-                                day: 'numeric'
-                              })}
+                            <TableCell className="font-bold text-lg text-center">
+                              {invoice.total.toLocaleString("ar-EG")} ج.م
                             </TableCell>
-                            <TableCell className="font-bold text-lg">
-                              {invoice.total.toLocaleString('ar-SA')} ر.س
+                            <TableCell className="text-center">
+                              <div className="flex justify-center">
+                                <StatusBadge status={invoice.status} />
+                              </div>
                             </TableCell>
-                            <TableCell>
-                              <StatusBadge status={invoice.status} />
-                            </TableCell>
-                            <TableCell className="text-left">
-                              <div className="flex justify-start gap-2">
-                                <Button 
-                                  variant="ghost" 
+                            <TableCell className="text-center">
+                              <div className="flex justify-center gap-2">
+                                <Button
+                                  variant="ghost"
                                   size="icon"
                                   className="hover:bg-primary/10 transition-all"
                                   title="عرض"

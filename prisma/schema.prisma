@@ -1,0 +1,69 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Customer {
+  id        Int      @id @default(autoincrement())
+  name      String   @db.VarChar(255)
+  code      Int      @unique // كود العميل الفريد
+  phone     String?  @db.VarChar(20)
+  address   String?  @db.Text
+  invoices SalesInvoice[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Supplier {
+  id        Int      @id @default(autoincrement())
+  name      String   @db.VarChar(255)
+  code      Int      @unique
+  phone     String?  @db.VarChar(20)
+  address   String?  @db.Text
+  category  String?  @db.VarChar(100)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model SalesInvoice {
+  id            Int                @id @default(autoincrement())
+  invoiceNumber Int                @unique
+  customerName  String             @db.VarChar(255)
+  customerId    Int
+  customer      Customer           @relation(fields: [customerId], references: [id])
+  invoiceDate   DateTime
+  subtotal      Float
+  totalTax      Float
+  total         Float
+  status        InvoiceStatus      @default(cash)
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  items         SalesInvoiceItem[]
+}
+
+model SalesInvoiceItem {
+  id          Int          @id @default(autoincrement())
+  invoice     SalesInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoiceId   Int
+  description String       @db.VarChar(255)
+  quantity    Float
+  unitPrice   Float
+  taxRate     Float        @default(0)
+  total       Float
+}
+
+enum InvoiceStatus {
+  cash
+  credit
+  pending
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
