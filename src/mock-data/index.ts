@@ -10,3 +10,9 @@ export {
   expensesByCategory,
   revenueByRegion,
 } from "./dashboard";
+export {
+  treasuryAccounts,
+  vouchers,
+  expenseCategories,
+} from "./treasury";
+export type { Treasury, Voucher } from "./treasury";

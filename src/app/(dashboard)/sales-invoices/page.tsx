@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
-import { Plus, Eye, Trash2 } from "lucide-react";
+import { Plus, Eye, Trash2, AlertTriangle } from "lucide-react";
 import { Navbar } from "@/components/layout/navbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -15,11 +15,20 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   DataTableToolbar,
   EmptyState,
   PaginationControls,
 } from "@/components/shared";
 import { getSalesInvoices, deleteSalesInvoice } from "./actions";
+import { useRouter } from "next/navigation";
 
 // ─── نوع الفاتورة ─────────────────────────────────────────────────────────────
 interface InvoiceRow {
@@ -35,10 +44,22 @@ const ITEMS_PER_PAGE = 8;
 
 // ─── شارة الحالة ──────────────────────────────────────────────────────────────
 function StatusBadge({ status }: { status: InvoiceRow["status"] }) {
-  const map: Record<InvoiceRow["status"], { label: string; className: string }> = {
-    cash:    { label: "نقدي",  className: "bg-green-100 text-green-700 border-green-200"   },
-    credit:  { label: "أجل",   className: "bg-blue-100 text-blue-700 border-blue-200"     },
-    pending: { label: "معلقة", className: "bg-yellow-100 text-yellow-700 border-yellow-200" },
+  const map: Record<
+    InvoiceRow["status"],
+    { label: string; className: string }
+  > = {
+    cash: {
+      label: "نقدي",
+      className: "bg-green-100 text-green-700 border-green-200",
+    },
+    credit: {
+      label: "أجل",
+      className: "bg-blue-100 text-blue-700 border-blue-200",
+    },
+    pending: {
+      label: "معلقة",
+      className: "bg-yellow-100 text-yellow-700 border-yellow-200",
+    },
   };
   const { label, className } = map[status] ?? map.pending;
   return (
@@ -56,6 +77,12 @@ export default function SalesInvoicesPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [filters, setFilters] = useState<Record<string, string>>({});
   const [currentPage, setCurrentPage] = useState(1);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [invoiceToDelete, setInvoiceToDelete] = useState<InvoiceRow | null>(
+    null,
+  );
+  const [deleting, setDeleting] = useState(false);
+  const router = useRouter();
 
   // ─── جلب الفواتير من قاعدة البيانات ──────────────────────────────────────
   useEffect(() => {
@@ -81,7 +108,7 @@ export default function SalesInvoicesPage() {
   const totalPages = Math.ceil(filteredInvoices.length / ITEMS_PER_PAGE);
   const paginatedInvoices = filteredInvoices.slice(
     (currentPage - 1) * ITEMS_PER_PAGE,
-    currentPage * ITEMS_PER_PAGE
+    currentPage * ITEMS_PER_PAGE,
   );
 
   const filterOptions = [
@@ -89,9 +116,9 @@ export default function SalesInvoicesPage() {
       label: "الحالة",
       value: "status",
       options: [
-        { label: "نقدي",   value: "cash"    },
-        { label: "أجل",    value: "credit"  },
-        { label: "معلقة",  value: "pending" },
+        { label: "نقدي", value: "cash" },
+        { label: "أجل", value: "credit" },
+        { label: "معلقة", value: "pending" },
       ],
     },
   ];
@@ -109,11 +136,27 @@ export default function SalesInvoicesPage() {
     setCurrentPage(1);
   };
 
+  // ─── فتح مودال الحذف ──────────────────────────────────────────────────────
+  const openDeleteDialog = (invoice: InvoiceRow) => {
+    setInvoiceToDelete(invoice);
+    setDeleteDialogOpen(true);
+  };
+
   // ─── حذف فاتورة ──────────────────────────────────────────────────────────
-  const handleDelete = async (id: number) => {
-    if (!confirm("هل أنت متأكد من حذف هذه الفاتورة؟")) return;
-    await deleteSalesInvoice(id);
-    setInvoices((prev) => prev.filter((i) => i.id !== id));
+  const confirmDelete = async () => {
+    if (!invoiceToDelete) return;
+
+    setDeleting(true);
+    try {
+      await deleteSalesInvoice(invoiceToDelete.id);
+      setInvoices((prev) => prev.filter((i) => i.id !== invoiceToDelete.id));
+      setDeleteDialogOpen(false);
+      setInvoiceToDelete(null);
+    } catch (error) {
+      console.error("Error deleting invoice:", error);
+    } finally {
+      setDeleting(false);
+    }
   };
 
   return (
@@ -129,7 +172,10 @@ export default function SalesInvoicesPage() {
               إدارة فواتير المبيعات وتتبع المدفوعات
             </p>
           </div>
-          <Button asChild className="gap-2 shadow-md hover:shadow-lg transition-all">
+          <Button
+            asChild
+            className="gap-2 shadow-md hover:shadow-lg transition-all"
+          >
             <Link href="/sales-invoices/create">
               <Plus className="h-4 w-4" />
               <span className="font-medium">إنشاء فاتورة</span>
@@ -210,7 +256,7 @@ export default function SalesInvoicesPage() {
                                   year: "numeric",
                                   month: "long",
                                   day: "numeric",
-                                }
+                                },
                               )}
                             </TableCell>
                             <TableCell className="font-bold text-lg text-center">
@@ -223,18 +269,22 @@ export default function SalesInvoicesPage() {
                             </TableCell>
                             <TableCell className="text-center">
                               <div className="flex justify-center gap-2">
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="hover:bg-primary/10 transition-all"
-                                  title="عرض"
+                                <Link
+                                  href={`/sales-invoices/create?id=${invoice.id}`}
                                 >
-                                  <Eye className="h-4 w-4 text-primary" />
-                                </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="hover:bg-primary/10 transition-all"
+                                    title="عرض وتعديل"
+                                  >
+                                    <Eye className="h-4 w-4 text-primary" />
+                                  </Button>
+                                </Link>
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  onClick={() => handleDelete(invoice.id)}
+                                  onClick={() => openDeleteDialog(invoice)}
                                   className="hover:bg-destructive/10 transition-all"
                                   title="حذف"
                                 >
@@ -262,7 +312,7 @@ export default function SalesInvoicesPage() {
                   description="حاول تعديل البحث أو الفلاتر، أو قم بإنشاء فاتورة جديدة."
                   action={{
                     label: "إنشاء فاتورة",
-                    onClick: () => {},
+                    onClick: () => router.push("/sales-invoices/create"), // التعديل هنا
                   }}
                 />
               )}
@@ -270,6 +320,65 @@ export default function SalesInvoicesPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* مودال تأكيد الحذف */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <div className="flex items-center gap-3 mb-2">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10">
+                <AlertTriangle className="h-6 w-6 text-destructive" />
+              </div>
+              <DialogTitle className="text-xl font-bold">
+                تأكيد حذف الفاتورة
+              </DialogTitle>
+            </div>
+            <DialogDescription className="text-base leading-relaxed pt-2">
+              هل أنت متأكد من حذف الفاتورة{" "}
+              <span className="font-bold text-foreground">
+                #{invoiceToDelete?.invoiceNumber}
+              </span>{" "}
+              الخاصة بالعميل{" "}
+              <span className="font-bold text-foreground">
+                {invoiceToDelete?.customerName}
+              </span>
+              ؟
+              <br />
+              <span className="text-destructive font-semibold mt-2 block">
+                هذا الإجراء لا يمكن التراجع عنه.
+              </span>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0 mt-4">
+            <Button
+              variant="outline"
+              onClick={() => setDeleteDialogOpen(false)}
+              disabled={deleting}
+              className="font-medium"
+            >
+              إلغاء
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmDelete}
+              disabled={deleting}
+              className="gap-2 font-medium"
+            >
+              {deleting ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  جاري الحذف...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4" />
+                  حذف الفاتورة
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

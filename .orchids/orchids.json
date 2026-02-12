@@ -1,0 +1,9 @@
+{
+  "projectId": "8a6bd6d4-9816-4a8e-99ab-1e2a4c7b8d08",
+  "createdAt": 1770896280989,
+  "version": "1.0",
+  "startupCommands": [
+    "bun install && npx next dev --turbopack"
+  ],
+  "templateId": "any"
+}

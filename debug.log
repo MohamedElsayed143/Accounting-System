@@ -1,0 +1,129 @@
+2026-02-12T11:43:13.226Z [console][error] Uncaught Error: Hydration failed because the server rendered text didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <HotReload assetPrefix="" globalError={[...]}>
+      <AppDevOverlayErrorBoundary globalError={[...]}>
+        <ReplaySsrOnlyErrors>
+        <DevRootHTTPAccessFallbackBoundary>
+          <HTTPAccessFallbackBoundary notFound={<NotAllowedRootHTTPFallbackError>}>
+            <HTTPAccessFallbackErrorBoundary pathname="/dashboard" notFound={<NotAllowedRootHTTPFallbackError>} ...>
+              <RedirectBoundary>
+                <RedirectErrorBoundary router={{...}}>
+                  <Head headCacheNode={{lazyData:null, ...}}>
+                    <__next_viewport_boundary__>
+                    <meta>
+                    <MetadataTree>
+                      <__next_metadata_boundary__>
+                        <__next_metadata_boundary__>
+                          <div
+                            hidden={true}
+-                           data-orchid-ref="ref-ujpf67m293"
+                          >
+                  <__next_root_layout_boundary__>
+                    <SegmentViewNode type="layout" pagePath="/orchids-p...">
+                      <SegmentTrieNode>
+                      <link>
+                      <script>
+                      <script>
+                      <RootLayout>
+                        <html data-orchids-id="src\app\la..." data-orchids-name="html" lang="en">
+                          <body
+                            data-orchids-id="src\app\layout.tsx:28:6"
+                            data-orchids-name="body"
+                            className="geist_a71539c9-module__T19VSG__variable geist_mono_8d43a2aa-module__8Li5zG__var..."
+-                           data-orchid-ref="ref-vrrt8qe3hu"
+                          >
+                            ...
+                              <TooltipProvider data-orchids-id="src\compon..." data-orchids-name="TooltipPro..." ...>
+                                <TooltipProviderProvider scope={undefined} isOpenDelayedRef={{current:true}} ...>
+                                  <div
+                                    data-orchids-id="src\app\(dashboard)\layout.tsx:12:4"
+                                    data-orchids-name="SidebarProvider"
+                                    data-slot="sidebar-wrapper"
+                                    style={{--sidebar-width:"16rem",--sidebar-width-icon:"3rem"}}
+                                    className="group/sidebar-wrapper has-data-[variant=inset]:bg-sidebar flex min-h-sv..."
+-                                   data-orchid-ref="ref-kg7imz7wqj"
+                                  >
+                                    <AppSidebar data-orchids-id="src\app\(d..." data-orchids-name="AppSidebar">
+                                      <Sidebar data-orchids-id="src\compon..." data-orchids-name="Sidebar" ...>
+                                        <div
+                                          data-orchids-id="src\components\ui\sidebar.tsx:209:4@state"
+                                          data-orchids-name="div"
+                                          className="group peer text-sidebar-foreground hidden md:block"
+                                          data-state="expanded"
+                                          data-collapsible=""
+                                          data-variant="sidebar"
+                                          data-... [truncated]
+2026-02-12T11:50:15.764Z [console][error] Uncaught Error: Hydration failed because the server rendered text didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <RedirectErrorBoundary router={{...}}>
+      <InnerLayoutRouter url="/treasury" tree={[...]} cacheNode={{lazyData:null, ...}} segmentPath={[...]}>
+        <SegmentViewNode type="layout" pagePath="/orchids-p...">
+          <SegmentTrieNode>
+          <script>
+          <script>
+          <script>
+          <ClientSegmentRoot Component={function DashboardLayout} slots={{...}} params={{}}>
+            <DashboardLayout params={Promise}>
+              <SidebarProvider data-orchids-id="src\app\(d..." data-orchids-name="SidebarPro...">
+                <TooltipProvider data-orchids-id="src\compon..." data-orchids-name="TooltipPro..." delayDuration={0}>
+                  <TooltipProvider data-orchids-id="src\compon..." data-orchids-name="TooltipPro..." ...>
+                    <TooltipProviderProvider scope={undefined} isOpenDelayedRef={{current:true}} delayDuration={0} ...>
+                      <div data-orchids-id="src\app\(d..." data-orchids-name="SidebarPro..." data-slot="sidebar-wr..." ...>
+                        <AppSidebar data-orchids-id="src\app\(d..." data-orchids-name="AppSidebar">
+                          <Sidebar data-orchids-id="src\compon..." data-orchids-name="Sidebar" className="border-l b...">
+                            <div
+                              data-orchids-id="src\components\ui\sidebar.tsx:209:4@state"
+                              data-orchids-name="div"
+                              className="group peer text-sidebar-foreground hidden md:block"
+                              data-state="expanded"
+                              data-collapsible=""
+                              data-variant="sidebar"
+                              data-side="left"
+                              data-slot="sidebar"
+-                             data-orchid-ref="ref-ekwcnypwjv"
+                            >
+                              <div
+                                data-orchids-id="src\components\ui\sidebar.tsx:218:6"
+                                data-orchids-name="div"
+                                data-slot="sidebar-gap"
+                                className="relative w-(--sidebar-width) bg-transparent transition-[width] duration-200..."
+-                               data-orchid-ref="ref-4plcdv1q0u"
+                              >
+                              <div
+                                data-orchids-id="src\components\layout\app-sidebar.tsx:112:4"
+                                data-orchids-name="Sidebar"
+                                data-slot="sidebar-container"
+                                className="fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,righ..."
+-                               data-orchid-ref="ref-a65ark2nu4"
+                              >
+                                <div
+                                  data-orchids-id="src\components\ui\sidebar.tsx:244:8"
+                                  data-orchids-name="div"
+                                  data-sidebar="sidebar"
+                                  data-slot="sidebar-inner"
+                                  className="bg-sidebar group-data-[variant=floating]:border-sidebar-border flex h-ful..."
+-                                 data-orchid-ref="ref-es179buv20"
+                                >
+         ... [truncated]

@@ -12,6 +12,7 @@ import {
   Settings,
   Calculator,
   ChevronDown,
+  Landmark,
 } from "lucide-react";
 import {
   Sidebar,
@@ -74,6 +75,17 @@ const invoiceNavItems = [
     ],
   },
 ];
+
+const treasuryNavItem = {
+  title: "إدارة النقدية",
+  href: "/treasury",
+  icon: Landmark,
+  subItems: [
+    { title: "الخزنة والبنوك", href: "/treasury" },
+    { title: "سند قبض", href: "/treasury/receipt-voucher" },
+    { title: "سند صرف", href: "/treasury/payment-voucher" },
+  ],
+};
 
 const otherNavItems = [
   {
@@ -186,9 +198,53 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <SidebarGroup className="mt-4">
-          <SidebarGroupLabel className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">
-            الإدارة
+          <SidebarGroup className="mt-4">
+            <SidebarGroupLabel className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">
+              النقدية
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <Collapsible
+                  defaultOpen={isActive(treasuryNavItem.href)}
+                  className="group/collapsible"
+                >
+                  <SidebarMenuItem>
+                    <CollapsibleTrigger asChild>
+                      <SidebarMenuButton
+                        isActive={isActive(treasuryNavItem.href)}
+                        className="group hover:bg-primary/10 transition-all"
+                      >
+                        <treasuryNavItem.icon className="h-4 w-4 group-hover:scale-110 transition-transform" />
+                        <span className="font-medium">{treasuryNavItem.title}</span>
+                        <ChevronDown className="mr-auto h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-180" />
+                      </SidebarMenuButton>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <SidebarMenuSub className="mr-4 border-r-2 border-primary/20">
+                        {treasuryNavItem.subItems.map((subItem) => (
+                          <SidebarMenuSubItem key={subItem.href}>
+                            <SidebarMenuSubButton
+                              asChild
+                              isActive={pathname === subItem.href}
+                              className="hover:bg-primary/5 transition-all"
+                            >
+                              <Link href={subItem.href} className="text-sm font-medium">
+                                {subItem.title}
+                              </Link>
+                            </SidebarMenuSubButton>
+                          </SidebarMenuSubItem>
+                        ))}
+                      </SidebarMenuSub>
+                    </CollapsibleContent>
+                  </SidebarMenuItem>
+                </Collapsible>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+
+          <SidebarGroup className="mt-4">
+            <SidebarGroupLabel className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">
+              الإدارة
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>

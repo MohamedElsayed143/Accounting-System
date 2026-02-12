@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowRight, Plus, Trash2, Save, Calculator,
   Search, User, ChevronLeft, CreditCard, Hash,
@@ -30,6 +30,8 @@ import {
   getNextInvoiceNumber,
   checkInvoiceNumberExists,
   createSalesInvoice,
+  getSalesInvoiceById,
+  updateSalesInvoice,
 } from "../actions";
 
 // ─── الأنواع ──────────────────────────────────────────────────────────────────
@@ -148,41 +150,26 @@ function CustomerSearchStep({
 }
 
 // ============================================================
-// Step 2 — نموذج إنشاء الفاتورة
+// Step 2 — نموذج إنشاء/تعديل الفاتورة
 // ============================================================
 function InvoiceFormStep({
   customer,
   onBack,
+  invoiceId,
 }: {
   customer: Customer;
   onBack: () => void;
+  invoiceId?: string | null;
 }) {
   const router = useRouter();
+  const isEditMode = !!invoiceId && invoiceId !== "create";
 
   // ─── رقم الفاتورة ─────────────────────────────────────────────────────────
   const [invoiceNumber, setInvoiceNumber] = useState<number>(1);
   const [invoiceNumberError, setInvoiceNumberError] = useState<string>("");
   const [checkingNumber, setCheckingNumber] = useState(false);
   const [saving, setSaving] = useState(false);
-
-  // جلب الرقم التالي من قاعدة البيانات عند فتح النموذج
-  useEffect(() => {
-    getNextInvoiceNumber().then(setInvoiceNumber);
-  }, []);
-
-  // التحقق من رقم الفاتورة عند تغييره (debounce 400ms)
-  useEffect(() => {
-    if (!invoiceNumber || invoiceNumber < 1) return;
-    setCheckingNumber(true);
-    const timer = setTimeout(async () => {
-      const taken = await checkInvoiceNumberExists(invoiceNumber);
-      setInvoiceNumberError(
-        taken ? `رقم الفاتورة #${invoiceNumber} مستخدم مسبقاً، يرجى اختيار رقم آخر` : ""
-      );
-      setCheckingNumber(false);
-    }, 400);
-    return () => clearTimeout(timer);
-  }, [invoiceNumber]);
+  const [loading, setLoading] = useState(isEditMode);
 
   // ─── باقي حقول الفاتورة ───────────────────────────────────────────────────
   const [paymentType, setPaymentType] = useState<"cash" | "credit" | "pending">("cash");
@@ -192,6 +179,79 @@ function InvoiceFormStep({
   const [items, setItems] = useState<InvoiceItem[]>([
     { id: "1", description: "", quantity: 0, unitPrice: 0, taxRate: 0, total: 0 },
   ]);
+
+  // تحميل بيانات الفاتورة إذا كنا في وضع التعديل
+  useEffect(() => {
+  if (isEditMode && invoiceId) {
+    setLoading(true);
+    getSalesInvoiceById(Number(invoiceId))
+      .then((invoice) => {
+        if (invoice) {
+          setInvoiceNumber(invoice.invoiceNumber);
+          setPaymentType(invoice.status as "cash" | "credit" | "pending");
+          setInvoiceDate(new Date(invoice.invoiceDate).toISOString().split("T")[0]);
+          
+          if (invoice.items && invoice.items.length > 0) {
+            const formattedItems = invoice.items.map((item: {
+              description: string;
+              quantity: number;
+              unitPrice: number;
+              taxRate: number;
+              total: number;
+            }, index: number) => ({
+              id: String(index + 1),
+              description: item.description,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              taxRate: item.taxRate,
+              total: item.total,
+            }));
+            setItems(formattedItems);
+          }
+        }
+      })
+      .catch((error) => {
+        console.error("Error loading invoice:", error);
+        toast.error("حدث خطأ أثناء تحميل بيانات الفاتورة");
+      })
+      .finally(() => setLoading(false));
+  }
+}, [isEditMode, invoiceId]);
+
+  // جلب الرقم التالي من قاعدة البيانات عند فتح النموذج (فقط في وضع الإنشاء)
+  useEffect(() => {
+    if (!isEditMode) {
+      getNextInvoiceNumber().then(setInvoiceNumber);
+    }
+  }, [isEditMode]);
+
+  // التحقق من رقم الفاتورة عند تغييره (debounce 400ms)
+  useEffect(() => {
+    if (!invoiceNumber || invoiceNumber < 1) return;
+    
+    setCheckingNumber(true);
+    const timer = setTimeout(async () => {
+      const taken = await checkInvoiceNumberExists(invoiceNumber);
+      // في وضع التعديل، إذا كان الرقم هو نفس الرقم الأصلي، لا نعرض خطأ
+      if (isEditMode && taken) {
+        // نحتاج لمعرفة إذا كان هذا الرقم يخص هذه الفاتورة
+        const invoice = await getSalesInvoiceById(Number(invoiceId));
+        if (invoice && invoice.invoiceNumber === invoiceNumber) {
+          setInvoiceNumberError("");
+        } else {
+          setInvoiceNumberError(
+            taken ? `رقم الفاتورة #${invoiceNumber} مستخدم مسبقاً، يرجى اختيار رقم آخر` : ""
+          );
+        }
+      } else {
+        setInvoiceNumberError(
+          taken ? `رقم الفاتورة #${invoiceNumber} مستخدم مسبقاً، يرجى اختيار رقم آخر` : ""
+        );
+      }
+      setCheckingNumber(false);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [invoiceNumber, isEditMode, invoiceId]);
 
   const addItem = () => {
     setItems((prev) => [
@@ -246,7 +306,7 @@ function InvoiceFormStep({
   );
   const grandTotal = subtotal + totalTax;
 
-  // ─── حفظ الفاتورة في قاعدة البيانات ──────────────────────────────────────
+  // ─── حفظ أو تحديث الفاتورة في قاعدة البيانات ──────────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -261,7 +321,8 @@ function InvoiceFormStep({
 
     try {
       setSaving(true);
-      await createSalesInvoice({
+      
+      const invoiceData = {
         invoiceNumber,
         customerId: customer.id,
         customerName: customer.name,
@@ -277,14 +338,18 @@ function InvoiceFormStep({
           taxRate,
           total,
         })),
-      });
+      };
 
-      const statusLabel =
-        paymentType === "cash" ? "نقدي" : paymentType === "credit" ? "أجل" : "معلقة";
-
-      toast.success(
-        `تم حفظ الفاتورة #${invoiceNumber} (${statusLabel}) للعميل: ${customer.name}`
-      );
+      if (isEditMode && invoiceId) {
+        // تحديث فاتورة موجودة
+        await updateSalesInvoice(Number(invoiceId), invoiceData);
+        toast.success(`تم تحديث الفاتورة #${invoiceNumber} بنجاح`);
+      } else {
+        // إنشاء فاتورة جديدة
+        await createSalesInvoice(invoiceData);
+        toast.success(`تم حفظ الفاتورة #${invoiceNumber} بنجاح`);
+      }
+      
       router.push("/sales-invoices");
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "حدث خطأ أثناء الحفظ";
@@ -294,7 +359,18 @@ function InvoiceFormStep({
     }
   };
 
-  const canSave = !invoiceNumberError && !checkingNumber && !saving;
+  const canSave = !invoiceNumberError && !checkingNumber && !saving && !loading;
+
+  if (loading) {
+    return (
+      <div className="flex-1 flex items-center justify-center p-6 bg-slate-50/50 min-h-[calc(100vh-64px)]">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm text-muted-foreground font-medium">جاري تحميل بيانات الفاتورة...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 space-y-6 p-6 bg-slate-50/50 min-h-screen" dir="rtl">
@@ -310,7 +386,7 @@ function InvoiceFormStep({
           </Button>
           <div>
             <h2 className="text-3xl font-black text-slate-800 tracking-tight">
-              إنشاء فاتورة مبيعات
+              {isEditMode ? "تعديل فاتورة مبيعات" : "إنشاء فاتورة مبيعات"}
             </h2>
             <p className="text-muted-foreground font-medium">
               نظام إدارة مبيعات مصنع الطوب
@@ -558,7 +634,7 @@ function InvoiceFormStep({
                 </>
               ) : (
                 <>
-                  <Save className="h-5 w-5" /> حفظ الفاتورة
+                  <Save className="h-5 w-5" /> {isEditMode ? "تحديث الفاتورة" : "حفظ الفاتورة"}
                 </>
               )}
             </Button>
@@ -573,17 +649,81 @@ function InvoiceFormStep({
 // الصفحة الرئيسية
 // ============================================================
 export default function CreateSalesInvoicePage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const invoiceId = searchParams.get("id");
+  const isEditMode = !!invoiceId && invoiceId !== "create";
+  
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [loading, setLoading] = useState(isEditMode);
+
+  // تحميل بيانات الفاتورة في وضع التعديل
+  useEffect(() => {
+    if (isEditMode) {
+      setLoading(true);
+      // جلب الفاتورة أولاً
+      getSalesInvoiceById(Number(invoiceId))
+        .then((invoice) => {
+          if (invoice) {
+            // جلب كل العملاء
+            return getCustomers().then((customers) => {
+              // البحث عن العميل المطلوب
+              const fullCustomer = (customers as Customer[]).find(c => c.id === invoice.customerId);
+              if (fullCustomer) {
+                setSelectedCustomer(fullCustomer);
+              } else {
+                // إذا لم يتم العثور على العميل، نستخدم بيانات من الفاتورة
+                setSelectedCustomer({
+                  id: invoice.customerId,
+                  name: invoice.customerName,
+                  code: 0,
+                  phone: null,
+                  address: null,
+                });
+              }
+            });
+          }
+        })
+        .catch((error) => {
+          console.error("Error loading invoice:", error);
+          toast.error("حدث خطأ أثناء تحميل بيانات الفاتورة");
+        })
+        .finally(() => setLoading(false));
+    }
+  }, [isEditMode, invoiceId]);
+
+  if (loading) {
+    return (
+      <>
+        <Navbar title="فاتورة مبيعات" />
+        <div className="flex-1 flex items-center justify-center p-6 bg-slate-50/50 min-h-[calc(100vh-64px)]">
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+            <p className="text-sm text-muted-foreground font-medium">جاري تحميل بيانات الفاتورة...</p>
+          </div>
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
-      <Navbar title="فاتورة مبيعات جديدة" />
+      <Navbar title={isEditMode ? "تعديل فاتورة مبيعات" : "فاتورة مبيعات جديدة"} />
       {selectedCustomer === null ? (
-        <CustomerSearchStep onCustomerSelected={setSelectedCustomer} />
+        <CustomerSearchStep 
+          onCustomerSelected={setSelectedCustomer}
+        />
       ) : (
         <InvoiceFormStep
           customer={selectedCustomer}
-          onBack={() => setSelectedCustomer(null)}
+          onBack={() => {
+            if (isEditMode) {
+              router.push("/sales-invoices");
+            } else {
+              setSelectedCustomer(null);
+            }
+          }}
+          invoiceId={invoiceId}
         />
       )}
     </>
