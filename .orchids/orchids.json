@@ -3,7 +3,7 @@
   "createdAt": 1770896280989,
   "version": "1.0",
   "startupCommands": [
-    "bun install && npx next dev --turbopack"
+    "bun install; npx next dev --turbopack"
   ],
   "templateId": "any"
 }

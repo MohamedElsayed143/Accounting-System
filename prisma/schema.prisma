@@ -28,6 +28,7 @@ model Supplier {
   category  String?  @db.VarChar(100)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  invoices PurchaseInvoice[]
 }
 
 model SalesInvoice {
@@ -54,6 +55,33 @@ model SalesInvoiceItem {
   quantity    Float
   unitPrice   Float
   taxRate     Float        @default(0)
+  total       Float
+}
+
+model PurchaseInvoice {
+  id            Int                  @id @default(autoincrement())
+  invoiceNumber Int                  @unique
+  supplierName  String               @db.VarChar(255)
+  supplierId    Int
+  supplier      Supplier             @relation(fields: [supplierId], references: [id])
+  invoiceDate   DateTime
+  subtotal      Float
+  totalTax      Float
+  total         Float
+  status        InvoiceStatus        @default(cash)
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  items         PurchaseInvoiceItem[]
+}
+
+model PurchaseInvoiceItem {
+  id          Int             @id @default(autoincrement())
+  invoice     PurchaseInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoiceId   Int
+  description String          @db.VarChar(255)
+  quantity    Float
+  unitPrice   Float
+  taxRate     Float           @default(0)
   total       Float
 }
 

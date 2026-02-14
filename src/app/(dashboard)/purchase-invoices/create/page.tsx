@@ -25,62 +25,58 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 
-import { getCustomers } from "@/app/(dashboard)/customers/actions";
+// Import real supplier action
+import { getSuppliers } from "@/app/(dashboard)/suppliers/actions"; 
+
+// Import mock invoice actions
 import {
-  getNextInvoiceNumber,
-  checkInvoiceNumberExists,
-  createSalesInvoice,
-  getSalesInvoiceById,
-  updateSalesInvoice,
+  getNextPurchaseInvoiceNumber,
+  checkPurchaseInvoiceNumberExists,
+  createPurchaseInvoice,
+  getPurchaseInvoiceById,
+  updatePurchaseInvoice,
+  PurchaseInvoiceItem
 } from "../actions";
 import { PrintableInvoice } from "@/components/invoices/printable-invoice";
 
 // ─── الأنواع ──────────────────────────────────────────────────────────────────
-interface Customer {
+interface Supplier {
   id: number;
   name: string;
   code: number;
   phone: string | null;
   address: string | null;
-}
-
-interface InvoiceItem {
-  id: string;
-  description: string;
-  quantity: number;
-  unitPrice: number;
-  taxRate: number;
-  total: number;
+  category: string | null;
 }
 
 // ============================================================
-// Step 1 — البحث الفوري عن العميل
+// Step 1 — البحث الفوري عن المورد
 // ============================================================
-function CustomerSearchStep({
-  onCustomerSelected,
+function SupplierSearchStep({
+  onSupplierSelected,
 }: {
-  onCustomerSelected: (customer: Customer) => void;
+  onSupplierSelected: (supplier: Supplier) => void;
 }) {
   const [query, setQuery] = useState("");
-  const [allCustomers, setAllCustomers] = useState<Customer[]>([]);
+  const [allSuppliers, setAllSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getCustomers()
-      .then((data) => setAllCustomers(data as Customer[]))
+    getSuppliers()
+      .then((data) => setAllSuppliers(data as Supplier[]))
       .finally(() => setLoading(false));
   }, []);
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return [];
-    return allCustomers.filter((c) => {
-      const codeMatch = c.code.toString() === q;
-      const phoneMatch = c.phone && c.phone === q;
-      const nameMatch = c.name.toLowerCase().includes(q);
+    return allSuppliers.filter((s) => {
+      const codeMatch = s.code.toString() === q;
+      const phoneMatch = s.phone && s.phone === q;
+      const nameMatch = s.name.toLowerCase().includes(q);
       return codeMatch || phoneMatch || nameMatch;
     });
-  }, [query, allCustomers]);
+  }, [query, allSuppliers]);
 
   return (
     <div
@@ -92,18 +88,18 @@ function CustomerSearchStep({
           <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
             <User className="h-8 w-8 text-primary" />
           </div>
-          <h2 className="text-2xl font-black text-slate-800">ابحث عن العميل أولاً</h2>
+          <h2 className="text-2xl font-black text-slate-800">ابحث عن المورد أولاً</h2>
           <p className="text-muted-foreground">تظهر النتائج تلقائياً أثناء الكتابة</p>
         </div>
 
         <Card className="border-none shadow-md">
           <CardContent className="p-6 space-y-4">
             <div className="space-y-2">
-              <Label className="font-semibold text-slate-700">بحث فوري عن العميل</Label>
+              <Label className="font-semibold text-slate-700">بحث فوري عن المورد</Label>
               <div className="relative">
                 <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <Input
-                  placeholder="اكتب الكود، الموبايل، أو اسم العميل..."
+                  placeholder="اكتب الكود، الموبايل، أو اسم المورد..."
                   value={query}
                   disabled={loading}
                   onChange={(e) => setQuery(e.target.value)}
@@ -116,20 +112,20 @@ function CustomerSearchStep({
             {query.trim() !== "" && (
               <div className="space-y-2 pt-2 max-h-64 overflow-y-auto">
                 {results.length > 0 ? (
-                  results.map((customer) => (
+                  results.map((supplier) => (
                     <button
-                      key={customer.id}
+                      key={supplier.id}
                       type="button"
-                      onClick={() => onCustomerSelected(customer)}
+                      onClick={() => onSupplierSelected(supplier)}
                       className="w-full text-right p-4 rounded-lg border border-slate-200 hover:border-primary hover:bg-primary/5 transition-all flex justify-between items-center group"
                     >
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
                           <span className="font-bold text-slate-800 group-hover:text-primary">
-                            {customer.name}
+                            {supplier.name}
                           </span>
                           <span className="text-xs bg-slate-100 px-2 py-0.5 rounded-full">
-                            #{customer.code}
+                            #{supplier.code}
                           </span>
                         </div>
                       </div>
@@ -154,11 +150,11 @@ function CustomerSearchStep({
 // Step 2 — نموذج إنشاء/تعديل الفاتورة
 // ============================================================
 function InvoiceFormStep({
-  customer,
+  supplier,
   onBack,
   invoiceId,
 }: {
-  customer: Customer;
+  supplier: Supplier;
   onBack: () => void;
   invoiceId?: string | null;
 }) {
@@ -177,52 +173,52 @@ function InvoiceFormStep({
   const [invoiceDate, setInvoiceDate] = useState<string>(
     new Date().toISOString().split("T")[0]
   );
-  const [items, setItems] = useState<InvoiceItem[]>([
-    { id: "1", description: "", quantity: 0, unitPrice: 0, taxRate: 0, total: 0 },
+  const [items, setItems] = useState<PurchaseInvoiceItem[]>([
+    { id: Date.now(), description: "", quantity: 0, unitPrice: 0, taxRate: 0, total: 0 },
   ]);
 
   // تحميل بيانات الفاتورة إذا كنا في وضع التعديل
   useEffect(() => {
-  if (isEditMode && invoiceId) {
-    setLoading(true);
-    getSalesInvoiceById(Number(invoiceId))
-      .then((invoice) => {
-        if (invoice) {
-          setInvoiceNumber(invoice.invoiceNumber);
-          setPaymentType(invoice.status as "cash" | "credit" | "pending");
-          setInvoiceDate(new Date(invoice.invoiceDate).toISOString().split("T")[0]);
-          
-          if (invoice.items && invoice.items.length > 0) {
-            const formattedItems = invoice.items.map((item: {
-              description: string;
-              quantity: number;
-              unitPrice: number;
-              taxRate: number;
-              total: number;
-            }, index: number) => ({
-              id: String(index + 1),
-              description: item.description,
-              quantity: item.quantity,
-              unitPrice: item.unitPrice,
-              taxRate: item.taxRate,
-              total: item.total,
-            }));
-            setItems(formattedItems);
+    if (isEditMode && invoiceId) {
+      setLoading(true);
+      getPurchaseInvoiceById(Number(invoiceId))
+        .then((invoice) => {
+          if (invoice) {
+            setInvoiceNumber(invoice.invoiceNumber);
+            setPaymentType(invoice.status as "cash" | "credit" | "pending");
+            setInvoiceDate(new Date(invoice.invoiceDate).toISOString().split("T")[0]);
+            
+            if (invoice.items && invoice.items.length > 0) {
+              const formattedItems = invoice.items.map((item: {
+                description: string;
+                quantity: number;
+                unitPrice: number;
+                taxRate: number;
+                total: number;
+              }, index: number) => ({
+                id: Date.now() + index, // تأكد من أن كل item له id فريد
+                description: item.description,
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+                taxRate: item.taxRate,
+                total: item.total,
+              }));
+              setItems(formattedItems);
+            }
           }
-        }
-      })
-      .catch((error) => {
-        console.error("Error loading invoice:", error);
-        toast.error("حدث خطأ أثناء تحميل بيانات الفاتورة");
-      })
-      .finally(() => setLoading(false));
-  }
-}, [isEditMode, invoiceId]);
+        })
+        .catch((error) => {
+          console.error("Error loading invoice:", error);
+          toast.error("حدث خطأ أثناء تحميل بيانات الفاتورة");
+        })
+        .finally(() => setLoading(false));
+    }
+  }, [isEditMode, invoiceId]);
 
   // جلب الرقم التالي من قاعدة البيانات عند فتح النموذج (فقط في وضع الإنشاء)
   useEffect(() => {
     if (!isEditMode) {
-      getNextInvoiceNumber().then(setInvoiceNumber);
+      getNextPurchaseInvoiceNumber().then(setInvoiceNumber);
     }
   }, [isEditMode]);
 
@@ -232,11 +228,11 @@ function InvoiceFormStep({
     
     setCheckingNumber(true);
     const timer = setTimeout(async () => {
-      const taken = await checkInvoiceNumberExists(invoiceNumber);
+      const taken = await checkPurchaseInvoiceNumberExists(invoiceNumber);
       // في وضع التعديل، إذا كان الرقم هو نفس الرقم الأصلي، لا نعرض خطأ
       if (isEditMode && taken) {
         // نحتاج لمعرفة إذا كان هذا الرقم يخص هذه الفاتورة
-        const invoice = await getSalesInvoiceById(Number(invoiceId));
+        const invoice = await getPurchaseInvoiceById(Number(invoiceId));
         if (invoice && invoice.invoiceNumber === invoiceNumber) {
           setInvoiceNumberError("");
         } else {
@@ -258,7 +254,7 @@ function InvoiceFormStep({
     setItems((prev) => [
       ...prev,
       {
-        id: String(Date.now()),
+        id: Date.now(),
         description: "",
         quantity: 0,
         unitPrice: 0,
@@ -268,18 +264,20 @@ function InvoiceFormStep({
     ]);
   };
 
-  const removeItem = (id: string) => {
-    if (items.length > 1) setItems((prev) => prev.filter((item) => item.id !== id));
+  const removeItem = (index: number) => {
+    if (items.length > 1) {
+      setItems((prev) => prev.filter((_, i) => i !== index));
+    }
   };
 
   const updateItem = (
-    id: string,
-    field: keyof InvoiceItem,
+    index: number,
+    field: keyof PurchaseInvoiceItem,
     value: string | number
   ) => {
     setItems((prev) =>
-      prev.map((item) => {
-        if (item.id !== id) return item;
+      prev.map((item, i) => {
+        if (i !== index) return item;
         let finalValue = value;
         if (field === "quantity" || field === "unitPrice" || field === "taxRate") {
           finalValue = Math.max(0, Number(value));
@@ -325,8 +323,8 @@ function InvoiceFormStep({
       
       const invoiceData = {
         invoiceNumber,
-        customerId: customer.id,
-        customerName: customer.name,
+        supplierId: supplier.id,
+        supplierName: supplier.name,
         invoiceDate,
         subtotal,
         totalTax,
@@ -343,15 +341,15 @@ function InvoiceFormStep({
 
       if (isEditMode && invoiceId) {
         // تحديث فاتورة موجودة
-        await updateSalesInvoice(Number(invoiceId), invoiceData);
+        await updatePurchaseInvoice(Number(invoiceId), invoiceData);
         toast.success(`تم تحديث الفاتورة #${invoiceNumber} بنجاح`);
       } else {
         // إنشاء فاتورة جديدة
-        await createSalesInvoice(invoiceData);
+        await createPurchaseInvoice(invoiceData);
         toast.success(`تم حفظ الفاتورة #${invoiceNumber} بنجاح`);
       }
       
-      router.push("/sales-invoices");
+      router.push("/purchase-invoices");
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "حدث خطأ أثناء الحفظ";
       toast.error(message);
@@ -392,14 +390,14 @@ function InvoiceFormStep({
           </Button>
           <div>
             <h2 className="text-3xl font-black text-slate-800 tracking-tight">
-              {isEditMode ? "تعديل فاتورة مبيعات" : "إنشاء فاتورة مبيعات"}
+              {isEditMode ? "تعديل فاتورة مشتريات" : "إنشاء فاتورة مشتريات"}
             </h2>
             <p className="text-muted-foreground font-medium">
-              نظام إدارة مبيعات مصنع الطوب
+              نظام إدارة المشتريات
             </p>
           </div>
         </div>
-        
+
         {/* Print Button */}
         {(isEditMode || invoiceId) && (
              <Button
@@ -417,26 +415,26 @@ function InvoiceFormStep({
       <div className="print:hidden">
       <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-4">
         <div className="lg:col-span-3 space-y-6">
-          {/* ── بيانات العميل والطلب ── */}
+          {/* ── بيانات المورد والطلب ── */}
           <Card className="border-none shadow-sm overflow-hidden">
             <CardHeader className="bg-white border-b py-4">
               <CardTitle className="text-base font-bold flex items-center gap-2">
-                <div className="w-2 h-6 bg-primary rounded-full" /> بيانات العميل والطلب
+                <div className="w-2 h-6 bg-primary rounded-full" /> بيانات المورد والطلب
               </CardTitle>
             </CardHeader>
             <CardContent className="bg-white pt-5 pb-5">
               <div className="flex flex-col md:flex-row md:items-start gap-4 justify-between">
-                {/* معلومات العميل */}
+                {/* معلومات المورد */}
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center shrink-0">
                     <User className="h-6 w-6 text-primary" />
                   </div>
                   <div className="space-y-0.5">
                     <span className="font-black text-lg text-slate-800">
-                      {customer.name}
+                      {supplier.name}
                     </span>
                     <div className="text-xs text-muted-foreground font-bold">
-                      #{customer.code}
+                      #{supplier.code}
                     </div>
                   </div>
                 </div>
@@ -540,14 +538,14 @@ function InvoiceFormStep({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {items.map((item) => (
-                    <TableRow key={item.id}>
+                  {items.map((item, index) => (
+                    <TableRow key={item.id || index}>
                       <TableCell>
                         <Input
                           placeholder="وصف الصنف"
                           value={item.description}
                           onChange={(e) =>
-                            updateItem(item.id, "description", e.target.value)
+                            updateItem(index, "description", e.target.value)
                           }
                           className="bg-transparent border-none focus-visible:ring-1 shadow-none"
                           required
@@ -558,7 +556,7 @@ function InvoiceFormStep({
                           type="number"
                           value={item.quantity || ""}
                           onChange={(e) =>
-                            updateItem(item.id, "quantity", e.target.value)
+                            updateItem(index, "quantity", e.target.value)
                           }
                           className="bg-slate-50"
                           required
@@ -569,7 +567,7 @@ function InvoiceFormStep({
                           type="number"
                           value={item.unitPrice || ""}
                           onChange={(e) =>
-                            updateItem(item.id, "unitPrice", e.target.value)
+                            updateItem(index, "unitPrice", e.target.value)
                           }
                           className="bg-slate-50"
                           required
@@ -580,7 +578,7 @@ function InvoiceFormStep({
                           type="number"
                           value={item.taxRate}
                           onChange={(e) =>
-                            updateItem(item.id, "taxRate", e.target.value)
+                            updateItem(index, "taxRate", e.target.value)
                           }
                           className="bg-orange-50 border-orange-200"
                         />
@@ -593,7 +591,7 @@ function InvoiceFormStep({
                           type="button"
                           variant="ghost"
                           size="icon"
-                          onClick={() => removeItem(item.id)}
+                          onClick={() => removeItem(index)}
                           disabled={items.length === 1}
                           className="text-red-400"
                         >
@@ -668,9 +666,9 @@ function InvoiceFormStep({
          <PrintableInvoice
             invoiceNumber={invoiceNumber}
             date={invoiceDate}
-            partnerName={customer.name}
-            partnerLabel="العميل"
-            title="فاتورة مبيعات"
+            partnerName={supplier.name}
+            partnerLabel="المورد"
+            title="فاتورة مشتريات"
             items={items.map(item => ({
                 description: item.description,
                 quantity: item.quantity,
@@ -689,13 +687,13 @@ function InvoiceFormStep({
 // ============================================================
 // الصفحة الرئيسية
 // ============================================================
-export default function CreateSalesInvoicePage() {
+export default function CreatePurchaseInvoicePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const invoiceId = searchParams.get("id");
   const isEditMode = !!invoiceId && invoiceId !== "create";
   
-  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
   const [loading, setLoading] = useState(isEditMode);
 
   // تحميل بيانات الفاتورة في وضع التعديل
@@ -703,23 +701,24 @@ export default function CreateSalesInvoicePage() {
     if (isEditMode) {
       setLoading(true);
       // جلب الفاتورة أولاً
-      getSalesInvoiceById(Number(invoiceId))
+      getPurchaseInvoiceById(Number(invoiceId))
         .then((invoice) => {
           if (invoice) {
-            // جلب كل العملاء
-            return getCustomers().then((customers) => {
-              // البحث عن العميل المطلوب
-              const fullCustomer = (customers as Customer[]).find(c => c.id === invoice.customerId);
-              if (fullCustomer) {
-                setSelectedCustomer(fullCustomer);
+            // جلب كل الموردين
+            return getSuppliers().then((suppliers) => {
+              // البحث عن المورد المطلوب
+              const fullSupplier = (suppliers as Supplier[]).find(s => s.id === invoice.supplierId);
+              if (fullSupplier) {
+                setSelectedSupplier(fullSupplier);
               } else {
-                // إذا لم يتم العثور على العميل، نستخدم بيانات من الفاتورة
-                setSelectedCustomer({
-                  id: invoice.customerId,
-                  name: invoice.customerName,
+                // إذا لم يتم العثور على المورد، نستخدم بيانات من الفاتورة
+                setSelectedSupplier({
+                  id: invoice.supplierId,
+                  name: invoice.supplierName,
                   code: 0,
                   phone: null,
                   address: null,
+                  category: null
                 });
               }
             });
@@ -736,7 +735,7 @@ export default function CreateSalesInvoicePage() {
   if (loading) {
     return (
       <>
-        <Navbar title="فاتورة مبيعات" />
+        <Navbar title="فاتورة مشتريات" />
         <div className="flex-1 flex items-center justify-center p-6 bg-slate-50/50 min-h-[calc(100vh-64px)]">
           <div className="flex flex-col items-center gap-3">
             <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
@@ -749,19 +748,19 @@ export default function CreateSalesInvoicePage() {
 
   return (
     <>
-      <Navbar title={isEditMode ? "تعديل فاتورة مبيعات" : "فاتورة مبيعات جديدة"} />
-      {selectedCustomer === null ? (
-        <CustomerSearchStep 
-          onCustomerSelected={setSelectedCustomer}
+      <Navbar title={isEditMode ? "تعديل فاتورة مشتريات" : "فاتورة مشتريات جديدة"} />
+      {selectedSupplier === null ? (
+        <SupplierSearchStep 
+          onSupplierSelected={setSelectedSupplier}
         />
       ) : (
         <InvoiceFormStep
-          customer={selectedCustomer}
+          supplier={selectedSupplier}
           onBack={() => {
             if (isEditMode) {
-              router.push("/sales-invoices");
+              router.push("/purchase-invoices");
             } else {
-              setSelectedCustomer(null);
+              setSelectedSupplier(null);
             }
           }}
           invoiceId={invoiceId}
