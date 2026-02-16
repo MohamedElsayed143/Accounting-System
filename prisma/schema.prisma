@@ -119,6 +119,7 @@ model TreasuryBank {
   branch        String?  @db.VarChar(255)
   balance       Float    @default(0)
   description   String?  @db.Text
+   isActive      Boolean  @default(true)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   

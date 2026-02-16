@@ -2,13 +2,22 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Landmark, Building2, Plus, Wallet, Banknote, Trash2 } from "lucide-react";
+import {
+  Landmark,
+  Building2,
+  Plus,
+  Wallet,
+  Banknote,
+  Trash2,
+  Archive,
+  AlertTriangle,
+} from "lucide-react";
 import { Navbar } from "@/components/layout/navbar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
   getTreasuryData,
-  deleteBank,
+  archiveBank,
   type AccountSummary,
   type TreasuryStats,
 } from "./actions";
@@ -23,6 +32,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { toast } from "sonner";
 
 // تعريف نوع المعاملات
 interface Transaction {
@@ -51,8 +61,16 @@ export default function TreasuryPage() {
     recentTransactions: Transaction[];
   } | null>(null);
   const [showAddBank, setShowAddBank] = useState(false);
-  const [bankToDelete, setBankToDelete] = useState<AccountSummary | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
+  const [bankToArchive, setBankToArchive] = useState<AccountSummary | null>(
+    null,
+  );
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [archiveInfo, setArchiveInfo] = useState<{
+    hasTransactions: boolean;
+    transactionsCount: number;
+    message: string;
+  } | null>(null);
+  const [isArchiving, setIsArchiving] = useState(false);
 
   const loadData = () => {
     getTreasuryData().then(setData);
@@ -62,18 +80,52 @@ export default function TreasuryPage() {
     loadData();
   }, []);
 
-  const handleDeleteBank = async () => {
-    if (!bankToDelete) return;
-    
-    setIsDeleting(true);
-    const result = await deleteBank(bankToDelete.id);
-    setIsDeleting(false);
-    
-    if (result.success) {
-      setBankToDelete(null);
-      loadData();
-    } else {
-      alert(result.error || "حدث خطأ أثناء حذف البنك");
+  const handleArchiveClick = (bank: AccountSummary) => {
+    setBankToArchive(bank);
+    setShowConfirmDialog(true);
+  };
+
+  const handleArchiveBank = async () => {
+    if (!bankToArchive) return;
+
+    setIsArchiving(true);
+    try {
+      const result = await archiveBank(bankToArchive.id);
+      console.log("Archive result:", result);
+
+      if (result.success) {
+        if (result.deleted) {
+          toast.success(
+            `✅ تم حذف بنك "${bankToArchive.name}" نهائياً (لا يوجد معاملات)`,
+          );
+        } else {
+          toast.success(
+            `✅ تم أرشفة بنك "${bankToArchive.name}" وإخفاؤه من القائمة`,
+          );
+        }
+
+        setShowConfirmDialog(false);
+        setBankToArchive(null);
+        setArchiveInfo(null);
+
+        // تحديث البيانات
+        setTimeout(() => {
+          loadData();
+        }, 500);
+      } else {
+        toast.error(result.error || "حدث خطأ أثناء أرشفة البنك");
+        setShowConfirmDialog(false);
+        setBankToArchive(null);
+        setArchiveInfo(null);
+      }
+    } catch (error) {
+      console.error("Error in handleArchiveBank:", error);
+      toast.error("حدث خطأ غير متوقع");
+      setShowConfirmDialog(false);
+      setBankToArchive(null);
+      setArchiveInfo(null);
+    } finally {
+      setIsArchiving(false);
     }
   };
 
@@ -122,6 +174,18 @@ export default function TreasuryPage() {
           >
             <Plus className="h-4 w-4" /> إضافة بنك جديد
           </Button>
+
+          {/* زر البنوك المؤرشفة */}
+          <Link href="/treasury/archived">
+            <Button
+              variant="outline"
+              className="gap-2 border-orange-500 text-orange-600 hover:bg-orange-50"
+            >
+              <Landmark className="h-4 w-4" /> البنوك المؤرشفة
+            </Button>
+          </Link>
+
+          
           <Link href="/treasury/receipt-voucher">
             <Button className="bg-emerald-600 hover:bg-emerald-700">
               + سند قبض جديد
@@ -141,7 +205,9 @@ export default function TreasuryPage() {
                 <Link href={`/treasury/${acc.id}?type=${acc.type}`}>
                   <Card
                     className={`hover:shadow-md transition-all cursor-pointer border-b-4 ${
-                      acc.type === "safe" ? "border-b-blue-500" : "border-b-violet-500"
+                      acc.type === "safe"
+                        ? "border-b-blue-500"
+                        : "border-b-violet-500"
                     }`}
                   >
                     <CardContent className="pt-6">
@@ -178,20 +244,20 @@ export default function TreasuryPage() {
                     </CardContent>
                   </Card>
                 </Link>
-                
-                {/* زر الحذف - يظهر ثابت للبنوك مع cursor pointer */}
+
+                {/* زر الأرشفة - يظهر ثابت للبنوك */}
                 {acc.type === "bank" && (
                   <Button
-                    variant="destructive"
+                    variant="secondary"
                     size="icon"
-                    className="absolute -top-2 -left-2 h-8 w-8 rounded-full shadow-lg cursor-pointer"
+                    className="absolute -top-2 -left-2 h-8 w-8 rounded-full shadow-lg cursor-pointer bg-orange-500 hover:bg-orange-600"
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      setBankToDelete(acc);
+                      handleArchiveClick(acc);
                     }}
                   >
-                    <Trash2 className="h-4 w-4 cursor-pointer" />
+                    <Archive className="h-4 w-4 text-white cursor-pointer" />
                   </Button>
                 )}
               </div>
@@ -234,7 +300,9 @@ export default function TreasuryPage() {
                       <div className="text-left">
                         <p
                           className={`font-bold ${
-                            trans.type === "payment" ? "text-red-600" : "text-emerald-600"
+                            trans.type === "payment"
+                              ? "text-red-600"
+                              : "text-emerald-600"
                           }`}
                         >
                           {trans.type === "payment" ? "−" : "+"}
@@ -259,28 +327,61 @@ export default function TreasuryPage() {
         onSuccess={loadData}
       />
 
-      {/* Alert Dialog لتأكيد الحذف */}
-      <AlertDialog open={!!bankToDelete} onOpenChange={() => setBankToDelete(null)}>
+      {/* Alert Dialog لتأكيد أرشفة البنك */}
+      <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>هل أنت متأكد من حذف البنك؟</AlertDialogTitle>
-            <AlertDialogDescription>
-              {`هل تريد حذف بنك "${bankToDelete?.name}"؟ هذا الإجراء لا يمكن التراجع عنه.`}
-              {bankToDelete && (bankToDelete.balance > 0) && (
-                <p className="text-red-600 mt-2 font-bold">
-                  {`⚠️ تحذير: هذا البنك لديه رصيد ${bankToDelete.balance.toLocaleString()} ج.م`}
+            <AlertDialogTitle className="flex items-center gap-2 text-orange-600">
+              <Archive className="h-5 w-5" />
+              تأكيد أرشفة البنك
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-4">
+                <p className="text-muted-foreground">
+                  هل أنت متأكد من أرشفة بنك "{bankToArchive?.name}"؟
                 </p>
-              )}
+
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                  <p className="text-yellow-800 font-bold mb-2">
+                    ℹ️ معلومات مهمة
+                  </p>
+                  <ul className="text-yellow-700 text-sm list-disc list-inside space-y-1">
+                    <li>البنك سيختفي من قائمة الحسابات</li>
+                    <li>جميع المعاملات المرتبطة به ستبقى محفوظة</li>
+                    <li>يمكنك استرجاع البنك لاحقاً (تحتاج مطور)</li>
+                  </ul>
+                </div>
+
+                {bankToArchive && bankToArchive.balance > 0 && (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                    <p className="text-red-800 font-bold">
+                      ⚠️ رصيد البنك الحالي:{" "}
+                      {bankToArchive.balance.toLocaleString()} ج.م
+                    </p>
+                    <p className="text-red-700 text-sm mt-1">
+                      هذا الرصيد سيبقى في التقارير حتى بعد الأرشفة
+                    </p>
+                  </div>
+                )}
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="cursor-pointer">إلغاء</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDeleteBank}
-              disabled={isDeleting}
-              className="bg-red-600 hover:bg-red-700 cursor-pointer"
+            <AlertDialogCancel
+              className="cursor-pointer"
+              onClick={() => {
+                setShowConfirmDialog(false);
+                setBankToArchive(null);
+              }}
             >
-              {isDeleting ? "جاري الحذف..." : "نعم، احذف"}
+              إلغاء
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleArchiveBank}
+              disabled={isArchiving}
+              className="bg-orange-600 hover:bg-orange-700 cursor-pointer"
+            >
+              {isArchiving ? "جاري الأرشفة..." : "نعم، أرشفة البنك"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

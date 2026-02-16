@@ -58,46 +58,17 @@ async function ensureMainSafe() {
   return safe;
 }
 
-
-// 9. حذف بنك
-export async function deleteBank(bankId: number) {
-  try {
-    // تحقق من وجود سندات مرتبطة بالبنك
-    const relatedVouchers = await prisma.paymentVoucher.count({
-      where: { bankId }
-    });
-
-    const relatedReceipts = await prisma.receiptVoucher.count({
-      where: { bankId }
-    });
-
-    if (relatedVouchers > 0 || relatedReceipts > 0) {
-      return { 
-        success: false, 
-        error: "لا يمكن حذف البنك لوجود معاملات مرتبطة به" 
-      };
-    }
-
-    await prisma.treasuryBank.delete({
-      where: { id: bankId }
-    });
-
-    revalidatePath("/treasury");
-    return { success: true };
-  } catch (error) {
-    console.error("Error deleting bank:", error);
-    return { success: false, error: "فشل في حذف البنك" };
-  }
-}
-
-// 1. جلب بيانات الخزنة الرئيسية
+// 1. جلب بيانات الخزنة الرئيسية (البنوك النشطة فقط)
 export async function getTreasuryData() {
   const [safes, banks, recentReceipts, recentPayments] = await Promise.all([
     prisma.treasurySafe.findMany({ orderBy: { createdAt: 'desc' } }),
-    prisma.treasuryBank.findMany({ orderBy: { createdAt: 'desc' } }),
+    prisma.treasuryBank.findMany({ 
+      where: { isActive: true }, // البنوك النشطة فقط
+      orderBy: { createdAt: 'desc' } 
+    }),
     prisma.receiptVoucher.findMany({
-      take: 20, // زودنا العدد عشان نجيب عمليات اكتر ونرتبها صح
-      orderBy: { date: 'desc' }, // رتب حسب تاريخ السند مش تاريخ الإنشاء
+      take: 20,
+      orderBy: { date: 'desc' },
       include: {
         customer: { select: { name: true } },
         safe: { select: { name: true } },
@@ -106,7 +77,7 @@ export async function getTreasuryData() {
     }),
     prisma.paymentVoucher.findMany({
       take: 20,
-      orderBy: { date: 'desc' }, // رتب حسب تاريخ السند
+      orderBy: { date: 'desc' },
       include: {
         supplier: { select: { name: true } },
         safe: { select: { name: true } },
@@ -149,10 +120,10 @@ export async function getTreasuryData() {
       type: 'payment' as const,
       voucherNumber: p.voucherNumber,
       amount: p.amount,
-      date: p.date, // هنستخدم تاريخ السند
+      date: p.date,
       partyName: p.supplier.name,
       accountName: p.safe?.name || p.bank?.name || '',
-      createdAt: p.createdAt, // احتفظ بتاريخ الإنشاء كـ fallback
+      createdAt: p.createdAt,
     })),
     ...recentReceipts.map(r => ({
       id: `r-${r.id}`,
@@ -165,17 +136,12 @@ export async function getTreasuryData() {
       createdAt: r.createdAt,
     })),
   ]
-  // رتب حسب تاريخ السند (الأحدث أولاً)
-  // لو تاريخ السند متساوي، استخدم تاريخ الإنشاء
   .sort((a, b) => {
-    // قارن تواريخ السند أولاً
     const dateCompare = new Date(b.date).getTime() - new Date(a.date).getTime();
     if (dateCompare !== 0) return dateCompare;
-    
-    // لو تواريخ السند متساوية، استخدم تاريخ الإنشاء
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
   })
-  .slice(0, 10); // خد بس أحدث 10 عمليات
+  .slice(0, 10);
 
   return { accounts: allAccounts, stats, recentTransactions };
 }
@@ -189,6 +155,7 @@ export async function createBank(data: { name: string; accountNumber: string; br
         accountNumber: data.accountNumber || null,
         branch: data.branch || null,
         balance: data.initialBalance || 0,
+        isActive: true, // البنك الجديد نشط افتراضياً
       },
     });
     revalidatePath("/treasury");
@@ -199,7 +166,65 @@ export async function createBank(data: { name: string; accountNumber: string; br
   }
 }
 
-// 3. جلب البيانات الأولية لسند الصرف
+// 3. أرشفة بنك (بدل الحذف)
+export async function archiveBank(bankId: number) {
+  try {
+    console.log("Archiving bank:", bankId);
+    
+    // تحقق من وجود البنك
+    const bank = await prisma.treasuryBank.findUnique({
+      where: { id: bankId }
+    });
+
+    if (!bank) {
+      return { success: false, error: "البنك غير موجود" };
+    }
+
+    // تحقق من وجود معاملات مرتبطة
+    const relatedVouchers = await prisma.paymentVoucher.count({
+      where: { bankId }
+    });
+
+    const relatedReceipts = await prisma.receiptVoucher.count({
+      where: { bankId }
+    });
+
+    const hasTransactions = relatedVouchers > 0 || relatedReceipts > 0;
+
+    if (!hasTransactions) {
+      // لو مفيش معاملات، اقدر أحذفه فعلاً
+      await prisma.treasuryBank.delete({
+        where: { id: bankId }
+      });
+      
+      revalidatePath("/treasury");
+      return { 
+        success: true, 
+        message: "تم حذف البنك نهائياً",
+        deleted: true 
+      };
+    } else {
+      // لو في معاملات، اعمل أرشفة
+      await prisma.treasuryBank.update({
+        where: { id: bankId },
+        data: { isActive: false }
+      });
+      
+      revalidatePath("/treasury");
+      return { 
+        success: true, 
+        message: "تم أرشفة البنك وإخفاؤه من القائمة مع الاحتفاظ بالمعاملات",
+        archived: true,
+        transactionsCount: relatedVouchers + relatedReceipts
+      };
+    }
+  } catch (error) {
+    console.error("Error archiving bank:", error);
+    return { success: false, error: "فشل في أرشفة البنك" };
+  }
+}
+
+// 4. جلب البيانات الأولية لسند الصرف (البنوك النشطة فقط)
 export async function getInitialData(): Promise<InitialData> {
   try {
     // تأكد من وجود الخزنة الرئيسية
@@ -215,6 +240,7 @@ export async function getInitialData(): Promise<InitialData> {
         select: { id: true, name: true, balance: true }
       }),
       prisma.treasuryBank.findMany({ 
+        where: { isActive: true }, // البنوك النشطة فقط
         orderBy: { name: "asc" },
         select: { id: true, name: true, balance: true }
       }),
@@ -227,8 +253,7 @@ export async function getInitialData(): Promise<InitialData> {
   }
 }
 
-// 4. إنشاء سند صرف
-// 4. إنشاء سند صرف
+// 5. إنشاء سند صرف
 export async function createPaymentVoucher(data: PaymentVoucherInput) {
   try {
     const {
@@ -241,10 +266,8 @@ export async function createPaymentVoucher(data: PaymentVoucherInput) {
       description,
     } = data;
 
-    // تحويل القيم لرقم والتأكد من صحتها
     const amountFloat = typeof amount === "string" ? parseFloat(amount) : amount;
     
-    // تحويل accountId لرقم صحيح مع التحقق
     let idInt: number | null = null;
     if (accountId !== undefined && accountId !== null && accountId !== "") {
       if (typeof accountId === "string") {
@@ -254,7 +277,6 @@ export async function createPaymentVoucher(data: PaymentVoucherInput) {
       }
     }
     
-    // تحويل supplierId لرقم صحيح مع التحقق
     let suppIdInt: number | null = null;
     if (supplierId !== undefined && supplierId !== null && supplierId !== "") {
       if (typeof supplierId === "string") {
@@ -264,7 +286,6 @@ export async function createPaymentVoucher(data: PaymentVoucherInput) {
       }
     }
 
-    // التحقق من صحة الأرقام
     if (isNaN(amountFloat) || amountFloat <= 0) {
       throw new Error("المبلغ غير صحيح");
     }
@@ -279,18 +300,8 @@ export async function createPaymentVoucher(data: PaymentVoucherInput) {
       throw new Error("رقم المورد غير صحيح");
     }
 
-    console.log("Creating payment voucher with:", {
-      accountType,
-      idInt,
-      suppIdInt,
-      amountFloat,
-      voucherNumber,
-      date
-    });
-
     const result = await prisma.$transaction(async (tx) => {
       
-      // تحديث الرصيد والتحقق من التوفر
       if (accountType === "safe") {
         const safe = await tx.treasurySafe.findUnique({ 
           where: { id: idInt } 
@@ -329,7 +340,6 @@ export async function createPaymentVoucher(data: PaymentVoucherInput) {
         throw new Error("نوع الحساب غير معروف");
       }
 
-      // إنشاء سجل السند
       return await tx.paymentVoucher.create({
         data: {
           voucherNumber,
@@ -349,7 +359,6 @@ export async function createPaymentVoucher(data: PaymentVoucherInput) {
       });
     });
 
-    // تحديث الصفحات المرتبطة
     revalidatePath("/treasury");
     revalidatePath(`/treasury/${idInt}?type=${accountType}`);
     
@@ -361,7 +370,7 @@ export async function createPaymentVoucher(data: PaymentVoucherInput) {
   }
 }
 
-// 5. جلب تفاصيل حساب معين (خزنة أو بنك)
+// 6. جلب تفاصيل حساب معين
 export async function getAccountDetails(id: number, type: 'safe' | 'bank') {
   try {
     if (type === 'safe') {
@@ -469,7 +478,7 @@ export async function getAccountDetails(id: number, type: 'safe' | 'bank') {
 
 export type AccountDetails = Awaited<ReturnType<typeof getAccountDetails>>;
 
-// 6. جلب العملاء لسند القبض
+// 7. جلب العملاء لسند القبض
 export async function getCustomers() {
   try {
     const customers = await prisma.customer.findMany({
@@ -483,7 +492,7 @@ export async function getCustomers() {
   }
 }
 
-// 7. إنشاء سند قبض
+// 8. إنشاء سند قبض
 export async function createReceiptVoucher(data: {
   voucherNumber: string;
   date: string;
@@ -510,7 +519,6 @@ export async function createReceiptVoucher(data: {
 
     const result = await prisma.$transaction(async (tx) => {
       
-      // تحديث الرصيد (زيادة الرصيد لأنها سند قبض)
       if (accountType === "safe") {
         const safe = await tx.treasurySafe.findUnique({ 
           where: { id: accountId } 
@@ -535,7 +543,6 @@ export async function createReceiptVoucher(data: {
         throw new Error("نوع الحساب غير معروف");
       }
 
-      // إنشاء سجل السند
       return await tx.receiptVoucher.create({
         data: {
           voucherNumber,
@@ -555,9 +562,8 @@ export async function createReceiptVoucher(data: {
       });
     });
 
-    // تحديث الصفحات المرتبطة
     revalidatePath("/treasury");
-revalidatePath(`/treasury/${accountId}?type=${accountType}`);
+    revalidatePath(`/treasury/${accountId}?type=${accountType}`);
     
     return { success: true, data: result };
   } catch (error: unknown) {
@@ -567,7 +573,50 @@ revalidatePath(`/treasury/${accountId}?type=${accountType}`);
   }
 }
 
-// 7. جلب بيانات العملاء والحسابات لسند القبض
+// 10. جلب البنوك المؤرشفة
+export async function getArchivedBanks() {
+  try {
+    const banks = await prisma.treasuryBank.findMany({
+      where: { isActive: false },
+      orderBy: { updatedAt: 'desc' },
+      include: {
+        receiptVouchers: {
+          take: 5,
+          orderBy: { date: 'desc' }
+        },
+        paymentVouchers: {
+          take: 5,
+          orderBy: { date: 'desc' }
+        }
+      }
+    });
+
+    return { success: true, banks };
+  } catch (error) {
+    console.error("Error fetching archived banks:", error);
+    return { success: false, error: "فشل في جلب البنوك المؤرشفة" };
+  }
+}
+
+// 11. إرجاع بنك من الأرشيف
+export async function restoreBank(bankId: number) {
+  try {
+    await prisma.treasuryBank.update({
+      where: { id: bankId },
+      data: { isActive: true }
+    });
+
+    revalidatePath("/treasury");
+    revalidatePath("/treasury/archived");
+    
+    return { success: true, message: "تم إرجاع البنك بنجاح" };
+  } catch (error) {
+    console.error("Error restoring bank:", error);
+    return { success: false, error: "فشل في إرجاع البنك" };
+  }
+}
+
+// 9. جلب بيانات العملاء والحسابات لسند القبض (البنوك النشطة فقط)
 export async function getReceiptInitialData() {
   try {
     // تأكد من وجود الخزنة الرئيسية
@@ -583,6 +632,7 @@ export async function getReceiptInitialData() {
         select: { id: true, name: true, balance: true }
       }),
       prisma.treasuryBank.findMany({ 
+        where: { isActive: true }, // البنوك النشطة فقط
         orderBy: { name: "asc" },
         select: { id: true, name: true, balance: true }
       }),
