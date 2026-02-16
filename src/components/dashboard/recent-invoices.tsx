@@ -49,8 +49,12 @@ export function RecentInvoices({ invoices }: RecentInvoicesProps) {
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent border-b-2">
-                <TableHead className="font-bold text-right">رقم الفاتورة</TableHead>
-                <TableHead className="font-bold text-right">اسم العميل</TableHead>
+                <TableHead className="font-bold text-right">
+                  رقم الفاتورة
+                </TableHead>
+                <TableHead className="font-bold text-right">
+                  اسم العميل
+                </TableHead>
                 <TableHead className="font-bold text-right">المبلغ</TableHead>
                 <TableHead className="font-bold text-right">الحالة</TableHead>
                 <TableHead className="font-bold text-right">التاريخ</TableHead>
@@ -58,36 +62,38 @@ export function RecentInvoices({ invoices }: RecentInvoicesProps) {
             </TableHeader>
             <TableBody>
               {invoices.slice(0, 5).map((invoice, index) => (
-                <TableRow 
+                <TableRow
                   key={invoice.id}
                   className={cn(
                     "hover:bg-muted/50 transition-colors",
-                    index % 2 === 0 ? "bg-muted/20" : ""
+                    index % 2 === 0 ? "bg-muted/20" : "",
                   )}
                 >
                   <TableCell className="font-semibold text-primary">
                     {invoice.invoiceNumber}
                   </TableCell>
-                  <TableCell className="font-medium">{invoice.customerName}</TableCell>
+                  <TableCell className="font-medium">
+                    {invoice.customerName}
+                  </TableCell>
                   <TableCell className="font-bold">
-                    {invoice.total.toLocaleString('ar-SA')} ر.س
+                    {invoice.total.toLocaleString("ar-SA")} ج.م
                   </TableCell>
                   <TableCell>
                     <Badge
                       variant="secondary"
                       className={cn(
-                        statusStyles[invoice.status], 
-                        "font-semibold border shadow-sm"
+                        statusStyles[invoice.status],
+                        "font-semibold border shadow-sm",
                       )}
                     >
                       {statusLabels[invoice.status]}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-muted-foreground">
-                    {new Date(invoice.createdAt).toLocaleDateString('ar-SA', {
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric'
+                    {new Date(invoice.createdAt).toLocaleDateString("ar-SA", {
+                      year: "numeric",
+                      month: "long",
+                      day: "numeric",
                     })}
                   </TableCell>
                 </TableRow>

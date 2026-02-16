@@ -42,28 +42,28 @@ export default function DashboardPage() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <KPICard
             title="إجمالي المبيعات"
-            value={`${totalSales.toLocaleString('ar-SA')} ر.س`}
+            value={`${totalSales.toLocaleString("ar-SA")} ج.م`}
             change={12.5}
             changeType="increase"
             icon={DollarSign}
           />
           <KPICard
             title="العملاء"
-            value={totalCustomers.toLocaleString('ar-SA')}
+            value={totalCustomers.toLocaleString("ar-SA")}
             change={8.2}
             changeType="increase"
             icon={Users}
           />
           <KPICard
             title="الموردين"
-            value={totalSuppliers.toLocaleString('ar-SA')}
+            value={totalSuppliers.toLocaleString("ar-SA")}
             change={3.1}
             changeType="decrease"
             icon={Truck}
           />
           <KPICard
             title="الفواتير"
-            value={totalInvoices.toLocaleString('ar-SA')}
+            value={totalInvoices.toLocaleString("ar-SA")}
             change={15.3}
             changeType="increase"
             icon={FileText}

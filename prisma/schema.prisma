@@ -8,13 +8,19 @@ generator client {
   provider = "prisma-client-js"
 }
 
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
 model Customer {
   id        Int      @id @default(autoincrement())
   name      String   @db.VarChar(255)
   code      Int      @unique // كود العميل الفريد
   phone     String?  @db.VarChar(20)
   address   String?  @db.Text
-  invoices SalesInvoice[]
+  invoices  SalesInvoice[]
+  receiptVouchers ReceiptVoucher[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -28,7 +34,8 @@ model Supplier {
   category  String?  @db.VarChar(100)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  invoices PurchaseInvoice[]
+  invoices  PurchaseInvoice[]
+  paymentVouchers PaymentVoucher[]
 }
 
 model SalesInvoice {
@@ -91,7 +98,88 @@ enum InvoiceStatus {
   pending
 }
 
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+// ========== الخزائن ==========
+model TreasurySafe {
+  id          Int      @id @default(autoincrement())
+  name        String   @db.VarChar(255)
+  balance     Float    @default(0)
+  description String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  receiptVouchers  ReceiptVoucher[]
+  paymentVouchers  PaymentVoucher[]
 }
+
+// ========== البنوك ==========
+model TreasuryBank {
+  id            Int      @id @default(autoincrement())
+  name          String   @db.VarChar(255)
+  accountNumber String?  @db.VarChar(100)
+  branch        String?  @db.VarChar(255)
+  balance       Float    @default(0)
+  description   String?  @db.Text
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  receiptVouchers  ReceiptVoucher[]
+  paymentVouchers  PaymentVoucher[]
+}
+
+// ========== سندات القبض ==========
+model ReceiptVoucher {
+  id            Int      @id @default(autoincrement())
+  voucherNumber String   @unique @db.VarChar(50)
+  date          DateTime
+  amount        Float
+  description   String?  @db.Text
+  
+  // من العميل
+  customerId    Int
+  customer      Customer @relation(fields: [customerId], references: [id])
+  
+  // إلى خزنة أو بنك
+  accountType   String   @db.VarChar(10) // "safe" or "bank"
+  safeId        Int?
+  safe          TreasurySafe? @relation(fields: [safeId], references: [id])
+  bankId        Int?
+  bank          TreasuryBank? @relation(fields: [bankId], references: [id])
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([customerId])
+  @@index([safeId])
+  @@index([bankId])
+}
+
+// ========== سندات الصرف ==========
+model PaymentVoucher {
+  id            Int      @id @default(autoincrement())
+  voucherNumber String   @unique @db.VarChar(50)
+  date          DateTime
+  amount        Float
+  description   String?  @db.Text
+  
+  // من خزنة أو بنك
+  accountType   String   @db.VarChar(10) // "safe" or "bank"
+  safeId        Int?
+  safe          TreasurySafe? @relation(fields: [safeId], references: [id])
+  bankId        Int?
+  bank          TreasuryBank? @relation(fields: [bankId], references: [id])
+  
+  // إلى المورد
+  supplierId    Int
+  supplier      Supplier @relation(fields: [supplierId], references: [id])
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([supplierId])
+  @@index([safeId])
+  @@index([bankId])
+}
+
+
+
+

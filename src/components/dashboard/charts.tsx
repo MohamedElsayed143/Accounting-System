@@ -33,8 +33,12 @@ export function RevenueChart({ data }: RevenueChartProps) {
   return (
     <Card className="col-span-full lg:col-span-2 shadow-sm hover:shadow-md transition-shadow">
       <CardHeader>
-        <CardTitle className="text-xl font-bold">نظرة عامة على الإيرادات</CardTitle>
-        <CardDescription className="text-sm">الإيرادات الشهرية للعام الحالي</CardDescription>
+        <CardTitle className="text-xl font-bold">
+          نظرة عامة على الإيرادات
+        </CardTitle>
+        <CardDescription className="text-sm">
+          الإيرادات الشهرية للعام الحالي
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <div className="h-[300px]">
@@ -55,7 +59,7 @@ export function RevenueChart({ data }: RevenueChartProps) {
               <YAxis
                 className="text-xs"
                 tick={{ fill: "hsl(var(--muted-foreground))" }}
-                tickFormatter={(value) => `${(value / 1000).toFixed(0)}k ر.س`}
+                tickFormatter={(value) => `${(value / 1000).toFixed(0)}k ج.م`}
               />
               <Tooltip
                 contentStyle={{
@@ -65,7 +69,7 @@ export function RevenueChart({ data }: RevenueChartProps) {
                   direction: "rtl",
                 }}
                 formatter={(value: number) => [
-                  `${value.toLocaleString('ar-SA')} ر.س`,
+                  `${value.toLocaleString("ar-SA")} ج.م`,
                   "الإيرادات",
                 ]}
               />
@@ -123,7 +127,9 @@ export function ExpensesChart({ data }: ExpensesChartProps) {
                   borderRadius: "8px",
                   direction: "rtl",
                 }}
-                formatter={(value: number) => [`${value.toLocaleString('ar-SA')} ر.س`]}
+                formatter={(value: number) => [
+                  `${value.toLocaleString("ar-SA")} ج.م`,
+                ]}
               />
             </PieChart>
           </ResponsiveContainer>
@@ -135,7 +141,9 @@ export function ExpensesChart({ data }: ExpensesChartProps) {
                 className="h-3 w-3 rounded-full shadow-sm"
                 style={{ backgroundColor: COLORS[index % COLORS.length] }}
               />
-              <span className="text-xs text-muted-foreground font-medium">{item.name}</span>
+              <span className="text-xs text-muted-foreground font-medium">
+                {item.name}
+              </span>
             </div>
           ))}
         </div>
@@ -152,7 +160,9 @@ export function RegionChart({ data }: RegionChartProps) {
   return (
     <Card className="shadow-sm hover:shadow-md transition-shadow">
       <CardHeader>
-        <CardTitle className="text-xl font-bold">الإيرادات حسب المنطقة</CardTitle>
+        <CardTitle className="text-xl font-bold">
+          الإيرادات حسب المنطقة
+        </CardTitle>
         <CardDescription className="text-sm">التوزيع الجغرافي</CardDescription>
       </CardHeader>
       <CardContent>
@@ -164,7 +174,7 @@ export function RegionChart({ data }: RegionChartProps) {
                 type="number"
                 className="text-xs"
                 tick={{ fill: "hsl(var(--muted-foreground))" }}
-                tickFormatter={(value) => `${(value / 1000).toFixed(0)}k ر.س`}
+                tickFormatter={(value) => `${(value / 1000).toFixed(0)}k ج.م`}
               />
               <YAxis
                 type="category"
@@ -181,7 +191,7 @@ export function RegionChart({ data }: RegionChartProps) {
                   direction: "rtl",
                 }}
                 formatter={(value: number) => [
-                  `${value.toLocaleString('ar-SA')} ر.س`,
+                  `${value.toLocaleString("ar-SA")} ج.م`,
                   "الإيرادات",
                 ]}
               />
