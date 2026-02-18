@@ -49,6 +49,7 @@ model SalesInvoice {
   totalTax      Float
   total         Float
   status        InvoiceStatus      @default(cash)
+  description   String? 
   createdAt     DateTime           @default(now())
   updatedAt     DateTime           @updatedAt
   items         SalesInvoiceItem[]
@@ -76,6 +77,7 @@ model PurchaseInvoice {
   totalTax      Float
   total         Float
   status        InvoiceStatus        @default(cash)
+  description   String? 
   createdAt     DateTime             @default(now())
   updatedAt     DateTime             @updatedAt
   items         PurchaseInvoiceItem[]
