@@ -2,32 +2,68 @@
 
 import { prisma } from "@/lib/prisma";
 
-// ─── جلب كل الفواتير ────────────────────────────────────────────────────────
+// ─── جلب كل الفواتير مع عدد المرتجعات وقيمتها ─────────────────────────────
 export async function getSalesInvoices() {
-  return prisma.salesInvoice.findMany({
-    orderBy: { invoiceNumber: "desc" },
-    select: {
-      id: true,
-      invoiceNumber: true,
-      customerName: true,
-      invoiceDate: true,
-      total: true,
-      status: true,
-    },
+  try {
+    const invoices = await prisma.salesInvoice.findMany({
+      orderBy: { invoiceDate: 'desc' },
+      include: {
+        _count: {
+          select: { salesReturns: true }
+        },
+        salesReturns: {
+          select: { total: true }
+        }
+      }
+    });
+
+    return invoices.map(inv => {
+      const returnsTotal = inv.salesReturns.reduce((sum, ret) => sum + ret.total, 0);
+      return {
+        id: inv.id,
+        invoiceNumber: inv.invoiceNumber,
+        customerName: inv.customerName,
+        invoiceDate: inv.invoiceDate,
+        total: inv.total,
+        netTotal: inv.total - returnsTotal,
+        status: inv.status,
+        returnsCount: inv._count.salesReturns,
+        returnsTotal: returnsTotal,
+      };
+    });
+  } catch (error) {
+    console.error("Error fetching sales invoices:", error);
+    return [];
+  }
+}
+
+export async function getSalesInvoiceWithItems(id: number) {
+  return prisma.salesInvoice.findUnique({
+    where: { id },
+    include: { items: true }
   });
 }
 
-// ─── جلب فاتورة محددة للتعديل ────────────────────────────────────────────────
-export async function getSalesInvoiceById(id: number) {
+// ─── جلب فاتورة معينة مع المرتجعات (لصفحة العرض) ───────────────────────────
+export async function getSalesInvoiceWithReturns(id: number) {
   return prisma.salesInvoice.findUnique({
     where: { id },
     include: {
       items: true,
-    },
+      salesReturns: {
+        include: { items: true }
+      }
+    }
   });
 }
 
-// ─── الرقم التالي للفاتورة ───────────────────────────────────────────────────
+export async function getSalesInvoiceById(id: number) {
+  return prisma.salesInvoice.findUnique({
+    where: { id },
+    include: { items: true },
+  });
+}
+
 export async function getNextInvoiceNumber(): Promise<number> {
   const last = await prisma.salesInvoice.findFirst({
     orderBy: { invoiceNumber: "desc" },
@@ -36,7 +72,6 @@ export async function getNextInvoiceNumber(): Promise<number> {
   return (last?.invoiceNumber ?? 0) + 1;
 }
 
-// ─── التحقق من رقم مكرر ──────────────────────────────────────────────────────
 export async function checkInvoiceNumberExists(num: number): Promise<boolean> {
   const found = await prisma.salesInvoice.findUnique({
     where: { invoiceNumber: num },
@@ -45,7 +80,20 @@ export async function checkInvoiceNumberExists(num: number): Promise<boolean> {
   return !!found;
 }
 
-// ─── حفظ فاتورة جديدة ────────────────────────────────────────────────────────
+export async function getSalesInvoicesByCustomer(customerId: number) {
+  return prisma.salesInvoice.findMany({
+    where: { customerId },
+    orderBy: { invoiceDate: 'desc' },
+    select: {
+      id: true,
+      invoiceNumber: true,
+      customerName: true,
+      invoiceDate: true,
+      total: true,
+    }
+  });
+}
+
 export async function createSalesInvoice(data: {
   invoiceNumber: number;
   customerId: number;
@@ -63,7 +111,6 @@ export async function createSalesInvoice(data: {
     total: number;
   }[];
 }) {
-  // تحقق أخير قبل الحفظ منعاً للـ race condition
   const taken = await checkInvoiceNumberExists(data.invoiceNumber);
   if (taken) {
     throw new Error(`رقم الفاتورة #${data.invoiceNumber} مستخدم مسبقاً`);
@@ -86,7 +133,6 @@ export async function createSalesInvoice(data: {
   });
 }
 
-// ─── تحديث فاتورة موجودة ─────────────────────────────────────────────────────
 export async function updateSalesInvoice(
   id: number,
   data: {
@@ -107,7 +153,6 @@ export async function updateSalesInvoice(
     }[];
   }
 ) {
-  // تحقق من عدم تكرار الرقم مع فاتورة أخرى
   const existing = await prisma.salesInvoice.findFirst({
     where: {
       invoiceNumber: data.invoiceNumber,
@@ -119,7 +164,6 @@ export async function updateSalesInvoice(
     throw new Error(`رقم الفاتورة #${data.invoiceNumber} مستخدم مسبقاً`);
   }
 
-  // حذف الأصناف القديمة وإضافة الجديدة
   await prisma.salesInvoiceItem.deleteMany({
     where: { invoiceId: id },
   });
@@ -142,7 +186,6 @@ export async function updateSalesInvoice(
   });
 }
 
-// ─── حذف فاتورة ──────────────────────────────────────────────────────────────
 export async function deleteSalesInvoice(id: number) {
   return prisma.salesInvoice.delete({ where: { id } });
 }

@@ -644,3 +644,27 @@ export async function getReceiptInitialData() {
     return { customers: [], safes: [], banks: [] };
   }
 }
+// دالة جديدة لجلب البنوك النشطة (اختيارياً مع فلترة حسب isActive)
+export async function getBanks(activeOnly: boolean = true) {
+  try {
+    const banks = await prisma.treasuryBank.findMany({
+      where: activeOnly ? { isActive: true } : {},
+      orderBy: { name: 'asc' },
+      select: {
+        id: true,
+        name: true,
+        accountNumber: true,
+        branch: true,
+        balance: true,
+        isActive: true,
+      },
+    });
+    return banks;
+  } catch (error) {
+    console.error("Error fetching banks:", error);
+    return [];
+  }
+}
+
+// تأكد من تصديرها
+export { getBanks };

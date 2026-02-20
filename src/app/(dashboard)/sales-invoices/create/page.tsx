@@ -30,10 +30,9 @@ import {
   getNextInvoiceNumber,
   checkInvoiceNumberExists,
   createSalesInvoice,
-  getSalesInvoiceById,
+  getSalesInvoiceWithReturns,
   updateSalesInvoice,
 } from "../actions";
-import { PrintableInvoice } from "@/components/invoices/printable-invoice";
 
 // ─── الأنواع ──────────────────────────────────────────────────────────────────
 interface Customer {
@@ -151,28 +150,29 @@ function CustomerSearchStep({
 }
 
 // ============================================================
-// Step 2 — نموذج إنشاء/تعديل الفاتورة
+// Step 2 — نموذج إنشاء/تعديل/عرض الفاتورة
 // ============================================================
 function InvoiceFormStep({
   customer,
   onBack,
   invoiceId,
+  readOnly,
 }: {
   customer: Customer;
   onBack: () => void;
   invoiceId?: string | null;
+  readOnly?: boolean;
 }) {
   const router = useRouter();
-  const isEditMode = !!invoiceId && invoiceId !== "create";
+  const isEditMode = !!invoiceId && invoiceId !== "create" && !readOnly;
+  const isViewMode = !!readOnly;
 
-  // ─── رقم الفاتورة ─────────────────────────────────────────────────────────
   const [invoiceNumber, setInvoiceNumber] = useState<number>(1);
   const [invoiceNumberError, setInvoiceNumberError] = useState<string>("");
   const [checkingNumber, setCheckingNumber] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [loading, setLoading] = useState(isEditMode);
+  const [loading, setLoading] = useState(isEditMode || isViewMode);
 
-  // ─── باقي حقول الفاتورة ───────────────────────────────────────────────────
   const [paymentType, setPaymentType] = useState<"cash" | "credit" | "pending">("cash");
   const [invoiceDate, setInvoiceDate] = useState<string>(
     new Date().toISOString().split("T")[0]
@@ -181,62 +181,65 @@ function InvoiceFormStep({
     { id: "1", description: "", quantity: 0, unitPrice: 0, taxRate: 0, total: 0 },
   ]);
 
-  // تحميل بيانات الفاتورة إذا كنا في وضع التعديل
-  useEffect(() => {
-  if (isEditMode && invoiceId) {
-    setLoading(true);
-    getSalesInvoiceById(Number(invoiceId))
-      .then((invoice) => {
-        if (invoice) {
-          setInvoiceNumber(invoice.invoiceNumber);
-          setPaymentType(invoice.status as "cash" | "credit" | "pending");
-          setInvoiceDate(new Date(invoice.invoiceDate).toISOString().split("T")[0]);
-          
-          if (invoice.items && invoice.items.length > 0) {
-            const formattedItems = invoice.items.map((item: {
-              description: string;
-              quantity: number;
-              unitPrice: number;
-              taxRate: number;
-              total: number;
-            }, index: number) => ({
-              id: String(index + 1),
-              description: item.description,
-              quantity: item.quantity,
-              unitPrice: item.unitPrice,
-              taxRate: item.taxRate,
-              total: item.total,
-            }));
-            setItems(formattedItems);
-          }
-        }
-      })
-      .catch((error) => {
-        console.error("Error loading invoice:", error);
-        toast.error("حدث خطأ أثناء تحميل بيانات الفاتورة");
-      })
-      .finally(() => setLoading(false));
-  }
-}, [isEditMode, invoiceId]);
+  const [returnsTotal, setReturnsTotal] = useState<number>(0);
+  const [returnsCount, setReturnsCount] = useState<number>(0);
 
-  // جلب الرقم التالي من قاعدة البيانات عند فتح النموذج (فقط في وضع الإنشاء)
   useEffect(() => {
-    if (!isEditMode) {
+    if ((isEditMode || isViewMode) && invoiceId) {
+      setLoading(true);
+      getSalesInvoiceWithReturns(Number(invoiceId))
+        .then((invoice) => {
+          if (invoice) {
+            setInvoiceNumber(invoice.invoiceNumber);
+            setPaymentType(invoice.status as "cash" | "credit" | "pending");
+            setInvoiceDate(new Date(invoice.invoiceDate).toISOString().split("T")[0]);
+
+            const totalReturns = invoice.salesReturns?.reduce((sum, ret) => sum + ret.total, 0) || 0;
+            setReturnsTotal(totalReturns);
+            setReturnsCount(invoice.salesReturns?.length || 0);
+
+            if (invoice.items && invoice.items.length > 0) {
+              const formattedItems = invoice.items.map((item: {
+                description: string;
+                quantity: number;
+                unitPrice: number;
+                taxRate: number;
+                total: number;
+              }, index: number) => ({
+                id: String(index + 1),
+                description: item.description,
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+                taxRate: item.taxRate,
+                total: item.total,
+              }));
+              setItems(formattedItems);
+            }
+          }
+        })
+        .catch((error) => {
+          console.error("Error loading invoice:", error);
+          toast.error("حدث خطأ أثناء تحميل بيانات الفاتورة");
+        })
+        .finally(() => setLoading(false));
+    }
+  }, [isEditMode, isViewMode, invoiceId]);
+
+  useEffect(() => {
+    if (!isEditMode && !isViewMode) {
       getNextInvoiceNumber().then(setInvoiceNumber);
     }
-  }, [isEditMode]);
+  }, [isEditMode, isViewMode]);
 
-  // التحقق من رقم الفاتورة عند تغييره (debounce 400ms)
   useEffect(() => {
+    if (isViewMode) return;
     if (!invoiceNumber || invoiceNumber < 1) return;
-    
+
     setCheckingNumber(true);
     const timer = setTimeout(async () => {
       const taken = await checkInvoiceNumberExists(invoiceNumber);
-      // في وضع التعديل، إذا كان الرقم هو نفس الرقم الأصلي، لا نعرض خطأ
       if (isEditMode && taken) {
-        // نحتاج لمعرفة إذا كان هذا الرقم يخص هذه الفاتورة
-        const invoice = await getSalesInvoiceById(Number(invoiceId));
+        const invoice = await getSalesInvoiceWithReturns(Number(invoiceId));
         if (invoice && invoice.invoiceNumber === invoiceNumber) {
           setInvoiceNumberError("");
         } else {
@@ -252,9 +255,10 @@ function InvoiceFormStep({
       setCheckingNumber(false);
     }, 400);
     return () => clearTimeout(timer);
-  }, [invoiceNumber, isEditMode, invoiceId]);
+  }, [invoiceNumber, isEditMode, invoiceId, isViewMode]);
 
   const addItem = () => {
+    if (isViewMode) return;
     setItems((prev) => [
       ...prev,
       {
@@ -269,6 +273,7 @@ function InvoiceFormStep({
   };
 
   const removeItem = (id: string) => {
+    if (isViewMode) return;
     if (items.length > 1) setItems((prev) => prev.filter((item) => item.id !== id));
   };
 
@@ -277,6 +282,7 @@ function InvoiceFormStep({
     field: keyof InvoiceItem,
     value: string | number
   ) => {
+    if (isViewMode) return;
     setItems((prev) =>
       prev.map((item) => {
         if (item.id !== id) return item;
@@ -306,11 +312,11 @@ function InvoiceFormStep({
     [items]
   );
   const grandTotal = subtotal + totalTax;
+  const netTotal = grandTotal - returnsTotal;
 
-  // ─── حفظ أو تحديث الفاتورة في قاعدة البيانات ──────────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
+    if (isViewMode) return;
     if (invoiceNumberError || checkingNumber) {
       toast.error("يرجى تصحيح رقم الفاتورة أولاً");
       return;
@@ -322,7 +328,6 @@ function InvoiceFormStep({
 
     try {
       setSaving(true);
-      
       const invoiceData = {
         invoiceNumber,
         customerId: customer.id,
@@ -342,15 +347,12 @@ function InvoiceFormStep({
       };
 
       if (isEditMode && invoiceId) {
-        // تحديث فاتورة موجودة
         await updateSalesInvoice(Number(invoiceId), invoiceData);
         toast.success(`تم تحديث الفاتورة #${invoiceNumber} بنجاح`);
       } else {
-        // إنشاء فاتورة جديدة
         await createSalesInvoice(invoiceData);
         toast.success(`تم حفظ الفاتورة #${invoiceNumber} بنجاح`);
       }
-      
       router.push("/sales-invoices");
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "حدث خطأ أثناء الحفظ";
@@ -360,7 +362,7 @@ function InvoiceFormStep({
     }
   };
 
-  const canSave = !invoiceNumberError && !checkingNumber && !saving && !loading;
+  const canSave = !invoiceNumberError && !checkingNumber && !saving && !loading && !isViewMode;
 
   if (loading) {
     return (
@@ -380,7 +382,6 @@ function InvoiceFormStep({
   return (
     <div className="flex-1 space-y-6 p-6 bg-slate-50/50 min-h-screen" dir="rtl">
       <div className="print:hidden flex flex-col md:flex-row md:items-center justify-between gap-4">
-        {/* Header content */}
         <div className="flex items-center gap-4">
           <Button
             variant="outline"
@@ -392,295 +393,361 @@ function InvoiceFormStep({
           </Button>
           <div>
             <h2 className="text-3xl font-black text-slate-800 tracking-tight">
-              {isEditMode ? "تعديل فاتورة مبيعات" : "إنشاء فاتورة مبيعات"}
+              {isViewMode ? "عرض فاتورة مبيعات" : isEditMode ? "تعديل فاتورة مبيعات" : "إنشاء فاتورة مبيعات"}
             </h2>
             <p className="text-muted-foreground font-medium">
               نظام إدارة مبيعات مصنع الطوب
             </p>
           </div>
         </div>
-        
-        {/* Print Button */}
-        {(isEditMode || invoiceId) && (
-             <Button
-                variant="outline"
-                size="lg"
-                onClick={handlePrint}
-                className="gap-2 shadow-sm border-primary/20 hover:bg-primary/5 hover:border-primary/50 text-primary"
-             >
-                <Printer className="h-5 w-5" />
-                طباعة الفاتورة
-             </Button>
+
+        {(isEditMode || isViewMode || invoiceId) && (
+          <Button
+            variant="outline"
+            size="lg"
+            onClick={handlePrint}
+            className="gap-2 shadow-sm border-primary/20 hover:bg-primary/5 hover:border-primary/50 text-primary"
+          >
+            <Printer className="h-5 w-5" />
+            طباعة الفاتورة
+          </Button>
         )}
       </div>
 
       <div className="print:hidden">
-      <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-4">
-        <div className="lg:col-span-3 space-y-6">
-          {/* ── بيانات العميل والطلب ── */}
-          <Card className="border-none shadow-sm overflow-hidden">
-            <CardHeader className="bg-white border-b py-4">
-              <CardTitle className="text-base font-bold flex items-center gap-2">
-                <div className="w-2 h-6 bg-primary rounded-full" /> بيانات العميل والطلب
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="bg-white pt-5 pb-5">
-              <div className="flex flex-col md:flex-row md:items-start gap-4 justify-between">
-                {/* معلومات العميل */}
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center shrink-0">
-                    <User className="h-6 w-6 text-primary" />
-                  </div>
-                  <div className="space-y-0.5">
-                    <span className="font-black text-lg text-slate-800">
-                      {customer.name}
-                    </span>
-                    <div className="text-xs text-muted-foreground font-bold">
-                      #{customer.code}
+        <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-4">
+          <div className="lg:col-span-3 space-y-6">
+            <Card className="border-none shadow-sm overflow-hidden">
+              <CardHeader className="bg-white border-b py-4">
+                <CardTitle className="text-base font-bold flex items-center gap-2">
+                  <div className="w-2 h-6 bg-primary rounded-full" /> بيانات العميل والطلب
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="bg-white pt-5 pb-5">
+                <div className="flex flex-col md:flex-row md:items-start gap-4 justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center shrink-0">
+                      <User className="h-6 w-6 text-primary" />
+                    </div>
+                    <div className="space-y-0.5">
+                      <span className="font-black text-lg text-slate-800">
+                        {customer.name}
+                      </span>
+                      <div className="text-xs text-muted-foreground font-bold">
+                        #{customer.code}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                {/* الحقول الإضافية */}
-                <div className="flex items-end gap-4 flex-wrap">
-                  {/* ── رقم الفاتورة ── */}
-                  <div className="space-y-1.5">
-                    <Label className="text-slate-600 text-sm font-bold flex items-center gap-1">
-                      <Hash className="h-3 w-3" /> رقم الفاتورة
-                    </Label>
-                    <div className="space-y-1">
+                  <div className="flex items-end gap-4 flex-wrap">
+                    <div className="space-y-1.5">
+                      <Label className="text-slate-600 text-sm font-bold flex items-center gap-1">
+                        <Hash className="h-3 w-3" /> رقم الفاتورة
+                      </Label>
+                      <div className="space-y-1">
+                        <Input
+                          type="number"
+                          min={1}
+                          value={invoiceNumber}
+                          onChange={(e) => setInvoiceNumber(Number(e.target.value))}
+                          disabled={isViewMode}
+                          className={`w-32 bg-slate-50 border-slate-200 text-center font-bold text-lg ${
+                            invoiceNumberError
+                              ? "border-red-400 bg-red-50 focus-visible:ring-red-400"
+                              : ""
+                          }`}
+                          required={!isViewMode}
+                        />
+                        {checkingNumber && !isViewMode && (
+                          <p className="text-xs text-slate-400 font-medium">جاري التحقق...</p>
+                        )}
+                        {invoiceNumberError && !checkingNumber && !isViewMode && (
+                          <p className="text-xs text-red-500 font-medium max-w-[220px] leading-tight">
+                            {invoiceNumberError}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label className="text-slate-600 text-sm font-bold flex items-center gap-1">
+                        <CreditCard className="h-3 w-3" /> نوع الفاتورة
+                      </Label>
+                      <Select
+                        value={paymentType}
+                        onValueChange={(v) => setPaymentType(v as "cash" | "credit" | "pending")}
+                        disabled={isViewMode}
+                      >
+                        <SelectTrigger className="w-36 bg-slate-50 border-slate-200">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="cash">نقدي</SelectItem>
+                          <SelectItem value="credit">أجل</SelectItem>
+                          <SelectItem value="pending">معلقة</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label className="text-slate-600 text-sm font-bold">
+                        تاريخ الفاتورة
+                      </Label>
                       <Input
-                        type="number"
-                        min={1}
-                        value={invoiceNumber}
-                        onChange={(e) => setInvoiceNumber(Number(e.target.value))}
-                        className={`w-32 bg-slate-50 border-slate-200 text-center font-bold text-lg ${
-                          invoiceNumberError
-                            ? "border-red-400 bg-red-50 focus-visible:ring-red-400"
-                            : ""
-                        }`}
-                        required
+                        type="date"
+                        value={invoiceDate}
+                        onChange={(e) => setInvoiceDate(e.target.value)}
+                        disabled={isViewMode}
+                        className="bg-slate-50 border-slate-200 w-44"
+                        required={!isViewMode}
                       />
-                      {checkingNumber && (
-                        <p className="text-xs text-slate-400 font-medium">جاري التحقق...</p>
-                      )}
-                      {invoiceNumberError && !checkingNumber && (
-                        <p className="text-xs text-red-500 font-medium max-w-[220px] leading-tight">
-                          {invoiceNumberError}
-                        </p>
-                      )}
                     </div>
                   </div>
+                </div>
+              </CardContent>
+            </Card>
 
-                  {/* ── نوع الفاتورة ── */}
-                  <div className="space-y-1.5">
-                    <Label className="text-slate-600 text-sm font-bold flex items-center gap-1">
-                      <CreditCard className="h-3 w-3" /> نوع الفاتورة
-                    </Label>
-                    <Select
-                      value={paymentType}
-                      onValueChange={(v) =>
-                        setPaymentType(v as "cash" | "credit" | "pending")
-                      }
-                    >
-                      <SelectTrigger className="w-36 bg-slate-50 border-slate-200">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="cash">نقدي</SelectItem>
-                        <SelectItem value="credit">أجل</SelectItem>
-                        <SelectItem value="pending">معلقة</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+            <Card className="border-none shadow-sm overflow-hidden">
+              <CardHeader className="flex flex-row items-center justify-between bg-white border-b py-4">
+                <CardTitle className="text-base font-bold flex items-center gap-2">
+                  <div className="w-2 h-6 bg-orange-500 rounded-full" /> تفاصيل الأصناف
+                </CardTitle>
+                {!isViewMode && (
+                  <Button
+                    type="button"
+                    onClick={addItem}
+                    size="sm"
+                    className="bg-orange-600 hover:bg-orange-700 gap-2"
+                  >
+                    <Plus className="h-4 w-4" /> إضافة صنف
+                  </Button>
+                )}
+              </CardHeader>
+              <CardContent className="p-0 bg-white">
+                <Table>
+                  <TableHeader className="bg-slate-50">
+                    <TableRow>
+                      <TableHead className="text-right font-bold">الصنف *</TableHead>
+                      <TableHead className="text-right font-bold w-24">الكمية *</TableHead>
+                      <TableHead className="text-right font-bold w-28">السعر *</TableHead>
+                      <TableHead className="text-right font-bold w-24">الضريبة %</TableHead>
+                      <TableHead className="text-right font-bold w-32">الإجمالي</TableHead>
+                      <TableHead className="w-12"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {items.map((item) => (
+                      <TableRow key={item.id}>
+                        <TableCell>
+                          <Input
+                            placeholder="وصف الصنف"
+                            value={item.description}
+                            onChange={(e) => updateItem(item.id, "description", e.target.value)}
+                            disabled={isViewMode}
+                            className="bg-transparent border-none focus-visible:ring-1 shadow-none"
+                            required={!isViewMode}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            value={item.quantity || ""}
+                            onChange={(e) => updateItem(item.id, "quantity", e.target.value)}
+                            disabled={isViewMode}
+                            className="bg-slate-50"
+                            required={!isViewMode}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            value={item.unitPrice || ""}
+                            onChange={(e) => updateItem(item.id, "unitPrice", e.target.value)}
+                            disabled={isViewMode}
+                            className="bg-slate-50"
+                            required={!isViewMode}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            value={item.taxRate}
+                            onChange={(e) => updateItem(item.id, "taxRate", e.target.value)}
+                            disabled={isViewMode}
+                            className="bg-orange-50 border-orange-200"
+                          />
+                        </TableCell>
+                        <TableCell className="font-bold text-primary">
+                          {item.total.toLocaleString("ar-EG")} ج.م
+                        </TableCell>
+                        <TableCell>
+                          {!isViewMode && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => removeItem(item.id)}
+                              disabled={items.length === 1}
+                              className="text-red-400"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </div>
 
-                  {/* ── تاريخ الفاتورة ── */}
-                  <div className="space-y-1.5">
-                    <Label className="text-slate-600 text-sm font-bold">
-                      تاريخ الفاتورة
-                    </Label>
-                    <Input
-                      type="date"
-                      value={invoiceDate}
-                      onChange={(e) => setInvoiceDate(e.target.value)}
-                      className="bg-slate-50 border-slate-200 w-44"
-                      required
-                    />
-                  </div>
+          <div className="space-y-6">
+            <Card className="border-none shadow-xl bg-slate-900 text-white p-6 space-y-4">
+              <h3 className="text-lg font-bold flex items-center gap-2 border-b border-white/10 pb-4">
+                <Calculator className="h-5 w-5 text-orange-400" /> ملخص الفاتورة
+              </h3>
+              <div className="space-y-3">
+                <div className="flex justify-between text-slate-400 text-sm">
+                  <span>رقم الفاتورة:</span>
+                  <span className="text-white font-mono font-bold">
+                    #{invoiceNumber}
+                  </span>
+                </div>
+                <Separator className="bg-white/10" />
+                <div className="flex justify-between text-slate-400 text-sm">
+                  <span>الإجمالي قبل الضريبة:</span>
+                  <span className="text-white font-mono">
+                    {subtotal.toLocaleString("ar-EG")} ج.م
+                  </span>
+                </div>
+                <div className="flex justify-between text-slate-400 text-sm">
+                  <span>إجمالي الضرائب:</span>
+                  <span className="text-orange-400 font-mono">
+                    +{totalTax.toLocaleString("ar-EG")} ج.م
+                  </span>
+                </div>
+
+                {returnsCount > 0 && (
+                  <>
+                    <div className="flex justify-between text-slate-400 text-sm">
+                      <span>إجمالي المرتجعات:</span>
+                      <span className="text-red-400 font-mono">
+                        -{returnsTotal.toLocaleString("ar-EG")} ج.م
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-slate-400 text-sm">
+                      <span>عدد المرتجعات:</span>
+                      <span className="text-white font-mono">
+                        {returnsCount}
+                      </span>
+                    </div>
+                  </>
+                )}
+
+                <Separator className="bg-white/10" />
+                <div className="pt-2">
+                  <p className="text-xs text-slate-400 mb-1">الصافي النهائي:</p>
+                  <p className="text-3xl font-black text-green-400">
+                    {netTotal.toLocaleString("ar-EG")} ج.م
+                  </p>
                 </div>
               </div>
-            </CardContent>
-          </Card>
 
-          {/* ── تفاصيل الأصناف ── */}
-          <Card className="border-none shadow-sm overflow-hidden">
-            <CardHeader className="flex flex-row items-center justify-between bg-white border-b py-4">
-              <CardTitle className="text-base font-bold flex items-center gap-2">
-                <div className="w-2 h-6 bg-orange-500 rounded-full" /> تفاصيل الأصناف
-              </CardTitle>
-              <Button
-                type="button"
-                onClick={addItem}
-                size="sm"
-                className="bg-orange-600 hover:bg-orange-700 gap-2"
-              >
-                <Plus className="h-4 w-4" /> إضافة صنف
-              </Button>
-            </CardHeader>
-            <CardContent className="p-0 bg-white">
-              <Table>
-                <TableHeader className="bg-slate-50">
-                  <TableRow>
-                    <TableHead className="text-right font-bold">الصنف *</TableHead>
-                    <TableHead className="text-right font-bold w-24">الكمية *</TableHead>
-                    <TableHead className="text-right font-bold w-28">السعر *</TableHead>
-                    <TableHead className="text-right font-bold w-24">الضريبة %</TableHead>
-                    <TableHead className="text-right font-bold w-32">الإجمالي</TableHead>
-                    <TableHead className="w-12"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {items.map((item) => (
-                    <TableRow key={item.id}>
-                      <TableCell>
-                        <Input
-                          placeholder="وصف الصنف"
-                          value={item.description}
-                          onChange={(e) =>
-                            updateItem(item.id, "description", e.target.value)
-                          }
-                          className="bg-transparent border-none focus-visible:ring-1 shadow-none"
-                          required
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          type="number"
-                          value={item.quantity || ""}
-                          onChange={(e) =>
-                            updateItem(item.id, "quantity", e.target.value)
-                          }
-                          className="bg-slate-50"
-                          required
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          type="number"
-                          value={item.unitPrice || ""}
-                          onChange={(e) =>
-                            updateItem(item.id, "unitPrice", e.target.value)
-                          }
-                          className="bg-slate-50"
-                          required
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          type="number"
-                          value={item.taxRate}
-                          onChange={(e) =>
-                            updateItem(item.id, "taxRate", e.target.value)
-                          }
-                          className="bg-orange-50 border-orange-200"
-                        />
-                      </TableCell>
-                      <TableCell className="font-bold text-primary">
-                        {item.total.toLocaleString("ar-EG")} ج.م
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => removeItem(item.id)}
-                          disabled={items.length === 1}
-                          className="text-red-400"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* ── ملخص الفاتورة ── */}
-        <div className="space-y-6">
-          <Card className="border-none shadow-xl bg-slate-900 text-white p-6 space-y-4">
-            <h3 className="text-lg font-bold flex items-center gap-2 border-b border-white/10 pb-4">
-              <Calculator className="h-5 w-5 text-orange-400" /> ملخص الفاتورة
-            </h3>
-            <div className="space-y-3">
-              <div className="flex justify-between text-slate-400 text-sm">
-                <span>رقم الفاتورة:</span>
-                <span className="text-white font-mono font-bold">
-                  #{invoiceNumber}
-                </span>
-              </div>
-              <Separator className="bg-white/10" />
-              <div className="flex justify-between text-slate-400 text-sm">
-                <span>الإجمالي قبل الضريبة:</span>
-                <span className="text-white font-mono">
-                  {subtotal.toLocaleString("ar-EG")} ج.م
-                </span>
-              </div>
-              <div className="flex justify-between text-slate-400 text-sm">
-                <span>إجمالي الضرائب:</span>
-                <span className="text-orange-400 font-mono">
-                  +{totalTax.toLocaleString("ar-EG")} ج.م
-                </span>
-              </div>
-              <Separator className="bg-white/10" />
-              <div className="pt-2">
-                <p className="text-xs text-slate-400 mb-1">الصافي النهائي:</p>
-                <p className="text-3xl font-black text-green-400">
-                  {grandTotal.toLocaleString("ar-EG")} ج.م
-                </p>
-              </div>
-            </div>
-            <Button
-              type="submit"
-              disabled={!canSave}
-              className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-50 h-14 text-lg font-bold gap-2 mt-4 transition-transform active:scale-95 shadow-lg"
-            >
-              {saving ? (
-                <>
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  جاري الحفظ...
-                </>
-              ) : (
-                <>
-                  <Save className="h-5 w-5" /> {isEditMode ? "تحديث الفاتورة" : "حفظ الفاتورة"}
-                </>
+              {!isViewMode && (
+                <Button
+                  type="submit"
+                  disabled={!canSave}
+                  className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-50 h-14 text-lg font-bold gap-2 mt-4 transition-transform active:scale-95 shadow-lg"
+                >
+                  {saving ? (
+                    <>
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      جاري الحفظ...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-5 w-5" /> {isEditMode ? "تحديث الفاتورة" : "حفظ الفاتورة"}
+                    </>
+                  )}
+                </Button>
               )}
-            </Button>
-          </Card>
-        </div>
-      </form>
+            </Card>
+          </div>
+        </form>
       </div>
 
-      {/* Printable Component */}
-      <div className="hidden print:block absolute top-0 left-0 w-full h-full bg-white z-[9999]">
-         <PrintableInvoice
-            invoiceNumber={invoiceNumber}
-            date={invoiceDate}
-            partnerName={customer.name}
-            partnerLabel="العميل"
-            title="فاتورة مبيعات"
-            items={items.map(item => ({
-                description: item.description,
-                quantity: item.quantity,
-                unitPrice: item.unitPrice,
-                total: item.total
-            }))}
-            subtotal={subtotal}
-            tax={totalTax}
-            total={grandTotal}
-         />
+      {/* ========== نسخة الطباعة (مضمنة بالكامل) ========== */}
+      <div className="hidden print:block absolute top-0 left-0 w-full h-full bg-white z-[9999] p-8" dir="rtl">
+        <div className="max-w-4xl mx-auto">
+          {/* رأس الفاتورة */}
+          <div className="border-b pb-4 mb-4 flex justify-between items-center">
+            <div>
+              <h1 className="text-2xl font-bold">فاتورة مبيعات</h1>
+              <p className="text-sm text-gray-600">مصنع الطوب</p>
+            </div>
+            <div className="text-left">
+              <p className="text-sm">التاريخ: {new Date(invoiceDate).toLocaleDateString('ar-EG')}</p>
+              <p className="text-sm font-bold">رقم الفاتورة: #{invoiceNumber}</p>
+            </div>
+          </div>
+
+          {/* بيانات العميل */}
+          <div className="mb-4 p-2 bg-gray-50 rounded">
+            <p><span className="font-bold">العميل:</span> {customer.name}</p>
+          </div>
+
+          {/* جدول الأصناف */}
+          <table className="w-full border-collapse mb-4">
+            <thead>
+              <tr className="bg-gray-100 border-b">
+                <th className="py-2 px-1 text-right">البيان</th>
+                <th className="py-2 px-1 text-right">الكمية</th>
+                <th className="py-2 px-1 text-right">السعر</th>
+                <th className="py-2 px-1 text-right">الإجمالي</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item, idx) => (
+                <tr key={idx} className="border-b">
+                  <td className="py-1 px-1">{item.description}</td>
+                  <td className="py-1 px-1">{item.quantity}</td>
+                  <td className="py-1 px-1">{item.unitPrice.toLocaleString('ar-EG')}</td>
+                  <td className="py-1 px-1 font-bold">{item.total.toLocaleString('ar-EG')} ج.م</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {/* ملخص الأرقام */}
+          <div className="flex flex-col items-end space-y-1 border-t pt-2">
+            <div className="flex gap-4">
+              <span>الإجمالي قبل الضريبة:</span>
+              <span className="font-mono">{subtotal.toLocaleString('ar-EG')} ج.م</span>
+            </div>
+            <div className="flex gap-4">
+              <span>الضريبة:</span>
+              <span className="font-mono">{totalTax.toLocaleString('ar-EG')} ج.م</span>
+            </div>
+            {returnsCount > 0 && (
+              <div className="flex gap-4 text-red-600">
+                <span>إجمالي المرتجعات:</span>
+                <span className="font-mono">-{returnsTotal.toLocaleString('ar-EG')} ج.م</span>
+              </div>
+            )}
+            <div className="flex gap-4 text-lg font-bold border-t pt-1 mt-1">
+              <span>الإجمالي النهائي:</span>
+              <span className="text-green-600 font-mono">
+                {(returnsCount > 0 ? netTotal : grandTotal).toLocaleString('ar-EG')} ج.م
+              </span>
+            </div>
+          </div>
+
+          {/* توقيع */}
+          <div className="mt-8 text-center text-sm text-gray-500">
+            شكراً لتعاملكم معنا
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -693,27 +760,24 @@ export default function CreateSalesInvoicePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const invoiceId = searchParams.get("id");
-  const isEditMode = !!invoiceId && invoiceId !== "create";
-  
-  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
-  const [loading, setLoading] = useState(isEditMode);
+  const mode = searchParams.get("mode");
+  const isEditMode = !!invoiceId && invoiceId !== "create" && mode !== "view";
+  const isViewMode = !!invoiceId && invoiceId !== "create" && mode === "view";
 
-  // تحميل بيانات الفاتورة في وضع التعديل
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [loading, setLoading] = useState(isEditMode || isViewMode);
+
   useEffect(() => {
-    if (isEditMode) {
+    if (isEditMode || isViewMode) {
       setLoading(true);
-      // جلب الفاتورة أولاً
-      getSalesInvoiceById(Number(invoiceId))
+      getSalesInvoiceWithReturns(Number(invoiceId))
         .then((invoice) => {
           if (invoice) {
-            // جلب كل العملاء
             return getCustomers().then((customers) => {
-              // البحث عن العميل المطلوب
               const fullCustomer = (customers as Customer[]).find(c => c.id === invoice.customerId);
               if (fullCustomer) {
                 setSelectedCustomer(fullCustomer);
               } else {
-                // إذا لم يتم العثور على العميل، نستخدم بيانات من الفاتورة
                 setSelectedCustomer({
                   id: invoice.customerId,
                   name: invoice.customerName,
@@ -731,7 +795,7 @@ export default function CreateSalesInvoicePage() {
         })
         .finally(() => setLoading(false));
     }
-  }, [isEditMode, invoiceId]);
+  }, [isEditMode, isViewMode, invoiceId]);
 
   if (loading) {
     return (
@@ -749,22 +813,23 @@ export default function CreateSalesInvoicePage() {
 
   return (
     <>
-      <Navbar title={isEditMode ? "تعديل فاتورة مبيعات" : "فاتورة مبيعات جديدة"} />
+      <Navbar title={isViewMode ? "عرض فاتورة مبيعات" : isEditMode ? "تعديل فاتورة مبيعات" : "فاتورة مبيعات جديدة"} />
       {selectedCustomer === null ? (
-        <CustomerSearchStep 
+        <CustomerSearchStep
           onCustomerSelected={setSelectedCustomer}
         />
       ) : (
         <InvoiceFormStep
           customer={selectedCustomer}
           onBack={() => {
-            if (isEditMode) {
+            if (isEditMode || isViewMode) {
               router.push("/sales-invoices");
             } else {
               setSelectedCustomer(null);
             }
           }}
           invoiceId={invoiceId}
+          readOnly={isViewMode}
         />
       )}
     </>

@@ -1,3 +1,4 @@
+// app/(dashboard)/sales-invoices/page.tsx
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
@@ -30,19 +31,20 @@ import {
 import { getSalesInvoices, deleteSalesInvoice } from "./actions";
 import { useRouter } from "next/navigation";
 
-// ─── نوع الفاتورة ─────────────────────────────────────────────────────────────
 interface InvoiceRow {
   id: number;
   invoiceNumber: number;
   customerName: string;
   invoiceDate: Date | string;
-  total: number;
+  total: number;          // المبلغ الأصلي
+  netTotal: number;       // المبلغ بعد خصم المرتجعات
   status: "cash" | "credit" | "pending";
+  returnsCount: number;
+  returnsTotal: number;
 }
 
 const ITEMS_PER_PAGE = 8;
 
-// ─── شارة الحالة ──────────────────────────────────────────────────────────────
 function StatusBadge({ status }: { status: InvoiceRow["status"] }) {
   const map: Record<
     InvoiceRow["status"],
@@ -78,20 +80,16 @@ export default function SalesInvoicesPage() {
   const [filters, setFilters] = useState<Record<string, string>>({});
   const [currentPage, setCurrentPage] = useState(1);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [invoiceToDelete, setInvoiceToDelete] = useState<InvoiceRow | null>(
-    null,
-  );
+  const [invoiceToDelete, setInvoiceToDelete] = useState<InvoiceRow | null>(null);
   const [deleting, setDeleting] = useState(false);
   const router = useRouter();
 
-  // ─── جلب الفواتير من قاعدة البيانات ──────────────────────────────────────
   useEffect(() => {
     getSalesInvoices()
       .then((data) => setInvoices(data as InvoiceRow[]))
       .finally(() => setLoading(false));
   }, []);
 
-  // ─── فلترة وبحث ──────────────────────────────────────────────────────────
   const filteredInvoices = useMemo(() => {
     return invoices.filter((invoice) => {
       const matchesSearch =
@@ -136,13 +134,11 @@ export default function SalesInvoicesPage() {
     setCurrentPage(1);
   };
 
-  // ─── فتح مودال الحذف ──────────────────────────────────────────────────────
   const openDeleteDialog = (invoice: InvoiceRow) => {
     setInvoiceToDelete(invoice);
     setDeleteDialogOpen(true);
   };
 
-  // ─── حذف فاتورة ──────────────────────────────────────────────────────────
   const confirmDelete = async () => {
     if (!invoiceToDelete) return;
 
@@ -169,7 +165,7 @@ export default function SalesInvoicesPage() {
               فواتير المبيعات
             </h2>
             <p className="text-muted-foreground font-medium">
-              إدارة فواتير المبيعات وتتبع المدفوعات
+              إدارة فواتير المبيعات وتتبع المدفوعات والمرتجعات
             </p>
           </div>
           <Button
@@ -223,10 +219,13 @@ export default function SalesInvoicesPage() {
                             التاريخ
                           </TableHead>
                           <TableHead className="font-bold text-center">
-                            المبلغ
+                            المبلغ (الصافي)
                           </TableHead>
                           <TableHead className="font-bold text-center">
                             الحالة
+                          </TableHead>
+                          <TableHead className="font-bold text-center">
+                            المرتجعات
                           </TableHead>
                           <TableHead className="font-bold text-center">
                             الإجراءات
@@ -260,12 +259,26 @@ export default function SalesInvoicesPage() {
                               )}
                             </TableCell>
                             <TableCell className="font-bold text-lg text-center">
-                              {invoice.total.toLocaleString("ar-EG")} ج.م
+                              {invoice.netTotal.toLocaleString("ar-EG")} ج.م
                             </TableCell>
                             <TableCell className="text-center">
                               <div className="flex justify-center">
                                 <StatusBadge status={invoice.status} />
                               </div>
+                            </TableCell>
+                            <TableCell className="text-center">
+                              {invoice.returnsCount > 0 ? (
+                                <div className="flex flex-col items-center">
+                                  <span className="font-bold text-orange-600">
+                                    {invoice.returnsCount}
+                                  </span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {invoice.returnsTotal.toLocaleString()} ج.م
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground text-sm">لا يوجد</span>
+                              )}
                             </TableCell>
                             <TableCell className="text-center">
                               <div className="flex justify-center gap-2">
@@ -312,7 +325,7 @@ export default function SalesInvoicesPage() {
                   description="حاول تعديل البحث أو الفلاتر، أو قم بإنشاء فاتورة جديدة."
                   action={{
                     label: "إنشاء فاتورة",
-                    onClick: () => router.push("/sales-invoices/create"), // التعديل هنا
+                    onClick: () => router.push("/sales-invoices/create"),
                   }}
                 />
               )}
@@ -321,7 +334,6 @@ export default function SalesInvoicesPage() {
         </Card>
       </div>
 
-      {/* مودال تأكيد الحذف */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>

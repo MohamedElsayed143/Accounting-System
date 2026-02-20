@@ -1,10 +1,10 @@
+// app/(dashboard)/purchase-invoices/actions.ts
 "use server";
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 
 // ─── أنواع البيانات ─────────────────────────────────────────────────────────
-// نستخدم الأنواع المولدة من Prisma مباشرة أو نعرف واجهات متوافقة
 export interface PurchaseInvoiceItem {
   id?: number;
   description: string;
@@ -27,38 +27,56 @@ export interface PurchaseInvoice {
   items: PurchaseInvoiceItem[];
   createdAt: Date;
   updatedAt: Date;
+  returnsCount?: number;
+  returnsTotal?: number;
+  netTotal?: number;
 }
 
-// ─── جلب كل الفواتير ────────────────────────────────────────────────────────
+// ─── جلب كل الفواتير مع عدد المرتجعات وقيمتها ─────────────────────────────
 export async function getPurchaseInvoices() {
   const invoices = await prisma.purchaseInvoice.findMany({
     orderBy: { invoiceNumber: "desc" },
     include: {
       items: true,
+      purchaseReturns: {
+        select: { total: true }
+      }
     },
   });
   
-  // تحويل البيانات لتتوافق مع الواجهة (Prisma Date -> string/Date)
-  return invoices.map(inv => ({
-    ...inv,
-    status: inv.status as "cash" | "credit" | "pending"
-  }));
+  return invoices.map(inv => {
+    const returnsTotal = inv.purchaseReturns.reduce((sum, ret) => sum + ret.total, 0);
+    return {
+      ...inv,
+      status: inv.status as "cash" | "credit" | "pending",
+      returnsCount: inv.purchaseReturns.length,
+      returnsTotal,
+      netTotal: inv.total - returnsTotal
+    };
+  });
 }
 
-// ─── جلب فاتورة واحدة بواسطة المعرف ──────────────────────────────────────────
+// ─── جلب فاتورة واحدة بواسطة المعرف (مع المرتجعات) ──────────────────────────
 export async function getPurchaseInvoiceById(id: number) {
   const invoice = await prisma.purchaseInvoice.findUnique({
     where: { id },
     include: {
       items: true,
+      purchaseReturns: {
+        select: { total: true }
+      },
     },
   });
 
   if (!invoice) return null;
 
+  const returnsTotal = invoice.purchaseReturns.reduce((sum, ret) => sum + ret.total, 0);
   return {
     ...invoice,
-    status: invoice.status as "cash" | "credit" | "pending"
+    status: invoice.status as "cash" | "credit" | "pending",
+    returnsCount: invoice.purchaseReturns.length,
+    returnsTotal,
+    netTotal: invoice.total - returnsTotal
   };
 }
 
@@ -68,7 +86,6 @@ export async function getNextPurchaseInvoiceNumber(): Promise<number> {
     orderBy: { invoiceNumber: "desc" },
     select: { invoiceNumber: true },
   });
-  // يبدأ من 1 إذا لم توجد فواتير
   return (last?.invoiceNumber ?? 0) + 1;
 }
 
@@ -99,7 +116,6 @@ export async function createPurchaseInvoice(data: {
     total: number;
   }[];
 }) {
-  // تحقق أخير قبل الحفظ
   const taken = await checkPurchaseInvoiceNumberExists(data.invoiceNumber);
   if (taken) {
     throw new Error(`رقم الفاتورة #${data.invoiceNumber} مستخدم مسبقاً`);
@@ -147,7 +163,6 @@ export async function updatePurchaseInvoice(
     }[];
   }
 ) {
-  // تحقق من عدم تكرار الرقم مع فاتورة أخرى
   const existing = await prisma.purchaseInvoice.findFirst({
     where: {
       invoiceNumber: data.invoiceNumber,
@@ -159,7 +174,6 @@ export async function updatePurchaseInvoice(
     throw new Error(`رقم الفاتورة #${data.invoiceNumber} مستخدم مسبقاً`);
   }
 
-  // حذف الأصناف القديمة وإضافة الجديدة (استبدال كامل للأصناف لتسهيل التحديث)
   await prisma.purchaseInvoiceItem.deleteMany({
     where: { invoiceId: id },
   });
@@ -176,7 +190,7 @@ export async function updatePurchaseInvoice(
       total: data.total,
       status: data.status,
       items: {
-        create: data.items, // إنشاء الأصناف الجديدة
+        create: data.items,
       },
     },
     include: { items: true },
@@ -192,4 +206,35 @@ export async function deletePurchaseInvoice(id: number) {
     where: { id },
   });
   revalidatePath("/purchase-invoices");
+  return { success: true };
+}
+
+// ========== دوال إضافية مطلوبة لمرتجعات المشتريات ==========
+
+// ─── جلب فاتورة معينة مع أصنافها ومرتجعاتها (لصفحة العرض) ───────────────────
+export async function getPurchaseInvoiceWithReturns(id: number) {
+  return prisma.purchaseInvoice.findUnique({
+    where: { id },
+    include: {
+      items: true,
+      purchaseReturns: {
+        include: { items: true }
+      }
+    }
+  });
+}
+
+// ─── جلب فواتير مورد معين (للمرتجعات) ──────────────────────────────────────
+export async function getPurchaseInvoicesBySupplier(supplierId: number) {
+  return prisma.purchaseInvoice.findMany({
+    where: { supplierId },
+    orderBy: { invoiceDate: 'desc' },
+    select: {
+      id: true,
+      invoiceNumber: true,
+      supplierName: true,
+      invoiceDate: true,
+      total: true,
+    }
+  });
 }

@@ -13,6 +13,7 @@ import {
   Calculator,
   ChevronDown,
   Landmark,
+  RotateCcw, // أيقونة المرتجعات
 } from "lucide-react";
 import {
   Sidebar,
@@ -72,6 +73,28 @@ const invoiceNavItems = [
     subItems: [
       { title: "جميع الفواتير", href: "/purchase-invoices" },
       { title: "إنشاء فاتورة جديدة", href: "/purchase-invoices/create" },
+    ],
+  },
+];
+
+// ✅ قسم المرتجعات الجديد
+const returnsNavItems = [
+  {
+    title: "مرتجعات المبيعات",
+    href: "/sales-returns",
+    icon: RotateCcw,
+    subItems: [
+      { title: "جميع المرتجعات", href: "/sales-returns" },
+      { title: "إنشاء مرتجع جديد", href: "/sales-returns/new" },
+    ],
+  },
+  {
+    title: "مرتجعات المشتريات",
+    href: "/purchase-returns",
+    icon: RotateCcw,
+    subItems: [
+      { title: "جميع المرتجعات", href: "/purchase-returns" },
+      { title: "إنشاء مرتجع جديد", href: "/purchase-returns/new" },
     ],
   },
 ];
@@ -198,30 +221,33 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-          <SidebarGroup className="mt-4">
-            <SidebarGroupLabel className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">
-              النقدية
-            </SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
+        {/* ✅ قسم المرتجعات */}
+        <SidebarGroup className="mt-4">
+          <SidebarGroupLabel className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">
+            المرتجعات
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {returnsNavItems.map((item) => (
                 <Collapsible
-                  defaultOpen={isActive(treasuryNavItem.href)}
+                  key={item.href}
+                  defaultOpen={isActive(item.href)}
                   className="group/collapsible"
                 >
                   <SidebarMenuItem>
                     <CollapsibleTrigger asChild>
-                      <SidebarMenuButton
-                        isActive={isActive(treasuryNavItem.href)}
+                      <SidebarMenuButton 
+                        isActive={isActive(item.href)}
                         className="group hover:bg-primary/10 transition-all"
                       >
-                        <treasuryNavItem.icon className="h-4 w-4 group-hover:scale-110 transition-transform" />
-                        <span className="font-medium">{treasuryNavItem.title}</span>
+                        <item.icon className="h-4 w-4 group-hover:scale-110 transition-transform" />
+                        <span className="font-medium">{item.title}</span>
                         <ChevronDown className="mr-auto h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-180" />
                       </SidebarMenuButton>
                     </CollapsibleTrigger>
                     <CollapsibleContent>
                       <SidebarMenuSub className="mr-4 border-r-2 border-primary/20">
-                        {treasuryNavItem.subItems.map((subItem) => (
+                        {item.subItems.map((subItem) => (
                           <SidebarMenuSubItem key={subItem.href}>
                             <SidebarMenuSubButton
                               asChild
@@ -238,13 +264,58 @@ export function AppSidebar() {
                     </CollapsibleContent>
                   </SidebarMenuItem>
                 </Collapsible>
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
 
-          <SidebarGroup className="mt-4">
-            <SidebarGroupLabel className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">
-              الإدارة
+        <SidebarGroup className="mt-4">
+          <SidebarGroupLabel className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">
+            النقدية
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <Collapsible
+                defaultOpen={isActive(treasuryNavItem.href)}
+                className="group/collapsible"
+              >
+                <SidebarMenuItem>
+                  <CollapsibleTrigger asChild>
+                    <SidebarMenuButton
+                      isActive={isActive(treasuryNavItem.href)}
+                      className="group hover:bg-primary/10 transition-all"
+                    >
+                      <treasuryNavItem.icon className="h-4 w-4 group-hover:scale-110 transition-transform" />
+                      <span className="font-medium">{treasuryNavItem.title}</span>
+                      <ChevronDown className="mr-auto h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-180" />
+                    </SidebarMenuButton>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <SidebarMenuSub className="mr-4 border-r-2 border-primary/20">
+                      {treasuryNavItem.subItems.map((subItem) => (
+                        <SidebarMenuSubItem key={subItem.href}>
+                          <SidebarMenuSubButton
+                            asChild
+                            isActive={pathname === subItem.href}
+                            className="hover:bg-primary/5 transition-all"
+                          >
+                            <Link href={subItem.href} className="text-sm font-medium">
+                              {subItem.title}
+                            </Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      ))}
+                    </SidebarMenuSub>
+                  </CollapsibleContent>
+                </SidebarMenuItem>
+              </Collapsible>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup className="mt-4">
+          <SidebarGroupLabel className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">
+            الإدارة
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>

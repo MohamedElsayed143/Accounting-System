@@ -1,3 +1,4 @@
+// app/(dashboard)/reports/actions.tsx
 "use server";
 
 import { PrismaClient } from "@prisma/client";
@@ -97,7 +98,7 @@ export async function getCustomerTransactions(
   type?: string
 ) {
   try {
-    // جلب فواتير البيع مع createdAt والوصف
+    // جلب فواتير البيع
     const invoices = await prisma.salesInvoice.findMany({
       where: {
         customerId,
@@ -108,9 +109,7 @@ export async function getCustomerTransactions(
           }
         } : {}),
       },
-      include: {
-        customer: true,
-      },
+      include: { customer: true },
       orderBy: { invoiceDate: 'asc' }
     });
 
@@ -125,22 +124,33 @@ export async function getCustomerTransactions(
           }
         } : {}),
       },
-      include: {
-        customer: true,
-        safe: true,
-        bank: true,
-      },
+      include: { customer: true, safe: true, bank: true },
       orderBy: { date: 'asc' }
     });
 
-    // تحويل الفواتير - استخدم inv.description
+    // جلب مرتجعات المبيعات
+    const returns = await prisma.salesReturn.findMany({
+      where: {
+        customerId,
+        ...(fromDate && toDate ? {
+          returnDate: {
+            gte: fromDate,
+            lte: toDate,
+          }
+        } : {}),
+      },
+      include: { customer: true, items: true },
+      orderBy: { returnDate: 'asc' }
+    });
+
+    // تحويل الفواتير
     const invoiceTransactions: TransactionType[] = invoices.map(inv => ({
       id: `inv-${inv.id}`,
       date: inv.invoiceDate,
       createdAt: inv.createdAt,
       type: 'فاتورة',
       documentId: `INV-${inv.invoiceNumber}`,
-      description:`فاتورة بيع للعميل ${inv.customerName}`, // استخدام الوصف الفعلي مع fallback
+      description: inv.description || `فاتورة بيع للعميل ${inv.customerName}`,
       paymentMethod: inv.status === 'cash' ? 'نقدي' : 'آجل',
       debit: inv.total,
       credit: 0,
@@ -159,14 +169,31 @@ export async function getCustomerTransactions(
       credit: rec.amount,
     }));
 
-    // دمج
-    let allTransactions = [...invoiceTransactions, ...receiptTransactions];
+    // تحويل المرتجعات
+    const returnTransactions: TransactionType[] = returns.map(ret => ({
+      id: `ret-${ret.id}`,
+      date: ret.returnDate,
+      createdAt: ret.createdAt,
+      type: 'مرتجع',
+      documentId: `RET-${ret.returnNumber}`,
+      description: `مرتجع مبيعات - ${ret.reason || 'بدون سبب'}`,
+      paymentMethod: ret.refundMethod === 'cash' ? 'نقدي' : ret.refundMethod === 'bank' ? 'بنك' : 'آجل',
+      debit: 0,
+      credit: ret.total,
+    }));
 
-    // فلترة حسب النوع إذا طلب
+    // دمج جميع المعاملات
+    let allTransactions = [...invoiceTransactions, ...receiptTransactions, ...returnTransactions];
+
+    // ترتيب تصاعدي حسب التاريخ
+    allTransactions.sort((a, b) => a.date.getTime() - b.date.getTime());
+
+    // فلترة حسب النوع إذا طلب (بدون خيار "مرتجعات" في الفلتر)
     if (type && type !== 'الكل') {
       const typeMap: Record<string, string> = {
         'فواتير': 'فاتورة',
         'سند قبض': 'سند قبض',
+        // تم إزالة خيار 'مرتجعات' حتى لا يظهر في الفلتر
       };
       allTransactions = allTransactions.filter(t => t.type === typeMap[type]);
     }
@@ -186,7 +213,7 @@ export async function getSupplierTransactions(
   type?: string
 ) {
   try {
-    // جلب فواتير الشراء مع createdAt والوصف
+    // جلب فواتير الشراء
     const invoices = await prisma.purchaseInvoice.findMany({
       where: {
         supplierId,
@@ -197,9 +224,7 @@ export async function getSupplierTransactions(
           }
         } : {}),
       },
-      include: {
-        supplier: true,
-      },
+      include: { supplier: true },
       orderBy: { invoiceDate: 'asc' }
     });
 
@@ -214,22 +239,33 @@ export async function getSupplierTransactions(
           }
         } : {}),
       },
-      include: {
-        supplier: true,
-        safe: true,
-        bank: true,
-      },
+      include: { supplier: true, safe: true, bank: true },
       orderBy: { date: 'asc' }
     });
 
-    // تحويل الفواتير - استخدم inv.description
+    // جلب مرتجعات المشتريات
+    const purchaseReturns = await prisma.purchaseReturn.findMany({
+      where: {
+        supplierId,
+        ...(fromDate && toDate ? {
+          returnDate: {
+            gte: fromDate,
+            lte: toDate,
+          }
+        } : {}),
+      },
+      include: { supplier: true, items: true },
+      orderBy: { returnDate: 'asc' }
+    });
+
+    // تحويل الفواتير
     const invoiceTransactions: TransactionType[] = invoices.map(inv => ({
       id: `purch-${inv.id}`,
       date: inv.invoiceDate,
       createdAt: inv.createdAt,
       type: 'فاتورة',
       documentId: `PUR-${inv.invoiceNumber}`,
-      description:`فاتورة شراء من المورد ${inv.supplierName}`, // استخدام الوصف الفعلي مع fallback
+      description: inv.description || `فاتورة شراء من المورد ${inv.supplierName}`,
       paymentMethod: inv.status === 'cash' ? 'نقدي' : 'آجل',
       debit: inv.total,
       credit: 0,
@@ -248,7 +284,24 @@ export async function getSupplierTransactions(
       credit: pay.amount,
     }));
 
-    let allTransactions = [...invoiceTransactions, ...paymentTransactions];
+    // تحويل مرتجعات المشتريات (تظهر كمعاملات دائنة للمورد)
+    const returnTransactions: TransactionType[] = purchaseReturns.map(ret => ({
+      id: `purchRet-${ret.id}`,
+      date: ret.returnDate,
+      createdAt: ret.createdAt,
+      type: 'مرتجع',
+      documentId: `RET-${ret.returnNumber}`,
+      description: `مرتجع مشتريات - ${ret.reason || 'بدون سبب'}`,
+      paymentMethod: ret.refundMethod === 'cash' ? 'نقدي' : ret.refundMethod === 'bank' ? 'بنك' : 'آجل',
+      debit: 0,
+      credit: ret.total,
+    }));
+
+    // دمج جميع المعاملات
+    let allTransactions = [...invoiceTransactions, ...paymentTransactions, ...returnTransactions];
+
+    // ترتيب تصاعدي حسب التاريخ
+    allTransactions.sort((a, b) => a.date.getTime() - b.date.getTime());
 
     if (type && type !== 'الكل') {
       const typeMap: Record<string, string> = {

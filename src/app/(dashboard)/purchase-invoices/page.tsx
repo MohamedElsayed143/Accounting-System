@@ -74,14 +74,12 @@ export default function PurchaseInvoicesPage() {
   const [deleting, setDeleting] = useState(false);
   const router = useRouter();
 
-  // ─── جلب الفواتير من قاعدة البيانات (Mock) ──────────────────────────────────────
   useEffect(() => {
     getPurchaseInvoices()
       .then((data) => setInvoices(data as PurchaseInvoice[]))
       .finally(() => setLoading(false));
   }, []);
 
-  // ─── فلترة وبحث ──────────────────────────────────────────────────────────
   const filteredInvoices = useMemo(() => {
     return invoices.filter((invoice) => {
       const matchesSearch =
@@ -126,13 +124,11 @@ export default function PurchaseInvoicesPage() {
     setCurrentPage(1);
   };
 
-  // ─── فتح مودال الحذف ──────────────────────────────────────────────────────
   const openDeleteDialog = (invoice: PurchaseInvoice) => {
     setInvoiceToDelete(invoice);
     setDeleteDialogOpen(true);
   };
 
-  // ─── حذف فاتورة ──────────────────────────────────────────────────────────
   const confirmDelete = async () => {
     if (!invoiceToDelete) return;
 
@@ -213,10 +209,14 @@ export default function PurchaseInvoicesPage() {
                             التاريخ
                           </TableHead>
                           <TableHead className="font-bold text-center">
-                            المبلغ
+                            المبلغ (الصافي)
                           </TableHead>
                           <TableHead className="font-bold text-center">
                             الحالة
+                          </TableHead>
+                          {/* عمود المرتجعات */}
+                          <TableHead className="font-bold text-center">
+                            المرتجعات
                           </TableHead>
                           <TableHead className="font-bold text-center">
                             الإجراءات
@@ -250,12 +250,26 @@ export default function PurchaseInvoicesPage() {
                               )}
                             </TableCell>
                             <TableCell className="font-bold text-lg text-center">
-                              {invoice.total.toLocaleString("ar-EG")} ج.م
+                              {(invoice.netTotal ?? invoice.total).toLocaleString("ar-EG")} ج.م
                             </TableCell>
                             <TableCell className="text-center">
                               <div className="flex justify-center">
                                 <StatusBadge status={invoice.status} />
                               </div>
+                            </TableCell>
+                            <TableCell className="text-center">
+                              {(invoice.returnsCount ?? 0) > 0 ? (
+                                <div className="flex flex-col items-center">
+                                  <span className="font-bold text-orange-600">
+                                    {invoice.returnsCount}
+                                  </span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {invoice.returnsTotal?.toLocaleString()} ج.م
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground text-sm">لا يوجد</span>
+                              )}
                             </TableCell>
                             <TableCell className="text-center">
                               <div className="flex justify-center gap-2">
@@ -266,7 +280,7 @@ export default function PurchaseInvoicesPage() {
                                     variant="ghost"
                                     size="icon"
                                     className="hover:bg-primary/10 transition-all"
-                                    title="عرض وتعديل"
+                                    title="تعديل"
                                   >
                                     <Eye className="h-4 w-4 text-primary" />
                                   </Button>
@@ -311,7 +325,6 @@ export default function PurchaseInvoicesPage() {
         </Card>
       </div>
 
-      {/* مودال تأكيد الحذف */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
