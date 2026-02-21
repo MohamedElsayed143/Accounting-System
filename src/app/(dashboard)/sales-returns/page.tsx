@@ -134,7 +134,7 @@ export default function SalesReturnsPage() {
                   <tbody>
                     {filteredReturns.map((ret) => (
                       <tr key={ret.id} className="border-b hover:bg-gray-50">
-                        <td className="py-3 px-4">{ret.returnNumber}</td>
+                        <td className="py-3 px-4">RET-{ret.returnNumber}</td>
                         <td className="py-3 px-4">{ret.customer.name}</td>
                         <td className="py-3 px-4">{ret.invoice.invoiceNumber}</td>
                         <td className="py-3 px-4">{new Date(ret.returnDate).toLocaleDateString('ar-EG')}</td>

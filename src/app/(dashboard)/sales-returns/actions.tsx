@@ -40,6 +40,14 @@ async function generateReturnNumber(): Promise<number> {
   return lastReturn ? lastReturn.returnNumber + 1 : 1;
 }
 
+export async function getNextSalesReturnNumber(): Promise<number> {
+  const lastReturn = await prisma.salesReturn.findFirst({
+    orderBy: { returnNumber: 'desc' },
+    select: { returnNumber: true },
+  });
+  return lastReturn ? lastReturn.returnNumber + 1 : 1;
+}
+
 export async function getSalesReturns(
   customerId?: number,
   fromDate?: Date,
@@ -91,17 +99,44 @@ export async function getSalesReturnById(id: number) {
 
 export async function createSalesReturn(data: SalesReturnInput) {
   try {
-    // التحقق من وجود الفاتورة مع المرتجعات السابقة
+    // التحقق من وجود الفاتورة مع المرتجعات السابقة والأصناف
     const invoice = await prisma.salesInvoice.findUnique({
       where: { id: data.invoiceId },
       include: { 
         items: true,
-        salesReturns: { select: { total: true } }
+        salesReturns: { 
+          include: { items: true } // لجلب تفاصيل المرتجعات السابقة
+        }
       },
     });
     if (!invoice) throw new Error("الفاتورة غير موجودة");
 
-    // حساب إجمالي المرتجعات السابقة
+    // حساب إجمالي المرتجعات السابقة لكل صنف والكمية المتبقية
+    const previousReturnsByItem = new Map<number, number>();
+    invoice.salesReturns.forEach(ret => {
+      ret.items.forEach(item => {
+        if (item.invoiceItemId) {
+          const current = previousReturnsByItem.get(item.invoiceItemId) || 0;
+          previousReturnsByItem.set(item.invoiceItemId, current + item.quantity);
+        }
+      });
+    });
+
+    // التحقق من أن الكمية المرتجعة لكل صنف لا تتجاوز المتاح
+    for (const returnItem of data.items) {
+      if (!returnItem.invoiceItemId) continue; // إذا لم يكن مرتبطاً بصنف معين، نتجاوز (يفضل ربطه دائماً)
+      const originalItem = invoice.items.find(item => item.id === returnItem.invoiceItemId);
+      if (!originalItem) {
+        throw new Error(`الصنف غير موجود في الفاتورة الأصلية`);
+      }
+      const returnedSoFar = previousReturnsByItem.get(returnItem.invoiceItemId) || 0;
+      const available = originalItem.quantity - returnedSoFar;
+      if (returnItem.quantity > available) {
+        throw new Error(`الكمية المرتجعة للصنف "${originalItem.description}" (${returnItem.quantity}) تتجاوز المتاح (${available})`);
+      }
+    }
+
+    // حساب إجمالي المرتجعات السابقة للفاتورة
     const previousReturnsTotal = invoice.salesReturns.reduce((sum, ret) => sum + ret.total, 0);
     const availableTotal = invoice.total - previousReturnsTotal;
 
@@ -111,15 +146,16 @@ export async function createSalesReturn(data: SalesReturnInput) {
     }
 
     // التحقق من صحة طريقة الرد
-    if (data.refundMethod === 'safe' && !data.safeId) {
-      throw new Error("يجب اختيار الخزنة");
+    const isSafeRefund = data.refundMethod === 'safe' || data.refundMethod === 'cash';
+    if (isSafeRefund && !data.safeId) {
+      throw new Error("يجب اختيار الخزنة للرد النقدي");
     }
     if (data.refundMethod === 'bank' && !data.bankId) {
       throw new Error("يجب اختيار البنك");
     }
 
     // التحقق من كفاية الرصيد إذا كانت طريقة الرد safe أو bank
-    if (data.refundMethod === 'safe' && data.safeId) {
+    if (isSafeRefund && data.safeId) {
       const safe = await prisma.treasurySafe.findUnique({
         where: { id: data.safeId },
         select: { balance: true }
@@ -164,7 +200,7 @@ export async function createSalesReturn(data: SalesReturnInput) {
           reason: data.reason,
           status: data.status,
           refundMethod: data.refundMethod,
-          safeId: data.refundMethod === 'safe' ? data.safeId : null,
+          safeId: isSafeRefund ? data.safeId : null,
           bankId: data.refundMethod === 'bank' ? data.bankId : null,
           description: data.description,
           items: {
@@ -181,7 +217,8 @@ export async function createSalesReturn(data: SalesReturnInput) {
         include: { items: true },
       });
 
-      if (data.refundMethod === 'safe' && data.safeId) {
+      // إنشاء سند صرف وتحديث الرصيد للخزنة أو البنك
+      if (isSafeRefund && data.safeId) {
         await tx.paymentVoucher.create({
           data: {
             voucherNumber: `PV-${Date.now()}`,
@@ -190,7 +227,7 @@ export async function createSalesReturn(data: SalesReturnInput) {
             description: `سند صرف لمرتجع مبيعات رقم ${returnNumber}`,
             accountType: 'safe',
             safeId: data.safeId,
-            supplierId: 1,
+            supplierId: 1, // مورد افتراضي
           },
         });
         await tx.treasurySafe.update({
