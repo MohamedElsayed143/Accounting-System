@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { Trash2, Phone, MapPin, Hash, User, Search, Edit3, AlertTriangle, Tag, PackagePlus } from "lucide-react";
+import { Trash2, Phone, MapPin, Hash, User, Search, Edit3, AlertTriangle, Tag, PackagePlus, Wallet } from "lucide-react";
 import { Navbar } from "@/components/layout/navbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -53,6 +53,7 @@ interface Supplier {
   phone: string | null;
   address: string | null;
   category: string | null;
+  balance: number;
 }
 
 const ITEMS_PER_PAGE = 8;
@@ -305,6 +306,12 @@ export default function SuppliersPage() {
                             الفئة
                           </div>
                         </TableHead>
+                        <TableHead className="font-bold">
+                          <div className="flex items-center gap-2">
+                            <Wallet className="h-4 w-4" />
+                            الرصيد المستحق
+                          </div>
+                        </TableHead>
                         <TableHead className="font-bold text-center">الإجراءات</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -334,6 +341,14 @@ export default function SuppliersPage() {
                             ) : (
                               "-"
                             )}
+                          </TableCell>
+                          <TableCell className="font-bold">
+                            <span className={s.balance > 0 ? "text-red-600" : s.balance < 0 ? "text-green-600" : "text-slate-500"}>
+                              {Math.abs(s.balance).toLocaleString("ar-EG")} ج.م
+                              <span className="text-[10px] mr-1 font-normal opacity-70">
+                                ({s.balance > 0 ? "علينا" : s.balance < 0 ? "لنا" : "متوازن"})
+                              </span>
+                            </span>
                           </TableCell>
                           <TableCell>
                             <div className="flex gap-2 justify-center">

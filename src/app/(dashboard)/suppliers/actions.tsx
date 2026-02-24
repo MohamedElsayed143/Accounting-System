@@ -3,10 +3,31 @@
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 
-// جلب كل الموردين
+// جلب كل الموردين مع أرصدتهم
 export async function getSuppliers() {
-  return await prisma.supplier.findMany({
+  const suppliers = await prisma.supplier.findMany({
+    include: {
+      invoices: { select: { total: true } },
+      paymentVouchers: { select: { amount: true } },
+      purchaseReturns: { select: { total: true } },
+    },
     orderBy: { code: "asc" },
+  });
+
+  return suppliers.map((supplier) => {
+    const totalInvoices = supplier.invoices.reduce((sum, inv) => sum + inv.total, 0);
+    const totalPayments = supplier.paymentVouchers.reduce((sum, pay) => sum + pay.amount, 0);
+    const totalReturns = supplier.purchaseReturns.reduce((sum, ret) => sum + ret.total, 0);
+
+    return {
+      id: supplier.id,
+      name: supplier.name,
+      code: supplier.code,
+      phone: supplier.phone,
+      address: supplier.address,
+      category: supplier.category,
+      balance: totalInvoices - totalPayments - totalReturns,
+    };
   });
 }
 

@@ -46,6 +46,7 @@ import {
 import { getCustomers } from "../../reports/actions";
 import { getSalesInvoiceWithReturns } from "../../sales-invoices/actions";
 import { getBanks } from "../../treasury/actions";
+import { getProducts, ProductData } from "../../inventory/products/actions";
 
 export default function NewSalesReturnPage() {
   const router = useRouter();
@@ -53,6 +54,7 @@ export default function NewSalesReturnPage() {
   const [customers, setCustomers] = useState<any[]>([]);
   const [invoices, setInvoices] = useState<any[]>([]);
   const [banks, setBanks] = useState<any[]>([]);
+  const [products, setProducts] = useState<ProductData[]>([]);
   const [items, setItems] = useState<any[]>([]);
   const [invoiceTotal, setInvoiceTotal] = useState(0);
   const [nextReturnNumber, setNextReturnNumber] = useState<number>(0);
@@ -63,7 +65,7 @@ export default function NewSalesReturnPage() {
     customerId: "",
     returnDate: new Date().toISOString().split("T")[0],
     subtotal: 0,
-    discount: "0", // يتم تخزين الخصم كنص لتجنب مشاكل الإدخال
+    discount: "0",
     totalTax: 0,
     total: 0,
     reason: "",
@@ -79,10 +81,12 @@ export default function NewSalesReturnPage() {
       getCustomers(),
       getBanks(true),
       getNextSalesReturnNumber(),
-    ]).then(([customersData, banksData, nextNum]) => {
+      getProducts(),
+    ]).then(([customersData, banksData, nextNum, productsData]) => {
       setCustomers(customersData);
       setBanks(banksData);
       setNextReturnNumber(nextNum);
+      setProducts(productsData);
     });
   }, []);
 
@@ -94,7 +98,6 @@ export default function NewSalesReturnPage() {
       const { getSalesInvoicesByCustomer } =
         await import("../../sales-invoices/actions");
       const fetched = await getSalesInvoicesByCustomer(parseInt(customerId));
-      // جلب معها إجمالي المرتجعات لكل فاتورة لعرض المبلغ المتبقي
       const invoicesWithReturns = await Promise.all(
         fetched.map(async (inv: any) => {
           const fullInv = await getSalesInvoiceWithReturns(inv.id);
@@ -108,7 +111,11 @@ export default function NewSalesReturnPage() {
           };
         }),
       );
-      setInvoices(invoicesWithReturns);
+      // تصفية الفواتير التي لها رصيد متبقي > 0 فقط
+      const filteredInvoices = invoicesWithReturns.filter(
+        (inv) => inv.total - (inv.returnsTotal || 0) > 0,
+      );
+      setInvoices(filteredInvoices);
     } else {
       setInvoices([]);
     }
@@ -119,6 +126,22 @@ export default function NewSalesReturnPage() {
     if (invoiceId) {
       const invoiceData = await getSalesInvoiceWithReturns(parseInt(invoiceId));
       if (invoiceData) {
+        // التحقق من أن الفاتورة لا تزال لديها رصيد
+        const totalReturns =
+          invoiceData.salesReturns?.reduce(
+            (sum: number, ret: any) => sum + ret.total,
+            0,
+          ) || 0;
+        const remaining = invoiceData.total - totalReturns;
+        if (remaining <= 0) {
+          toast.error(
+            "لا يمكن إرجاع هذه الفاتورة لأن رصيدها بالكامل قد استُرد",
+          );
+          setFormData((prev) => ({ ...prev, invoiceId: "" }));
+          setItems([]);
+          setInvoiceTotal(0);
+          return;
+        }
         setInvoiceTotal(invoiceData.total);
         const initialItems = invoiceData.items.map((item: any) => {
           // حساب الكميات المرتجعة سابقاً لهذا الصنف
@@ -130,8 +153,13 @@ export default function NewSalesReturnPage() {
               return total + (retItem?.quantity || 0);
             }, 0) || 0;
 
+          // العثور على اسم المنتج من قائمة المنتجات باستخدام productId
+          const product = products.find((p) => p.id === item.productId);
+          const description = product?.name || item.description || "صنف غير معروف";
+
           return {
             ...item,
+            description,
             returnQuantity: 0,
             originalQuantity: item.quantity,
             returnedSoFar: returnedQty,
@@ -200,7 +228,6 @@ export default function NewSalesReturnPage() {
         return;
       }
 
-      // التحقق من عدم تجاوز إجمالي المرتجع للرصيد المتبقي من الفاتورة
       const selectedInvoice = invoices.find(
         (inv) => inv.id.toString() === formData.invoiceId,
       );
@@ -234,7 +261,7 @@ export default function NewSalesReturnPage() {
         customerId: parseInt(formData.customerId),
         returnDate: new Date(formData.returnDate),
         subtotal: formData.subtotal,
-        discount: parseFloat(formData.discount) || 0, // تحويل الخصم إلى رقم
+        discount: parseFloat(formData.discount) || 0,
         totalTax: formData.totalTax,
         total: formData.total,
         reason: formData.reason,
@@ -472,7 +499,7 @@ export default function NewSalesReturnPage() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="space-y-2">
                   <Label className="flex items-center gap-2 text-sm font-medium">
-                    <DollarSign className="h-4 w-4 text-muted-foreground" />
+                    
                     المجموع الفرعي
                   </Label>
                   <Input

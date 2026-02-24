@@ -13,7 +13,8 @@ import {
   Calculator,
   ChevronDown,
   Landmark,
-  RotateCcw, // أيقونة المرتجعات
+  RotateCcw,
+  Package,
 } from "lucide-react";
 import {
   Sidebar,
@@ -107,6 +108,20 @@ const treasuryNavItem = {
     { title: "الخزنة والبنوك", href: "/treasury" },
     { title: "سند قبض", href: "/treasury/receipt-voucher" },
     { title: "سند صرف", href: "/treasury/payment-voucher" },
+  ],
+};
+
+const inventoryNavItem = {
+  title: "المخزون",
+  href: "/inventory",
+  icon: Package,
+  subItems: [
+    { title: "لوحة المخزون", href: "/inventory" },
+    { title: "الأصناف", href: "/inventory/products" },
+    { title: "التصنيفات", href: "/inventory/categories" },
+    { title: "المخزون الحالي", href: "/inventory/stock" },
+    { title: "حركات المخزون", href: "/inventory/movements" },
+    { title: "تسويات المخزون", href: "/inventory/adjustments" },
   ],
 };
 
@@ -265,6 +280,51 @@ export function AppSidebar() {
                   </SidebarMenuItem>
                 </Collapsible>
               ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* ✅ قسم المخزون */}
+        <SidebarGroup className="mt-4">
+          <SidebarGroupLabel className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">
+            المخزون
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <Collapsible
+                defaultOpen={isActive(inventoryNavItem.href)}
+                className="group/collapsible"
+              >
+                <SidebarMenuItem>
+                  <CollapsibleTrigger asChild>
+                    <SidebarMenuButton
+                      isActive={isActive(inventoryNavItem.href)}
+                      className="group hover:bg-primary/10 transition-all"
+                    >
+                      <inventoryNavItem.icon className="h-4 w-4 group-hover:scale-110 transition-transform" />
+                      <span className="font-medium">{inventoryNavItem.title}</span>
+                      <ChevronDown className="mr-auto h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-180" />
+                    </SidebarMenuButton>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <SidebarMenuSub className="mr-4 border-r-2 border-primary/20">
+                      {inventoryNavItem.subItems.map((subItem) => (
+                        <SidebarMenuSubItem key={subItem.href}>
+                          <SidebarMenuSubButton
+                            asChild
+                            isActive={pathname === subItem.href}
+                            className="hover:bg-primary/5 transition-all"
+                          >
+                            <Link href={subItem.href} className="text-sm font-medium">
+                              {subItem.title}
+                            </Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      ))}
+                    </SidebarMenuSub>
+                  </CollapsibleContent>
+                </SidebarMenuItem>
+              </Collapsible>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

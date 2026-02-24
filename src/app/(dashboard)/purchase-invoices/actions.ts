@@ -10,8 +10,13 @@ export interface PurchaseInvoiceItem {
   description: string;
   quantity: number;
   unitPrice: number;
+  sellingPrice: number;
+  profitMargin: number;
   taxRate: number;
+  
+  discount: number;
   total: number;
+  productId?: number | null;
 }
 
 export interface PurchaseInvoice {
@@ -22,9 +27,12 @@ export interface PurchaseInvoice {
   invoiceDate: Date | string;
   subtotal: number;
   totalTax: number;
+  discount: number;
   total: number;
   status: "cash" | "credit" | "pending";
   items: PurchaseInvoiceItem[];
+  topNotes?: string[];
+  notes?: string[];
   createdAt: Date;
   updatedAt: Date;
   returnsCount?: number;
@@ -62,6 +70,7 @@ export async function getPurchaseInvoiceById(id: number) {
     where: { id },
     include: {
       items: true,
+      supplier: true,
       purchaseReturns: {
         select: { total: true }
       },
@@ -98,7 +107,7 @@ export async function checkPurchaseInvoiceNumberExists(invoiceNumber: number): P
   return !!found;
 }
 
-// ─── إنشاء فاتورة جديدة ────────────────────────────────────────────────────
+// ─── إنشاء فاتورة جديدة (مع حركات المخزون) ─────────────────────────────────
 export async function createPurchaseInvoice(data: {
   invoiceNumber: number;
   supplierId: number;
@@ -106,43 +115,103 @@ export async function createPurchaseInvoice(data: {
   invoiceDate: string;
   subtotal: number;
   totalTax: number;
+  discount: number;
   total: number;
   status: "cash" | "credit" | "pending";
   items: {
     description: string;
     quantity: number;
     unitPrice: number;
+    sellingPrice: number;
+    profitMargin: number;
     taxRate: number;
+    discount: number;
     total: number;
+    productId: number;
   }[];
+  topNotes?: string[];
+  notes?: string[];
 }) {
-  const taken = await checkPurchaseInvoiceNumberExists(data.invoiceNumber);
-  if (taken) {
-    throw new Error(`رقم الفاتورة #${data.invoiceNumber} مستخدم مسبقاً`);
-  }
+  if (!data.supplierId) throw new Error("يجب اختيار المورد أولاً");
+  if (data.items.length === 0) throw new Error("لا يمكن حفظ فاتورة فارغة");
 
-  const newInvoice = await prisma.purchaseInvoice.create({
-    data: {
-      invoiceNumber: data.invoiceNumber,
-      supplierId: data.supplierId,
-      supplierName: data.supplierName,
-      invoiceDate: new Date(data.invoiceDate),
-      subtotal: data.subtotal,
-      totalTax: data.totalTax,
-      total: data.total,
-      status: data.status,
-      items: {
-        create: data.items,
+  return prisma.$transaction(async (tx) => {
+    // 1. التحقق من رقم الفاتورة
+    const taken = await tx.purchaseInvoice.findUnique({
+      where: { invoiceNumber: data.invoiceNumber },
+      select: { id: true },
+    });
+    if (taken) throw new Error(`رقم الفاتورة #${data.invoiceNumber} مستخدم مسبقاً`);
+
+    // 2. التحقق من الأصناف (يجب أن تكون نشطة)
+    for (const item of data.items) {
+      const exists = await tx.product.findUnique({
+        where: { id: item.productId, isActive: true },
+        select: { name: true }
+      });
+      if (!exists) throw new Error(`أحد الأصناف المختارة غير متوفر أو تم إيقاف التعامل معه`);
+    }
+
+    // 3. إنشاء الفاتورة
+    const invoice = await tx.purchaseInvoice.create({
+      data: {
+        invoiceNumber: data.invoiceNumber,
+        supplierId: data.supplierId,
+        supplierName: data.supplierName,
+        invoiceDate: new Date(data.invoiceDate),
+        subtotal: data.subtotal,
+        totalTax: data.totalTax,
+        discount: data.discount,
+        total: data.total,
+        status: data.status,
+        topNotes: data.topNotes || [],
+        notes: data.notes || [],
+        items: {
+          create: data.items.map((item) => ({
+            description: item.description,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            sellingPrice: item.sellingPrice,
+            profitMargin: item.profitMargin,
+            taxRate: item.taxRate,
+            discount: item.discount,
+            total: item.total,
+            productId: item.productId,
+          })),
+        },
       },
-    },
-    include: { items: true },
-  });
+    });
 
-  revalidatePath("/purchase-invoices");
-  return newInvoice;
+    // 4. إنشاء حركات مخزون وتحديث الرصيد الحالي (شراء = دخول +) وتحديث أسعار المنتج
+    for (const item of data.items) {
+      await tx.stockMovement.create({
+        data: {
+          productId: item.productId,
+          movementType: "PURCHASE",
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          reference: `فاتورة شراء #${data.invoiceNumber}`,
+          purchaseInvoiceId: invoice.id,
+        },
+      });
+
+      // تحديث الرصيد في بطاقة الصنف وتحديث الأسعار
+      await tx.product.update({
+        where: { id: item.productId },
+        data: { 
+          currentStock: { increment: item.quantity },
+          buyPrice: item.unitPrice,
+          sellPrice: item.sellingPrice,
+          profitMargin: item.profitMargin
+        }
+      });
+    }
+
+    return invoice;
+  });
 }
 
-// ─── تحديث فاتورة موجودة ──────────────────────────────────────────────────
+// ─── تحديث فاتورة موجودة (مع تحديث حركات المخزون) ────────────────────────
 export async function updatePurchaseInvoice(
   id: number,
   data: {
@@ -152,64 +221,140 @@ export async function updatePurchaseInvoice(
     invoiceDate: string;
     subtotal: number;
     totalTax: number;
+    discount: number;
     total: number;
     status: "cash" | "credit" | "pending";
     items: {
       description: string;
       quantity: number;
       unitPrice: number;
+      sellingPrice: number;
+      profitMargin: number;
       taxRate: number;
+      discount: number;
       total: number;
+      productId: number;
     }[];
+    topNotes?: string[];
+    notes?: string[];
   }
 ) {
-  const existing = await prisma.purchaseInvoice.findFirst({
-    where: {
-      invoiceNumber: data.invoiceNumber,
-      NOT: { id },
-    },
-  });
+  if (!data.supplierId) throw new Error("يجب اختيار المورد أولاً");
 
-  if (existing) {
-    throw new Error(`رقم الفاتورة #${data.invoiceNumber} مستخدم مسبقاً`);
-  }
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.purchaseInvoice.findFirst({
+      where: { invoiceNumber: data.invoiceNumber, NOT: { id } },
+    });
+    if (existing) throw new Error(`رقم الفاتورة #${data.invoiceNumber} مستخدم مسبقاً`);
 
-  await prisma.purchaseInvoiceItem.deleteMany({
-    where: { invoiceId: id },
-  });
+    // 1. استرجاع الكميات القديمة لتعديل الرصيد
+    const oldItems = await tx.purchaseInvoiceItem.findMany({
+      where: { invoiceId: id },
+      select: { productId: true, quantity: true }
+    });
 
-  const updatedInvoice = await prisma.purchaseInvoice.update({
-    where: { id },
-    data: {
-      invoiceNumber: data.invoiceNumber,
-      supplierId: data.supplierId,
-      supplierName: data.supplierName,
-      invoiceDate: new Date(data.invoiceDate),
-      subtotal: data.subtotal,
-      totalTax: data.totalTax,
-      total: data.total,
-      status: data.status,
-      items: {
-        create: data.items,
+    for (const oldItem of oldItems) {
+      if (oldItem.productId) {
+        await tx.product.update({
+          where: { id: oldItem.productId },
+          data: { currentStock: { decrement: oldItem.quantity } }
+        });
+      }
+    }
+
+    // 2. حذف الأصناف القديمة وحركات المخزون
+    await tx.purchaseInvoiceItem.deleteMany({ where: { invoiceId: id } });
+    await tx.stockMovement.deleteMany({ where: { purchaseInvoiceId: id } });
+
+    // 3. التحقق من الأصناف
+    for (const item of data.items) {
+      const exists = await tx.product.findUnique({
+        where: { id: item.productId, isActive: true },
+        select: { id: true }
+      });
+      if (!exists) throw new Error(`أحد الأصناف المختارة تم إيقاف التعامل معه`);
+    }
+
+    const invoice = await tx.purchaseInvoice.update({
+      where: { id },
+      data: {
+        invoiceNumber: data.invoiceNumber,
+        supplierId: data.supplierId,
+        supplierName: data.supplierName,
+        invoiceDate: new Date(data.invoiceDate),
+        subtotal: data.subtotal,
+        totalTax: data.totalTax,
+        discount: data.discount,
+        total: data.total,
+        status: data.status,
+        topNotes: data.topNotes || [],
+        notes: data.notes || [],
+        items: {
+          create: data.items.map((item) => ({
+            description: item.description,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            sellingPrice: item.sellingPrice,
+            profitMargin: item.profitMargin,
+            taxRate: item.taxRate,
+            discount: item.discount,
+            total: item.total,
+            productId: item.productId,
+          })),
+        },
       },
-    },
-    include: { items: true },
-  });
+    });
 
-  revalidatePath("/purchase-invoices");
-  return updatedInvoice;
+    for (const item of data.items) {
+      await tx.stockMovement.create({
+        data: {
+          productId: item.productId,
+          movementType: "PURCHASE",
+          quantity: item.quantity, 
+          unitPrice: item.unitPrice,
+          reference: `فاتورة شراء #${data.invoiceNumber}`,
+          purchaseInvoiceId: invoice.id,
+        },
+      });
+
+      // تحديث الرصيد الجديد والأسعار
+      await tx.product.update({
+        where: { id: item.productId },
+        data: { 
+          currentStock: { increment: item.quantity },
+          buyPrice: item.unitPrice,
+          sellPrice: item.sellingPrice,
+          profitMargin: item.profitMargin
+        }
+      });
+    }
+
+    return invoice;
+  });
 }
 
-// ─── حذف فاتورة ────────────────────────────────────────────────────────────
+// ─── حذف فاتورة (مع حذف حركات المخزون المرتبطة) ─────────────────────────
 export async function deletePurchaseInvoice(id: number) {
-  await prisma.purchaseInvoice.delete({
-    where: { id },
-  });
-  revalidatePath("/purchase-invoices");
-  return { success: true };
-}
+  await prisma.$transaction(async (tx) => {
+    // تعديل الرصيد قبل الحذف
+    const items = await tx.purchaseInvoiceItem.findMany({
+      where: { invoiceId: id },
+      select: { productId: true, quantity: true }
+    });
 
-// ========== دوال إضافية مطلوبة لمرتجعات المشتريات ==========
+    for (const item of items) {
+      if (item.productId) {
+        await tx.product.update({
+          where: { id: item.productId },
+          data: { currentStock: { decrement: item.quantity } }
+        });
+      }
+    }
+
+    await tx.stockMovement.deleteMany({ where: { purchaseInvoiceId: id } });
+    await tx.purchaseInvoice.delete({ where: { id } });
+  });
+}
 
 // ─── جلب فاتورة معينة مع أصنافها ومرتجعاتها (لصفحة العرض) ───────────────────
 export async function getPurchaseInvoiceWithReturns(id: number) {
@@ -217,6 +362,7 @@ export async function getPurchaseInvoiceWithReturns(id: number) {
     where: { id },
     include: {
       items: true,
+      supplier: true,
       purchaseReturns: {
         include: { items: true }
       }

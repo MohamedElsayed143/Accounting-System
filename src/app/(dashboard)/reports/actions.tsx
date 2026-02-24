@@ -63,6 +63,25 @@ export async function getCustomers(search?: string) {
   }
 }
 
+// 1.1 جلب عميل محدد
+export async function getCustomerById(id: number) {
+  try {
+    const customer = await prisma.customer.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        phone: true,
+      }
+    });
+    return customer ? { ...customer, type: 'customer' as const } : null;
+  } catch (error) {
+    console.error("Error fetching customer by id:", error);
+    return null;
+  }
+}
+
 // 2. جلب الموردين (مع إمكانية البحث)
 export async function getSuppliers(search?: string) {
   try {
@@ -87,6 +106,25 @@ export async function getSuppliers(search?: string) {
   } catch (error) {
     console.error("Error fetching suppliers:", error);
     return [];
+  }
+}
+
+// 2.1 جلب مورد محدد
+export async function getSupplierById(id: number) {
+  try {
+    const supplier = await prisma.supplier.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        phone: true,
+      }
+    });
+    return supplier ? { ...supplier, type: 'supplier' as const } : null;
+  } catch (error) {
+    console.error("Error fetching supplier by id:", error);
+    return null;
   }
 }
 

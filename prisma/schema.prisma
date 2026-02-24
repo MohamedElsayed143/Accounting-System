@@ -49,9 +49,12 @@ model SalesInvoice {
   invoiceDate   DateTime
   subtotal      Float
   totalTax      Float
+  discount      Float              @default(0)
   total         Float
   status        InvoiceStatus      @default(cash)
   description   String?
+  topNotes      Json?
+  notes         Json?
   createdAt     DateTime           @default(now())
   updatedAt     DateTime           @updatedAt
   items         SalesInvoiceItem[]
@@ -66,7 +69,10 @@ model SalesInvoiceItem {
   quantity    Float
   unitPrice   Float
   taxRate     Float        @default(0)
+  discount    Float        @default(0)
   total       Float
+  productId   Int?
+  product     Product?     @relation(fields: [productId], references: [id])
 }
 
 model PurchaseInvoice {
@@ -78,9 +84,12 @@ model PurchaseInvoice {
   invoiceDate     DateTime
   subtotal        Float
   totalTax        Float
+  discount        Float                 @default(0)
   total           Float
   status          InvoiceStatus         @default(cash)
   description     String?
+  topNotes        Json?
+  notes           Json?
   createdAt       DateTime              @default(now())
   updatedAt       DateTime              @updatedAt
   items           PurchaseInvoiceItem[]
@@ -93,9 +102,14 @@ model PurchaseInvoiceItem {
   invoiceId   Int
   description String          @db.VarChar(255)
   quantity    Float
-  unitPrice   Float
-  taxRate     Float           @default(0)
-  total       Float
+  unitPrice     Float
+  sellingPrice  Float           @default(0)
+  profitMargin  Float           @default(0)
+  taxRate       Float           @default(0)
+  discount      Float           @default(0)
+  total         Float
+  productId     Int?
+  product       Product?        @relation(fields: [productId], references: [id])
 }
 
 enum InvoiceStatus {
@@ -290,4 +304,76 @@ enum RefundMethod {
   cash
   safe
   bank
+}
+
+// ========== المخزون ==========
+
+enum MovementType {
+  PURCHASE
+  SALE
+  PURCHASE_RETURN
+  SALE_RETURN
+  ADJUSTMENT
+}
+
+model Category {
+  id        Int       @id @default(autoincrement())
+  name      String    @db.VarChar(100)
+  code      String?   @unique @db.VarChar(50)
+  products  Product[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Warehouse {
+  id             Int             @id @default(autoincrement())
+  name           String          @db.VarChar(100)
+  location       String?         @db.VarChar(255)
+  isDefault      Boolean         @default(false)
+  stockMovements StockMovement[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+}
+
+model Product {
+  id                   Int                   @id @default(autoincrement())
+  code                 String                @unique @db.VarChar(50)
+  name                 String                @db.VarChar(255)
+  unit                 String?               @db.VarChar(50)
+  buyPrice             Float                 @default(0)
+  sellPrice            Float                 @default(0)
+  profitMargin         Float                 @default(0)
+  minStock             Float                 @default(0)
+  currentStock         Float                 @default(0)
+  isActive             Boolean               @default(true)
+  categoryId           Int?
+  category             Category?             @relation(fields: [categoryId], references: [id])
+  stockMovements       StockMovement[]
+  salesInvoiceItems    SalesInvoiceItem[]
+  purchaseInvoiceItems PurchaseInvoiceItem[]
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+}
+
+model StockMovement {
+  id                Int          @id @default(autoincrement())
+  productId         Int
+  product           Product      @relation(fields: [productId], references: [id])
+  movementType      MovementType
+  quantity          Float
+  unitPrice         Float        @default(0)
+  reference         String?      @db.VarChar(100)
+  notes             String?      @db.Text
+  warehouseId       Int?
+  warehouse         Warehouse?   @relation(fields: [warehouseId], references: [id])
+  purchaseInvoiceId Int?
+  salesInvoiceId    Int?
+  purchaseReturnId  Int?
+  salesReturnId     Int?
+  createdAt         DateTime     @default(now())
+
+  @@index([productId])
+  @@index([movementType])
+  @@index([createdAt])
+  @@index([warehouseId])
 }

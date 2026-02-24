@@ -17,6 +17,7 @@ import { createPurchaseReturn, type PurchaseReturnInput } from "../actions";
 import { getSuppliers } from "../../reports/actions";
 import { getPurchaseInvoiceWithReturns } from "../../purchase-invoices/actions";
 import { getBanks } from "../../treasury/actions";
+import { getProducts, ProductData } from "../../inventory/products/actions";
 
 export default function NewPurchaseReturnPage() {
   const router = useRouter();
@@ -24,6 +25,7 @@ export default function NewPurchaseReturnPage() {
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [invoices, setInvoices] = useState<any[]>([]);
   const [banks, setBanks] = useState<any[]>([]);
+  const [products, setProducts] = useState<ProductData[]>([]);
   const [items, setItems] = useState<any[]>([]);
   const [invoiceTotal, setInvoiceTotal] = useState(0);
   const [formData, setFormData] = useState({
@@ -47,9 +49,11 @@ export default function NewPurchaseReturnPage() {
     Promise.all([
       getSuppliers(),
       getBanks(true),
-    ]).then(([suppliersData, banksData]) => {
+      getProducts(),
+    ]).then(([suppliersData, banksData, productsData]) => {
       setSuppliers(suppliersData);
       setBanks(banksData);
+      setProducts(productsData);
     });
   }, []);
 
@@ -68,7 +72,9 @@ export default function NewPurchaseReturnPage() {
           returnsTotal: fullInv?.purchaseReturns?.reduce((sum: number, ret: any) => sum + ret.total, 0) || 0
         };
       }));
-      setInvoices(invoicesWithReturns);
+      // تصفية الفواتير التي لها رصيد متبقي > 0 فقط
+      const filteredInvoices = invoicesWithReturns.filter(inv => (inv.total - (inv.returnsTotal || 0)) > 0);
+      setInvoices(filteredInvoices);
     } else {
       setInvoices([]);
     }
@@ -79,6 +85,16 @@ export default function NewPurchaseReturnPage() {
     if (invoiceId) {
       const invoiceData = await getPurchaseInvoiceWithReturns(parseInt(invoiceId));
       if (invoiceData) {
+        // التحقق من أن الفاتورة لا تزال لديها رصيد
+        const totalReturns = invoiceData.purchaseReturns?.reduce((sum: number, ret: any) => sum + ret.total, 0) || 0;
+        const remaining = invoiceData.total - totalReturns;
+        if (remaining <= 0) {
+          toast.error("لا يمكن إرجاع هذه الفاتورة لأن رصيدها بالكامل قد استُرد");
+          setFormData(prev => ({ ...prev, invoiceId: "" }));
+          setItems([]);
+          setInvoiceTotal(0);
+          return;
+        }
         setInvoiceTotal(invoiceData.total);
         const initialItems = invoiceData.items.map((item: any) => {
           // حساب الكميات المرتجعة سابقاً لهذا الصنف
@@ -87,8 +103,13 @@ export default function NewPurchaseReturnPage() {
             return total + (retItem?.quantity || 0);
           }, 0) || 0;
 
+          // العثور على اسم المنتج من قائمة المنتجات باستخدام productId
+          const product = products.find(p => p.id === item.productId);
+          const description = product?.name || item.description || "صنف غير معروف";
+
           return {
             ...item,
+            description,
             returnQuantity: 0,
             originalQuantity: item.quantity,
             returnedSoFar: returnedQty,
@@ -231,7 +252,7 @@ export default function NewPurchaseReturnPage() {
                     <Hash className="h-4 w-4 text-muted-foreground" />
                     رقم المرتجع
                   </Label>
-                  <Input value="يُولد تلقائياً" disabled className="bg-muted/30" />
+                  <Input value={`RET-${formData.returnNumber}`} disabled className="bg-muted/30" />
                 </div>
 
                 <div className="space-y-2">

@@ -1,9 +1,8 @@
 "use server";
 
-import { PrismaClient } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 
-const prisma = new PrismaClient();
+import { prisma } from "@/lib/prisma";
 
 // تعريف الأنواع المستخدمة
 export type SalesReturnItemInput = {
@@ -217,6 +216,32 @@ export async function createSalesReturn(data: SalesReturnInput) {
         include: { items: true },
       });
 
+      // ✅ إنشاء حركات مخزون وتحديث الرصيد الحالي (مرتجع بيع = دخول +)
+      for (const returnItem of data.items) {
+        if (!returnItem.invoiceItemId) continue;
+        const invoiceItem = invoice.items.find(i => i.id === returnItem.invoiceItemId);
+        if (!(invoiceItem as any)?.productId) continue;
+
+        const productId = (invoiceItem as any).productId;
+
+        await tx.stockMovement.create({
+          data: {
+            productId,
+            movementType: "SALE_RETURN",
+            quantity: returnItem.quantity, // + دخول (إرجاع للمخزون)
+            unitPrice: returnItem.unitPrice,
+            reference: `مرتجع بيع #${returnNumber}`,
+            salesReturnId: salesReturn.id,
+          },
+        });
+
+        // تحديث الرصيد في بطاقة الصنف (إضافة)
+        await tx.product.update({
+          where: { id: productId },
+          data: { currentStock: { increment: returnItem.quantity } }
+        });
+      }
+
       // إنشاء سند صرف وتحديث الرصيد للخزنة أو البنك
       if (isSafeRefund && data.safeId) {
         await tx.paymentVoucher.create({
@@ -227,7 +252,7 @@ export async function createSalesReturn(data: SalesReturnInput) {
             description: `سند صرف لمرتجع مبيعات رقم ${returnNumber}`,
             accountType: 'safe',
             safeId: data.safeId,
-            supplierId: 1, // مورد افتراضي
+            supplierId: 1,
           },
         });
         await tx.treasurySafe.update({
@@ -261,6 +286,8 @@ export async function createSalesReturn(data: SalesReturnInput) {
     revalidatePath(`/customers/${data.customerId}`);
     revalidatePath(`/sales-invoices/${data.invoiceId}`);
     revalidatePath("/reports");
+    revalidatePath("/inventory/stock");
+    revalidatePath("/inventory/movements");
 
     return { success: true, data: result };
   } catch (error: any) {
@@ -285,11 +312,54 @@ export async function updateSalesReturnStatus(id: number, status: string) {
 
 export async function deleteSalesReturn(id: number) {
   try {
-    await prisma.salesReturn.delete({ where: { id } });
+    await prisma.$transaction(async (tx) => {
+      // 1. استرجاع بيانات المرتجع مع الأصناف
+      const salesReturn = await tx.salesReturn.findUnique({
+        where: { id },
+        include: { items: true, invoice: { include: { items: true } } }
+      });
+      if (!salesReturn) throw new Error("المرتجع غير موجود");
+
+      // 2. عكس حركات المخزون (كان + دخول، سيصبح - خروج) وتحديث الرصيد
+      for (const returnItem of salesReturn.items) {
+        if (!returnItem.invoiceItemId) continue;
+        const invoiceItem = salesReturn.invoice.items.find(i => i.id === returnItem.invoiceItemId);
+        if (!(invoiceItem as any)?.productId) continue;
+
+        const productId = (invoiceItem as any).productId;
+
+        // خصم من الرصيد (لأننا نحذف المرتجع الذي أضاف كمية للمخزون)
+        await tx.product.update({
+          where: { id: productId },
+          data: { currentStock: { decrement: returnItem.quantity } }
+        });
+      }
+
+      // 3. عكس حركة الخزنة/البنك (كان - صرف، سيصبح + قبض)
+      if ((salesReturn.refundMethod === 'safe' || salesReturn.refundMethod === 'cash') && salesReturn.safeId) {
+        await tx.treasurySafe.update({
+          where: { id: salesReturn.safeId },
+          data: { balance: { increment: salesReturn.total } },
+        });
+      } else if (salesReturn.refundMethod === 'bank' && salesReturn.bankId) {
+        await tx.treasuryBank.update({
+          where: { id: salesReturn.bankId },
+          data: { balance: { increment: salesReturn.total } },
+        });
+      }
+
+      // 4. حذف حركات المخزون وسندات الصرف وحذف المرتجع نفسه
+      await tx.stockMovement.deleteMany({ where: { salesReturnId: id } });
+      await tx.paymentVoucher.deleteMany({ where: { description: { contains: `رقم ${salesReturn.returnNumber}` } } });
+      await tx.salesReturn.delete({ where: { id } });
+    });
+
     revalidatePath("/sales-returns");
+    revalidatePath("/inventory/stock");
+    revalidatePath("/treasury");
     return { success: true };
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error deleting sales return:", error);
-    return { success: false, error: "فشل في حذف المرتجع" };
+    return { success: false, error: error.message || "فشل في حذف المرتجع" };
   }
 }

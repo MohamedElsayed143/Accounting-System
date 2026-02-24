@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   Search,
   Printer,
@@ -29,6 +30,8 @@ import {
   getSuppliers,
   getCustomerTransactions,
   getSupplierTransactions,
+  getCustomerById,
+  getSupplierById,
 } from "./actions";
 import { toast } from "sonner";
 
@@ -419,6 +422,25 @@ export default function AccountStatementPage() {
   const [fromDate, setFromDate] = useState<string>("");
   const [toDate, setToDate] = useState<string>("");
   const itemsPerPage = 10;
+
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const customerId = searchParams.get("customerId");
+    const supplierId = searchParams.get("supplierId");
+
+    if (customerId) {
+        setReportType("customer");
+        getCustomerById(Number(customerId)).then(data => {
+            if (data) setSelectedEntity(data);
+        });
+    } else if (supplierId) {
+        setReportType("supplier");
+        getSupplierById(Number(supplierId)).then(data => {
+            if (data) setSelectedEntity(data);
+        });
+    }
+  }, [searchParams]);
 
   const loadTransactions = async () => {
     if (!selectedEntity) return;

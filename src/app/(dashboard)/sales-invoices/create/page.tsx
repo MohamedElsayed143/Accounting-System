@@ -1,10 +1,13 @@
+// app/(dashboard)/sales-invoices/create/page.tsx
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import {
   ArrowRight, Plus, Trash2, Save, Calculator,
   Search, User, ChevronLeft, CreditCard, Hash, Printer,
+  History as HistoryIcon
 } from "lucide-react";
 import { toast } from "sonner";
 import { Navbar } from "@/components/layout/navbar";
@@ -24,6 +27,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { ProductSelect } from "@/components/shared/ProductSelect";
+import { DynamicNotes } from "@/components/shared/DynamicNotes";
+import { CustomerSelect } from "@/components/shared/CustomerSelect";
+import { PrintableInvoice } from "@/components/invoices/printable-invoice";
 
 import { getCustomers } from "@/app/(dashboard)/customers/actions";
 import {
@@ -38,9 +45,6 @@ import {
 interface Customer {
   id: number;
   name: string;
-  code: number;
-  phone: string | null;
-  address: string | null;
 }
 
 interface InvoiceItem {
@@ -48,117 +52,29 @@ interface InvoiceItem {
   description: string;
   quantity: number;
   unitPrice: number;
+  profitMargin: number;
   taxRate: number;
+  discount: number;
   total: number;
+  productId?: number | null;
 }
+
+import { getProducts, ProductData } from "@/app/(dashboard)/inventory/products/actions";
 
 // ============================================================
 // Step 1 — البحث الفوري عن العميل
 // ============================================================
-function CustomerSearchStep({
-  onCustomerSelected,
-}: {
-  onCustomerSelected: (customer: Customer) => void;
-}) {
-  const [query, setQuery] = useState("");
-  const [allCustomers, setAllCustomers] = useState<Customer[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    getCustomers()
-      .then((data) => setAllCustomers(data as Customer[]))
-      .finally(() => setLoading(false));
-  }, []);
-
-  const results = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return [];
-    return allCustomers.filter((c) => {
-      const codeMatch = c.code.toString() === q;
-      const phoneMatch = c.phone && c.phone === q;
-      const nameMatch = c.name.toLowerCase().includes(q);
-      return codeMatch || phoneMatch || nameMatch;
-    });
-  }, [query, allCustomers]);
-
-  return (
-    <div
-      className="flex-1 flex items-center justify-center p-6 bg-slate-50/50 min-h-[calc(100vh-64px)]"
-      dir="rtl"
-    >
-      <div className="w-full max-w-xl space-y-6">
-        <div className="text-center space-y-2">
-          <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
-            <User className="h-8 w-8 text-primary" />
-          </div>
-          <h2 className="text-2xl font-black text-slate-800">ابحث عن العميل أولاً</h2>
-          <p className="text-muted-foreground">تظهر النتائج تلقائياً أثناء الكتابة</p>
-        </div>
-
-        <Card className="border-none shadow-md">
-          <CardContent className="p-6 space-y-4">
-            <div className="space-y-2">
-              <Label className="font-semibold text-slate-700">بحث فوري عن العميل</Label>
-              <div className="relative">
-                <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <Input
-                  placeholder="اكتب الكود، الموبايل، أو اسم العميل..."
-                  value={query}
-                  disabled={loading}
-                  onChange={(e) => setQuery(e.target.value)}
-                  className="pr-10 bg-slate-50 h-12"
-                  autoFocus
-                />
-              </div>
-            </div>
-
-            {query.trim() !== "" && (
-              <div className="space-y-2 pt-2 max-h-64 overflow-y-auto">
-                {results.length > 0 ? (
-                  results.map((customer) => (
-                    <button
-                      key={customer.id}
-                      type="button"
-                      onClick={() => onCustomerSelected(customer)}
-                      className="w-full text-right p-4 rounded-lg border border-slate-200 hover:border-primary hover:bg-primary/5 transition-all flex justify-between items-center group"
-                    >
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-slate-800 group-hover:text-primary">
-                            {customer.name}
-                          </span>
-                          <span className="text-xs bg-slate-100 px-2 py-0.5 rounded-full">
-                            #{customer.code}
-                          </span>
-                        </div>
-                      </div>
-                      <ChevronLeft className="h-5 w-5 text-slate-300 group-hover:text-primary" />
-                    </button>
-                  ))
-                ) : (
-                  <div className="text-center py-4">
-                    <p className="text-sm text-muted-foreground">لا يوجد نتائج مطابقة</p>
-                  </div>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  );
-}
 
 // ============================================================
 // Step 2 — نموذج إنشاء/تعديل/عرض الفاتورة
 // ============================================================
 function InvoiceFormStep({
-  customer,
+  customer: initialCustomer,
   onBack,
   invoiceId,
   readOnly,
 }: {
-  customer: Customer;
+  customer: Customer | null;
   onBack: () => void;
   invoiceId?: string | null;
   readOnly?: boolean;
@@ -173,13 +89,23 @@ function InvoiceFormStep({
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(isEditMode || isViewMode);
 
+  const [customer, setCustomer] = useState<Customer | null>(initialCustomer);
   const [paymentType, setPaymentType] = useState<"cash" | "credit" | "pending">("cash");
   const [invoiceDate, setInvoiceDate] = useState<string>(
     new Date().toISOString().split("T")[0]
   );
-  const [items, setItems] = useState<InvoiceItem[]>([
-    { id: "1", description: "", quantity: 0, unitPrice: 0, taxRate: 0, total: 0 },
-  ]);
+  const [items, setItems] = useState<InvoiceItem[]>([]);
+  const [topNotes, setTopNotes] = useState<string[]>([]);
+  const [discount, setDiscount] = useState<number>(0); // Global discount
+  const [notes, setNotes] = useState<string[]>([]);
+
+  // قائمة جميع المنتجات
+  const [products, setProducts] = useState<ProductData[]>([]);
+
+  // تحميل المنتجات
+  useEffect(() => {
+    getProducts().then(setProducts);
+  }, []);
 
   const [returnsTotal, setReturnsTotal] = useState<number>(0);
   const [returnsCount, setReturnsCount] = useState<number>(0);
@@ -193,27 +119,34 @@ function InvoiceFormStep({
             setInvoiceNumber(invoice.invoiceNumber);
             setPaymentType(invoice.status as "cash" | "credit" | "pending");
             setInvoiceDate(new Date(invoice.invoiceDate).toISOString().split("T")[0]);
+            setDiscount(invoice.discount || 0);
+            
+            if (invoice.customer) {
+              setCustomer({
+                id: invoice.customer.id,
+                name: invoice.customer.name,
+              });
+            }
 
             const totalReturns = invoice.salesReturns?.reduce((sum, ret) => sum + ret.total, 0) || 0;
             setReturnsTotal(totalReturns);
             setReturnsCount(invoice.salesReturns?.length || 0);
 
             if (invoice.items && invoice.items.length > 0) {
-              const formattedItems = invoice.items.map((item: {
-                description: string;
-                quantity: number;
-                unitPrice: number;
-                taxRate: number;
-                total: number;
-              }, index: number) => ({
-                id: String(index + 1),
+              const formattedItems = invoice.items.map((item: any, index: number) => ({
+                id: String(item.id || index + 1),
                 description: item.description,
                 quantity: item.quantity,
                 unitPrice: item.unitPrice,
+                profitMargin: item.profitMargin || 0,
                 taxRate: item.taxRate,
+                discount: item.discount || 0,
                 total: item.total,
+                productId: item.productId || null,
               }));
-              setItems(formattedItems);
+                setItems(formattedItems);
+              setTopNotes((invoice as any).topNotes || []);
+              setNotes((invoice as any).notes || []);
             }
           }
         })
@@ -257,17 +190,20 @@ function InvoiceFormStep({
     return () => clearTimeout(timer);
   }, [invoiceNumber, isEditMode, invoiceId, isViewMode]);
 
-  const addItem = () => {
+  const addItem = (product: ProductData) => {
     if (isViewMode) return;
     setItems((prev) => [
       ...prev,
       {
         id: String(Date.now()),
-        description: "",
-        quantity: 0,
-        unitPrice: 0,
+        description: product.name,
+        quantity: 1,
+        unitPrice: product.sellPrice,
+        profitMargin: product.profitMargin || 0,
         taxRate: 0,
-        total: 0,
+        discount: 0,
+        total: product.sellPrice * 1.14,
+        productId: product.id,
       },
     ]);
   };
@@ -280,19 +216,25 @@ function InvoiceFormStep({
   const updateItem = (
     id: string,
     field: keyof InvoiceItem,
-    value: string | number
+    value: string | number | null
   ) => {
     if (isViewMode) return;
     setItems((prev) =>
       prev.map((item) => {
         if (item.id !== id) return item;
         let finalValue = value;
-        if (field === "quantity" || field === "unitPrice" || field === "taxRate") {
+
+        if (field === "quantity" || field === "unitPrice" || field === "taxRate" || field === "discount") {
           finalValue = Math.max(0, Number(value));
         }
+
         const updated = { ...item, [field]: finalValue };
+
         const basePrice = Number(updated.quantity) * Number(updated.unitPrice);
-        updated.total = basePrice + basePrice * (Number(updated.taxRate) / 100);
+        // Discount as percentage
+        const discountAmount = basePrice * (Number(updated.discount || 0) / 100);
+        const priceAfterDiscount = basePrice - discountAmount;
+        updated.total = priceAfterDiscount + priceAfterDiscount * (Number(updated.taxRate) / 100);
         return updated;
       })
     );
@@ -302,16 +244,24 @@ function InvoiceFormStep({
     () => items.reduce((sum, i) => sum + Number(i.quantity) * Number(i.unitPrice), 0),
     [items]
   );
+  const itemsDiscount = useMemo(
+    () => items.reduce((sum, i) => sum + (Number(i.quantity) * Number(i.unitPrice)) * (Number(i.discount || 0) / 100), 0),
+    [items]
+  );
   const totalTax = useMemo(
     () =>
       items.reduce(
-        (sum, i) =>
-          sum + Number(i.quantity) * Number(i.unitPrice) * (Number(i.taxRate) / 100),
+        (sum, i) => {
+          const itemBase = Number(i.quantity) * Number(i.unitPrice);
+          const discountAmount = itemBase * (Number(i.discount || 0) / 100);
+          const itemAfterDiscount = itemBase - discountAmount;
+          return sum + itemAfterDiscount * (Number(i.taxRate) / 100);
+        },
         0
       ),
     [items]
   );
-  const grandTotal = subtotal + totalTax;
+  const grandTotal = subtotal - itemsDiscount - discount + totalTax;
   const netTotal = grandTotal - returnsTotal;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -321,7 +271,15 @@ function InvoiceFormStep({
       toast.error("يرجى تصحيح رقم الفاتورة أولاً");
       return;
     }
-    if (grandTotal === 0) {
+    if (!customer) {
+      toast.error("يرجى اختيار العميل أولاً");
+      return;
+    }
+    if (grandTotal <= 0 && items.length > 0) {
+      toast.error("إجمالي الفاتورة يجب أن يكون أكبر من صفر");
+      return;
+    }
+    if (items.length === 0) {
       toast.error("لا يمكن حفظ فاتورة فارغة");
       return;
     }
@@ -335,15 +293,23 @@ function InvoiceFormStep({
         invoiceDate,
         subtotal,
         totalTax,
+        discount: itemsDiscount + discount,
         total: grandTotal,
         status: paymentType,
-        items: items.map(({ description, quantity, unitPrice, taxRate, total }) => ({
-          description,
-          quantity,
-          unitPrice,
-          taxRate,
-          total,
-        })),
+        topNotes,
+        notes,
+        items: items.map(({ description, quantity, unitPrice, taxRate, discount, total, productId }) => {
+          if (!productId) throw new Error("يجب اختيار منتج لكل صنف");
+          return {
+            description,
+            quantity,
+            unitPrice,
+            taxRate,
+            discount,
+            total,
+            productId,
+          };
+        }),
       };
 
       if (isEditMode && invoiceId) {
@@ -402,19 +368,41 @@ function InvoiceFormStep({
         </div>
 
         {(isEditMode || isViewMode || invoiceId) && (
-          <Button
-            variant="outline"
-            size="lg"
-            onClick={handlePrint}
-            className="gap-2 shadow-sm border-primary/20 hover:bg-primary/5 hover:border-primary/50 text-primary"
-          >
-            <Printer className="h-5 w-5" />
-            طباعة الفاتورة
-          </Button>
+          <div className="flex gap-3">
+            <Button
+              variant="outline"
+              size="lg"
+              onClick={handlePrint}
+              className="gap-2 shadow-sm border-primary/20 hover:bg-primary/5 hover:border-primary/50 text-primary"
+            >
+              <Printer className="h-5 w-5" />
+              طباعة الفاتورة
+            </Button>
+            {isViewMode && customer && (
+              <Button
+                variant="outline"
+                size="lg"
+                asChild
+                className="gap-2 shadow-sm border-blue-200 hover:bg-blue-50 hover:border-blue-400 text-blue-600"
+              >
+                <Link href={`/reports?customerId=${customer.id}`}>
+                  <HistoryIcon className="h-5 w-5" />
+                  كشف حساب العميل
+                </Link>
+              </Button>
+            )}
+          </div>
         )}
       </div>
 
       <div className="print:hidden">
+        <div className="mb-6">
+          <DynamicNotes
+            notes={topNotes}
+            onChange={setTopNotes}
+            disabled={isViewMode}
+          />
+        </div>
         <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-4">
           <div className="lg:col-span-3 space-y-6">
             <Card className="border-none shadow-sm overflow-hidden">
@@ -425,18 +413,12 @@ function InvoiceFormStep({
               </CardHeader>
               <CardContent className="bg-white pt-5 pb-5">
                 <div className="flex flex-col md:flex-row md:items-start gap-4 justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center shrink-0">
-                      <User className="h-6 w-6 text-primary" />
-                    </div>
-                    <div className="space-y-0.5">
-                      <span className="font-black text-lg text-slate-800">
-                        {customer.name}
-                      </span>
-                      <div className="text-xs text-muted-foreground font-bold">
-                        #{customer.code}
-                      </div>
-                    </div>
+                  <div className="w-full max-w-sm">
+                    <CustomerSelect
+                      onSelect={(c) => setCustomer(c)}
+                      selectedId={customer?.id}
+                      error={!customer ? "يرجى اختيار العميل" : ""}
+                    />
                   </div>
 
                   <div className="flex items-end gap-4 flex-wrap">
@@ -513,71 +495,89 @@ function InvoiceFormStep({
                   <div className="w-2 h-6 bg-orange-500 rounded-full" /> تفاصيل الأصناف
                 </CardTitle>
                 {!isViewMode && (
-                  <Button
-                    type="button"
-                    onClick={addItem}
-                    size="sm"
-                    className="bg-orange-600 hover:bg-orange-700 gap-2"
-                  >
-                    <Plus className="h-4 w-4" /> إضافة صنف
-                  </Button>
+                  <div className="w-72">
+                    <ProductSelect onSelect={addItem} disabled={loading} onlyInStock={true} />
+                  </div>
                 )}
               </CardHeader>
               <CardContent className="p-0 bg-white">
                 <Table>
                   <TableHeader className="bg-slate-50">
                     <TableRow>
-                      <TableHead className="text-right font-bold">الصنف *</TableHead>
+                      <TableHead className="text-right font-bold">الصنف</TableHead>
                       <TableHead className="text-right font-bold w-24">الكمية *</TableHead>
-                      <TableHead className="text-right font-bold w-28">السعر *</TableHead>
-                      <TableHead className="text-right font-bold w-24">الضريبة %</TableHead>
+                      <TableHead className="text-right font-bold w-24">السعر *</TableHead>
+                      <TableHead className="text-right font-bold w-24 text-green-600">الربح (%)</TableHead>
+                      <TableHead className="text-right font-bold w-24">الخصم (%)</TableHead>
+                      <TableHead className="text-right font-bold w-20">الضريبة %</TableHead>
                       <TableHead className="text-right font-bold w-32">الإجمالي</TableHead>
-                      <TableHead className="w-12"></TableHead>
+                      <TableHead className="w-10"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {items.map((item) => (
                       <TableRow key={item.id}>
-                        <TableCell>
-                          <Input
-                            placeholder="وصف الصنف"
-                            value={item.description}
-                            onChange={(e) => updateItem(item.id, "description", e.target.value)}
-                            disabled={isViewMode}
-                            className="bg-transparent border-none focus-visible:ring-1 shadow-none"
-                            required={!isViewMode}
-                          />
+                        <TableCell className="p-3">
+                          <div className="flex flex-col gap-0.5">
+                            <span className="font-bold text-slate-800">{item.description}</span>
+                            <span className="text-[10px] text-muted-foreground font-mono">
+                              PID: {item.productId}
+                            </span>
+                          </div>
                         </TableCell>
                         <TableCell>
                           <Input
                             type="number"
+                            step="any"
                             value={item.quantity || ""}
                             onChange={(e) => updateItem(item.id, "quantity", e.target.value)}
                             disabled={isViewMode}
-                            className="bg-slate-50"
+                            className="bg-slate-50 h-9 font-bold text-center"
                             required={!isViewMode}
                           />
                         </TableCell>
                         <TableCell>
                           <Input
                             type="number"
+                            step="any"
                             value={item.unitPrice || ""}
                             onChange={(e) => updateItem(item.id, "unitPrice", e.target.value)}
                             disabled={isViewMode}
-                            className="bg-slate-50"
+                            className="bg-slate-50 h-9 font-bold text-center"
                             required={!isViewMode}
                           />
                         </TableCell>
                         <TableCell>
                           <Input
                             type="number"
+                            step="any"
+                            value={item.profitMargin || 0}
+                            disabled
+                            className="bg-green-50/50 border-green-100 h-9 font-bold text-center text-green-700"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            step="any"
+                            value={item.discount || ""}
+                            onChange={(e) => updateItem(item.id, "discount", e.target.value)}
+                            disabled={isViewMode}
+                            placeholder="%"
+                            className="bg-red-50 border-red-100 h-9 font-bold text-center"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            step="any"
                             value={item.taxRate}
                             onChange={(e) => updateItem(item.id, "taxRate", e.target.value)}
                             disabled={isViewMode}
-                            className="bg-orange-50 border-orange-200"
+                            className="bg-orange-50 border-orange-200 h-9 font-bold text-center"
                           />
                         </TableCell>
-                        <TableCell className="font-bold text-primary">
+                        <TableCell className="font-bold text-primary text-sm whitespace-nowrap">
                           {item.total.toLocaleString("ar-EG")} ج.م
                         </TableCell>
                         <TableCell>
@@ -588,7 +588,7 @@ function InvoiceFormStep({
                               size="icon"
                               onClick={() => removeItem(item.id)}
                               disabled={items.length === 1}
-                              className="text-red-400"
+                              className="text-red-400 h-8 w-8"
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
@@ -600,6 +600,8 @@ function InvoiceFormStep({
                 </Table>
               </CardContent>
             </Card>
+
+            <DynamicNotes notes={notes} onChange={setNotes} disabled={isViewMode} />
           </div>
 
           <div className="space-y-6">
@@ -626,6 +628,22 @@ function InvoiceFormStep({
                   <span className="text-orange-400 font-mono">
                     +{totalTax.toLocaleString("ar-EG")} ج.م
                   </span>
+                </div>
+                <div className="space-y-1.5 pt-2">
+                  <div className="flex justify-between text-slate-400 text-sm mb-1">
+                    <span>خصم إضافي:</span>
+                    <span className="text-red-400 font-mono">
+                      -{discount.toLocaleString("ar-EG")} ج.م
+                    </span>
+                  </div>
+                  <Input
+                    type="number"
+                    value={discount || ""}
+                    onChange={(e) => setDiscount(Math.max(0, Number(e.target.value)))}
+                    disabled={isViewMode}
+                    className="bg-white/5 border-white/10 h-8 text-center font-bold"
+                    placeholder="قيمة الخصم..."
+                  />
                 </div>
 
                 {returnsCount > 0 && (
@@ -678,77 +696,24 @@ function InvoiceFormStep({
       </div>
 
       {/* ========== نسخة الطباعة (مضمنة بالكامل) ========== */}
-      <div className="hidden print:block absolute top-0 left-0 w-full h-full bg-white z-[9999] p-8" dir="rtl">
-        <div className="max-w-4xl mx-auto">
-          {/* رأس الفاتورة */}
-          <div className="border-b pb-4 mb-4 flex justify-between items-center">
-            <div>
-              <h1 className="text-2xl font-bold">فاتورة مبيعات</h1>
-              <p className="text-sm text-gray-600">مصنع الطوب</p>
-            </div>
-            <div className="text-left">
-              <p className="text-sm">التاريخ: {new Date(invoiceDate).toLocaleDateString('ar-EG')}</p>
-              <p className="text-sm font-bold">رقم الفاتورة: #{invoiceNumber}</p>
-            </div>
-          </div>
-
-          {/* بيانات العميل */}
-          <div className="mb-4 p-2 bg-gray-50 rounded">
-            <p><span className="font-bold">العميل:</span> {customer.name}</p>
-          </div>
-
-          {/* جدول الأصناف */}
-          <table className="w-full border-collapse mb-4">
-            <thead>
-              <tr className="bg-gray-100 border-b">
-                <th className="py-2 px-1 text-right">البيان</th>
-                <th className="py-2 px-1 text-right">الكمية</th>
-                <th className="py-2 px-1 text-right">السعر</th>
-                <th className="py-2 px-1 text-right">الإجمالي</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((item, idx) => (
-                <tr key={idx} className="border-b">
-                  <td className="py-1 px-1">{item.description}</td>
-                  <td className="py-1 px-1">{item.quantity}</td>
-                  <td className="py-1 px-1">{item.unitPrice.toLocaleString('ar-EG')}</td>
-                  <td className="py-1 px-1 font-bold">{item.total.toLocaleString('ar-EG')} ج.م</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          {/* ملخص الأرقام */}
-          <div className="flex flex-col items-end space-y-1 border-t pt-2">
-            <div className="flex gap-4">
-              <span>الإجمالي قبل الضريبة:</span>
-              <span className="font-mono">{subtotal.toLocaleString('ar-EG')} ج.م</span>
-            </div>
-            <div className="flex gap-4">
-              <span>الضريبة:</span>
-              <span className="font-mono">{totalTax.toLocaleString('ar-EG')} ج.م</span>
-            </div>
-            {returnsCount > 0 && (
-              <div className="flex gap-4 text-red-600">
-                <span>إجمالي المرتجعات:</span>
-                <span className="font-mono">-{returnsTotal.toLocaleString('ar-EG')} ج.م</span>
-              </div>
-            )}
-            <div className="flex gap-4 text-lg font-bold border-t pt-1 mt-1">
-              <span>الإجمالي النهائي:</span>
-              <span className="text-green-600 font-mono">
-                {(returnsCount > 0 ? netTotal : grandTotal).toLocaleString('ar-EG')} ج.م
-              </span>
-            </div>
-          </div>
-
-          {/* توقيع */}
-          <div className="mt-8 text-center text-sm text-gray-500">
-            شكراً لتعاملكم معنا
-          </div>
-        </div>
-      </div>
+      <PrintableInvoice
+        invoiceNumber={invoiceNumber}
+        date={invoiceDate}
+        partnerName={customer?.name || ""}
+        partnerLabel="العميل"
+        title="فاتورة مبيعات"
+        items={items.map(item => ({
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          total: item.total
+        }))}
+        subtotal={subtotal}
+        tax={totalTax}
+        total={returnsCount > 0 ? netTotal : grandTotal}
+        topNotes={topNotes}
+        notes={notes}
+      />
     </div>
   );
 }
@@ -761,41 +726,33 @@ export default function CreateSalesInvoicePage() {
   const searchParams = useSearchParams();
   const invoiceId = searchParams.get("id");
   const mode = searchParams.get("mode");
-  const isEditMode = !!invoiceId && invoiceId !== "create" && mode !== "view";
   const isViewMode = !!invoiceId && invoiceId !== "create" && mode === "view";
 
-  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
-  const [loading, setLoading] = useState(isEditMode || isViewMode);
+  const [initialCustomer, setInitialCustomer] = useState<Customer | null>(null);
+  const [loading, setLoading] = useState(!!invoiceId && invoiceId !== "create");
 
   useEffect(() => {
-    if (isEditMode || isViewMode) {
+    if (invoiceId && invoiceId !== "create") {
       setLoading(true);
       getSalesInvoiceWithReturns(Number(invoiceId))
         .then((invoice) => {
           if (invoice) {
-            return getCustomers().then((customers) => {
+            getCustomers().then((customers) => {
               const fullCustomer = (customers as Customer[]).find(c => c.id === invoice.customerId);
               if (fullCustomer) {
-                setSelectedCustomer(fullCustomer);
+                setInitialCustomer(fullCustomer);
               } else {
-                setSelectedCustomer({
+                setInitialCustomer({
                   id: invoice.customerId,
                   name: invoice.customerName,
-                  code: 0,
-                  phone: null,
-                  address: null,
                 });
               }
             });
           }
         })
-        .catch((error) => {
-          console.error("Error loading invoice:", error);
-          toast.error("حدث خطأ أثناء تحميل بيانات الفاتورة");
-        })
         .finally(() => setLoading(false));
     }
-  }, [isEditMode, isViewMode, invoiceId]);
+  }, [invoiceId]);
 
   if (loading) {
     return (
@@ -803,7 +760,7 @@ export default function CreateSalesInvoicePage() {
         <Navbar title="فاتورة مبيعات" />
         <div className="flex-1 flex items-center justify-center p-6 bg-slate-50/50 min-h-[calc(100vh-64px)]">
           <div className="flex flex-col items-center gap-3">
-            <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+            <Loader2 className="h-12 w-12 animate-spin text-primary" />
             <p className="text-sm text-muted-foreground font-medium">جاري تحميل بيانات الفاتورة...</p>
           </div>
         </div>
@@ -813,25 +770,17 @@ export default function CreateSalesInvoicePage() {
 
   return (
     <>
-      <Navbar title={isViewMode ? "عرض فاتورة مبيعات" : isEditMode ? "تعديل فاتورة مبيعات" : "فاتورة مبيعات جديدة"} />
-      {selectedCustomer === null ? (
-        <CustomerSearchStep
-          onCustomerSelected={setSelectedCustomer}
-        />
-      ) : (
+      <Navbar title={isViewMode ? "عرض فاتورة مبيعات" : (invoiceId && invoiceId !== "create" ? "تعديل فاتورة مبيعات" : "فاتورة مبيعات جديدة")} />
+      <div className="min-h-screen bg-slate-50/50 pb-12">
         <InvoiceFormStep
-          customer={selectedCustomer}
-          onBack={() => {
-            if (isEditMode || isViewMode) {
-              router.push("/sales-invoices");
-            } else {
-              setSelectedCustomer(null);
-            }
-          }}
+          customer={initialCustomer}
+          onBack={() => router.push("/sales-invoices")}
           invoiceId={invoiceId}
           readOnly={isViewMode}
         />
-      )}
+      </div>
     </>
   );
 }
+
+import { Loader2 } from "lucide-react";
