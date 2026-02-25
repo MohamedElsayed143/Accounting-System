@@ -304,6 +304,7 @@ enum RefundMethod {
   cash
   safe
   bank
+  credit
 }
 
 // ========== المخزون ==========
