@@ -57,7 +57,7 @@ export const QuotationPrint = React.forwardRef<HTMLDivElement, QuotationPrintPro
             <div className="space-y-2">
               <div className="flex flex-col">
                 <span className="text-sm text-slate-500 mb-1">اسم العميل:</span>
-                <span className="text-lg font-bold text-slate-900">{customerName}</span>
+                <span className="text-lg font-bold text-slate-900">{customerName || "عميل عام"}</span>
               </div>
               {customerCode && (
                 <div className="flex items-center gap-2">

@@ -12,6 +12,8 @@ import {
   Archive,
   AlertTriangle,
   ArrowLeftRight,
+  ArrowUpCircle,
+  ArrowDownCircle,
 } from "lucide-react";
 import { Navbar } from "@/components/layout/navbar";
 import { Card, CardContent } from "@/components/ui/card";
@@ -41,12 +43,13 @@ import TransferDialog from "./components/TransferDialog";
 // تعريف نوع المعاملات
 interface Transaction {
   id: string;
-  type: "payment" | "receipt";
+  type: "payment" | "receipt" | "sales-invoice" | "purchase-invoice" | "sales-return" | "purchase-return" | "transfer";
   voucherNumber: string;
   amount: number;
   date: Date;
   partyName: string;
   accountName: string;
+  description?: string | null;
 }
 
 // تعريف نوع Props لـ StatCard
@@ -350,35 +353,59 @@ export default function TreasuryPage() {
                       key={trans.id}
                       className="p-4 flex justify-between items-center hover:bg-muted/50"
                     >
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`text-sm font-bold px-2 py-1 rounded-full ${
-                              trans.type === "payment"
-                                ? "bg-red-100 text-red-700"
-                                : "bg-emerald-100 text-emerald-700"
-                            }`}
-                          >
-                            {trans.type === "payment" ? "سند صرف" : "سند قبض"}
-                          </span>
-                          <span className="font-mono text-sm">
-                            {trans.voucherNumber}
-                          </span>
+                      <div className="flex items-center gap-3">
+                        {trans.type === "receipt" || trans.type === "sales-invoice" || trans.type === "purchase-return" ? (
+                          <ArrowDownCircle
+                            className={`shrink-0 ${trans.type === "purchase-return" ? "text-red-600" : "text-emerald-600"}`}
+                            size={20}
+                          />
+                        ) : trans.type === "transfer" ? (
+                          <ArrowLeftRight className="text-blue-600 shrink-0" size={20} />
+                        ) : (
+                          <ArrowUpCircle className="text-red-600 shrink-0" size={20} />
+                        )}
+                        <div>
+                          <div className="flex items-center gap-2">
+                              <span
+                                className={`text-sm font-bold px-2 py-1 rounded-full ${
+                                  trans.type === "payment" || trans.type === "purchase-invoice" || trans.type === "sales-return" || trans.type === "purchase-return"
+                                    ? "bg-red-100 text-red-700"
+                                    : "bg-emerald-100 text-emerald-700"
+                                }`}
+                              >
+                                {trans.type === "payment" ? "سند صرف" : 
+                                 trans.type === "receipt" ? "سند قبض" :
+                                 trans.type === "sales-invoice" ? "فاتورة مبيعات" : 
+                                 trans.type === "purchase-invoice" ? "فاتورة مشتريات" :
+                                 trans.type === "sales-return" ? "مرتجع مبيعات" : 
+                                 trans.type === "purchase-return" ? "مرتجع مشتريات" : 
+                                 trans.type === "transfer" ? "تحويل رصيد" : "أخرى"}
+                              </span>
+                            <span className="font-mono text-sm">
+                              {trans.voucherNumber}
+                            </span>
+                          </div>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            {trans.partyName} •{" "}
+                            {new Date(trans.date).toLocaleDateString("ar-EG")}
+                          </p>
+                          {trans.description && (
+                            <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
+                              {trans.description}
+                            </p>
+                          )}
                         </div>
-                        <p className="text-sm text-muted-foreground mt-1">
-                          {trans.partyName} •{" "}
-                          {new Date(trans.date).toLocaleDateString("ar-EG")}
-                        </p>
                       </div>
                       <div className="text-left">
                         <p
                           className={`font-bold ${
-                            trans.type === "payment"
+                            trans.type === "payment" || trans.type === "purchase-invoice" || trans.type === "sales-return" || trans.type === "purchase-return"
                               ? "text-red-600"
-                              : "text-emerald-600"
+                              : trans.type === "transfer" ? "text-blue-600" : "text-emerald-600"
                           }`}
                         >
-                          {trans.type === "payment" ? "−" : "+"}
+                          {trans.type === "payment" || trans.type === "purchase-invoice" || trans.type === "sales-return" ? "−" : 
+                           trans.type === "transfer" ? "" : "+"}
                           {trans.amount.toLocaleString()} ج.م
                         </p>
                         <p className="text-xs text-muted-foreground">
@@ -403,6 +430,12 @@ export default function TreasuryPage() {
       <AddSafeDialog
         open={showAddSafe}
         onOpenChange={setShowAddSafe}
+        onSuccess={loadData}
+      />
+
+      <TransferDialog
+        open={showTransfer}
+        onOpenChange={setShowTransfer}
         onSuccess={loadData}
       />
 

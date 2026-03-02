@@ -131,9 +131,9 @@ export default function AccountDetailsPage() {
                     className="py-4 flex justify-between items-center"
                   >
                     <div className="flex items-center gap-3">
-                      {trans.type === "receipt" ? (
+                      {trans.type === "receipt" || trans.type === "sales-invoice" || trans.type === "purchase-return" ? (
                         <ArrowDownCircle
-                          className="text-emerald-600"
+                          className={trans.type === "purchase-return" ? "text-red-600" : "text-emerald-600"}
                           size={20}
                         />
                       ) : (
@@ -143,12 +143,16 @@ export default function AccountDetailsPage() {
                         <div className="flex items-center gap-2">
                           <span
                             className={`text-sm font-bold px-2 py-1 rounded-full ${
-                              trans.type === "receipt"
+                                trans.type === "receipt" || trans.type === "sales-invoice"
                                 ? "bg-emerald-100 text-emerald-700"
                                 : "bg-red-100 text-red-700"
                             }`}
                           >
-                            {trans.type === "receipt" ? "سند قبض" : "سند صرف"}
+                            {trans.type === "receipt" ? "سند قبض" : 
+                             trans.type === "payment" ? "سند صرف" :
+                             trans.type === "sales-invoice" ? "فاتورة مبيعات" : 
+                             trans.type === "purchase-invoice" ? "فاتورة مشتريات" :
+                             trans.type === "sales-return" ? "مرتجع مبيعات" : "مرتجع مشتريات"}
                           </span>
                           <span className="font-mono text-sm">
                             {trans.voucherNumber}
@@ -166,9 +170,9 @@ export default function AccountDetailsPage() {
                       </div>
                     </div>
                     <p
-                      className={`font-bold ${trans.type === "receipt" ? "text-emerald-600" : "text-red-600"}`}
+                      className={`font-bold ${trans.type === "receipt" || trans.type === "sales-invoice" ? "text-emerald-600" : "text-red-600"}`}
                     >
-                      {trans.type === "receipt" ? "+" : "-"}
+                      {trans.type === "receipt" || trans.type === "sales-invoice" || trans.type === "purchase-return" ? "+" : "-"}
                       {trans.amount.toLocaleString()} ج.م
                     </p>
                   </div>

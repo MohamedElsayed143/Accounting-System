@@ -1,9 +1,7 @@
 "use server";
 
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-
-const prisma = new PrismaClient();
 
 // تعريف الأنواع
 export interface TreasuryStats {
@@ -74,7 +72,7 @@ async function ensureMainSafe() {
 
 // 1. جلب بيانات الخزنة الرئيسية (البنوك النشطة فقط)
 export async function getTreasuryData() {
-  const [safes, banks, recentReceipts, recentPayments] = await Promise.all([
+  const [safes, banks, recentReceipts, recentPayments, recentSalesInvoices, recentPurchaseInvoices, recentSalesReturns, recentPurchaseReturns, recentTransfers] = await Promise.all([
     prisma.treasurySafe.findMany({ 
       where: { isActive: true },
       orderBy: { createdAt: 'desc' } 
@@ -99,6 +97,54 @@ export async function getTreasuryData() {
         supplier: { select: { name: true } },
         safe: { select: { name: true } },
         bank: { select: { name: true } },
+      }
+    }),
+    prisma.salesInvoice.findMany({
+      where: { status: 'cash' },
+      take: 20,
+      orderBy: { invoiceDate: 'desc' },
+      include: {
+        safe: { select: { name: true } },
+        bank: { select: { name: true } },
+      }
+    }),
+    prisma.purchaseInvoice.findMany({
+      where: { status: 'cash' },
+      take: 20,
+      orderBy: { invoiceDate: 'desc' },
+      include: {
+        safe: { select: { name: true } },
+        bank: { select: { name: true } },
+      }
+    }),
+    prisma.salesReturn.findMany({
+      where: { refundMethod: { in: ['cash', 'safe', 'bank'] } },
+      take: 20,
+      orderBy: { returnDate: 'desc' },
+      include: {
+        customer: { select: { name: true } },
+        safe: { select: { name: true } },
+        bank: { select: { name: true } },
+      }
+    }),
+    prisma.purchaseReturn.findMany({
+      where: { refundMethod: { in: ['cash', 'safe', 'bank'] } },
+      take: 20,
+      orderBy: { returnDate: 'desc' },
+      include: {
+        supplier: { select: { name: true } },
+        safe: { select: { name: true } },
+        bank: { select: { name: true } },
+      }
+    }),
+    prisma.treasuryTransfer.findMany({
+      take: 20,
+      orderBy: { date: 'desc' },
+      include: {
+        fromSafe: { select: { name: true } },
+        fromBank: { select: { name: true } },
+        toSafe: { select: { name: true } },
+        toBank: { select: { name: true } },
       }
     }),
   ]);
@@ -142,6 +188,7 @@ export async function getTreasuryData() {
       date: p.date,
       partyName: p.supplier.name,
       accountName: p.safe?.name || p.bank?.name || '',
+      description: p.description,
       createdAt: p.createdAt,
     })),
     ...recentReceipts.map(r => ({
@@ -152,7 +199,63 @@ export async function getTreasuryData() {
       date: r.date,
       partyName: r.customer.name,
       accountName: r.safe?.name || r.bank?.name || '',
+      description: r.description,
       createdAt: r.createdAt,
+    })),
+    ...recentSalesInvoices.map(s => ({
+      id: `si-${s.id}`,
+      type: 'sales-invoice' as const,
+      voucherNumber: `INV-${s.invoiceNumber}`,
+      amount: s.total,
+      date: s.invoiceDate,
+      partyName: s.customerName,
+      accountName: s.safe?.name || s.bank?.name || '',
+      description: s.description,
+      createdAt: s.createdAt,
+    })),
+    ...recentPurchaseInvoices.map(p => ({
+      id: `pi-${p.id}`,
+      type: 'purchase-invoice' as const,
+      voucherNumber: `PUR-${p.invoiceNumber}`,
+      amount: p.total,
+      date: p.invoiceDate,
+      partyName: p.supplierName,
+      accountName: p.safe?.name || p.bank?.name || '',
+      description: p.description,
+      createdAt: p.createdAt,
+    })),
+    ...recentSalesReturns.map(sr => ({
+      id: `sr-${sr.id}`,
+      type: 'sales-return' as const,
+      voucherNumber: `SR-${sr.returnNumber}`,
+      amount: sr.total,
+      date: sr.returnDate,
+      partyName: sr.customer.name,
+      accountName: sr.safe?.name || sr.bank?.name || '',
+      description: sr.reason || sr.description,
+      createdAt: sr.createdAt,
+    })),
+    ...recentPurchaseReturns.map(pr => ({
+      id: `pr-${pr.id}`,
+      type: 'purchase-return' as const,
+      voucherNumber: `PR-${pr.returnNumber}`,
+      amount: pr.total,
+      date: pr.returnDate,
+      partyName: pr.supplier.name,
+      accountName: pr.safe?.name || pr.bank?.name || '',
+      description: pr.reason || pr.description,
+      createdAt: pr.createdAt,
+    })),
+    ...recentTransfers.map(tr => ({
+      id: `tr-${tr.id}`,
+      type: 'transfer' as any, // We can handle this in UI later or use payment/receipt
+      voucherNumber: tr.transferNumber,
+      amount: tr.amount,
+      date: tr.date,
+      partyName: `${tr.fromSafe?.name || tr.fromBank?.name} ⬅️ ${tr.toSafe?.name || tr.toBank?.name}`,
+      accountName: 'تحويل',
+      description: tr.description || 'تحويل رصيد',
+      createdAt: tr.createdAt,
     })),
   ]
   .sort((a, b) => {
@@ -160,7 +263,7 @@ export async function getTreasuryData() {
     if (dateCompare !== 0) return dateCompare;
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
   })
-  .slice(0, 10);
+  .slice(0, 15);
 
   return { accounts: allAccounts, stats, recentTransactions };
 }
@@ -404,6 +507,32 @@ export async function getAccountDetails(id: number, type: 'safe' | 'bank') {
           paymentVouchers: {
             include: { supplier: { select: { name: true } } },
             orderBy: { date: 'desc' }
+          },
+          salesInvoices: {
+            where: { status: 'cash' },
+            orderBy: { invoiceDate: 'desc' }
+          },
+          purchaseInvoices: {
+            where: { status: 'cash' },
+            orderBy: { invoiceDate: 'desc' }
+          },
+          salesReturns: {
+            where: { refundMethod: { in: ['cash', 'safe'] } },
+            include: { customer: { select: { name: true } } },
+            orderBy: { returnDate: 'desc' }
+          },
+          purchaseReturns: {
+            where: { refundMethod: { in: ['cash', 'safe'] } },
+            include: { supplier: { select: { name: true } } },
+            orderBy: { returnDate: 'desc' }
+          },
+          transfersFrom: {
+            include: { toSafe: true, toBank: true },
+            orderBy: { date: 'desc' }
+          },
+          transfersTo: {
+            include: { fromSafe: true, fromBank: true },
+            orderBy: { date: 'desc' }
           }
         }
       });
@@ -429,6 +558,60 @@ export async function getAccountDetails(id: number, type: 'safe' | 'bank') {
           partyName: v.supplier.name,
           description: v.description,
         })),
+        ...safe.salesInvoices.map(v => ({
+          id: `si-${v.id}`,
+          type: 'sales-invoice' as const,
+          voucherNumber: `INV-${v.invoiceNumber}`,
+          amount: v.total,
+          date: v.invoiceDate,
+          partyName: v.customerName,
+          description: v.description,
+        })),
+        ...safe.purchaseInvoices.map(v => ({
+          id: `pi-${v.id}`,
+          type: 'purchase-invoice' as const,
+          voucherNumber: `PUR-${v.invoiceNumber}`,
+          amount: v.total,
+          date: v.invoiceDate,
+          partyName: v.supplierName,
+          description: v.description,
+        })),
+        ...safe.salesReturns.map(v => ({
+          id: `sr-${v.id}`,
+          type: 'sales-return' as const,
+          voucherNumber: `SR-${v.returnNumber}`,
+          amount: v.total,
+          date: v.returnDate,
+          partyName: v.customer.name,
+          description: v.reason || v.description,
+        })),
+        ...safe.purchaseReturns.map(v => ({
+          id: `pr-${v.id}`,
+          type: 'purchase-return' as const,
+          voucherNumber: `PR-${v.returnNumber}`,
+          amount: v.total,
+          date: v.returnDate,
+          partyName: v.supplier.name,
+          description: v.reason || v.description,
+        })),
+        ...safe.transfersFrom.map(v => ({
+          id: `tr-out-${v.id}`,
+          type: 'payment' as const, // Use payment for outflow
+          voucherNumber: v.transferNumber,
+          amount: v.amount,
+          date: v.date,
+          partyName: v.toSafe?.name || v.toBank?.name || 'حساب آخر',
+          description: v.description || 'تحويل صادر',
+        })),
+        ...safe.transfersTo.map(v => ({
+          id: `tr-in-${v.id}`,
+          type: 'receipt' as const, // Use receipt for inflow
+          voucherNumber: v.transferNumber,
+          amount: v.amount,
+          date: v.date,
+          partyName: v.fromSafe?.name || v.fromBank?.name || 'حساب آخر',
+          description: v.description || 'تحويل وارد',
+        })),
       ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
       return {
@@ -450,6 +633,32 @@ export async function getAccountDetails(id: number, type: 'safe' | 'bank') {
           },
           paymentVouchers: {
             include: { supplier: { select: { name: true } } },
+            orderBy: { date: 'desc' }
+          },
+          salesInvoices: {
+            where: { status: 'cash' },
+            orderBy: { invoiceDate: 'desc' }
+          },
+          purchaseInvoices: {
+            where: { status: 'cash' },
+            orderBy: { invoiceDate: 'desc' }
+          },
+          salesReturns: {
+            where: { refundMethod: 'bank' },
+            include: { customer: { select: { name: true } } },
+            orderBy: { returnDate: 'desc' }
+          },
+          purchaseReturns: {
+            where: { refundMethod: 'bank' },
+            include: { supplier: { select: { name: true } } },
+            orderBy: { returnDate: 'desc' }
+          },
+          transfersFrom: {
+            include: { toSafe: true, toBank: true },
+            orderBy: { date: 'desc' }
+          },
+          transfersTo: {
+            include: { fromSafe: true, fromBank: true },
             orderBy: { date: 'desc' }
           }
         }
@@ -475,6 +684,60 @@ export async function getAccountDetails(id: number, type: 'safe' | 'bank') {
           date: v.date,
           partyName: v.supplier.name,
           description: v.description,
+        })),
+        ...bank.salesInvoices.map(v => ({
+          id: `si-${v.id}`,
+          type: 'sales-invoice' as const,
+          voucherNumber: `INV-${v.invoiceNumber}`,
+          amount: v.total,
+          date: v.invoiceDate,
+          partyName: v.customerName,
+          description: v.description,
+        })),
+        ...bank.purchaseInvoices.map(v => ({
+          id: `pi-${v.id}`,
+          type: 'purchase-invoice' as const,
+          voucherNumber: `PUR-${v.invoiceNumber}`,
+          amount: v.total,
+          date: v.invoiceDate,
+          partyName: v.supplierName,
+          description: v.description,
+        })),
+        ...bank.salesReturns.map(v => ({
+          id: `sr-${v.id}`,
+          type: 'sales-return' as const,
+          voucherNumber: `SR-${v.returnNumber}`,
+          amount: v.total,
+          date: v.returnDate,
+          partyName: v.customer.name,
+          description: v.reason || v.description,
+        })),
+        ...bank.purchaseReturns.map(v => ({
+          id: `pr-${v.id}`,
+          type: 'purchase-return' as const,
+          voucherNumber: `PR-${v.returnNumber}`,
+          amount: v.total,
+          date: v.returnDate,
+          partyName: v.supplier.name,
+          description: v.reason || v.description,
+        })),
+        ...bank.transfersFrom.map(v => ({
+          id: `tr-out-${v.id}`,
+          type: 'payment' as const,
+          voucherNumber: v.transferNumber,
+          amount: v.amount,
+          date: v.date,
+          partyName: v.toSafe?.name || v.toBank?.name || 'حساب آخر',
+          description: v.description || 'تحويل صادر',
+        })),
+        ...bank.transfersTo.map(v => ({
+          id: `tr-in-${v.id}`,
+          type: 'receipt' as const,
+          voucherNumber: v.transferNumber,
+          amount: v.amount,
+          date: v.date,
+          partyName: v.fromSafe?.name || v.fromBank?.name || 'حساب آخر',
+          description: v.description || 'تحويل وارد',
         })),
       ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 

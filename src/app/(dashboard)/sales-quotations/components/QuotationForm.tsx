@@ -4,7 +4,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
-  ArrowRight, Save, Calculator, Hash, Printer, FileOutput,
+  ArrowRight, Save, Calculator, Hash, Printer,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -191,7 +191,7 @@ export function QuotationForm({ quotationId, readOnly, onBack }: QuotationFormPr
     try {
       await updateQuotationStatus(
         Number(quotationId),
-        newStatus as "Draft" | "Sent" | "Approved" | "Rejected" | "Converted"
+        newStatus as "Draft" | "Sent" | "Approved" | "Rejected"
       );
       setCurrentStatus(newStatus);
       toast.success("تم تحديث الحالة بنجاح");
@@ -204,10 +204,6 @@ export function QuotationForm({ quotationId, readOnly, onBack }: QuotationFormPr
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isViewMode) return;
-    if (!customer) {
-      toast.error("يرجى اختيار العميل أولاً");
-      return;
-    }
     if (items.length === 0) {
       toast.error("لا يمكن حفظ عرض سعر فارغ");
       return;
@@ -216,7 +212,7 @@ export function QuotationForm({ quotationId, readOnly, onBack }: QuotationFormPr
     try {
       setSaving(true);
       const quotationData = {
-        customerId: customer.id,
+        customerId: customer?.id || null,
         date: quotationDate,
         subtotal: subtotalAfterItemDiscounts,
         discount: globalDiscountAmount,
@@ -246,7 +242,7 @@ export function QuotationForm({ quotationId, readOnly, onBack }: QuotationFormPr
 
   const handlePrint = () => window.print();
 
-  const canSave = !saving && !loading && !isViewMode && !!customer;
+  const canSave = !saving && !loading && !isViewMode;
 
   if (loading) {
     return (
@@ -289,23 +285,6 @@ export function QuotationForm({ quotationId, readOnly, onBack }: QuotationFormPr
               طباعة / تحميل PDF
             </Button>
           )}
-          {isViewMode && currentStatus !== "Converted" && (
-            <Button
-              variant="outline"
-              size="lg"
-              onClick={() => router.push(`/sales-invoices/create?fromQuotation=${quotationId}`)}
-              className="gap-2 shadow-sm border-green-200 hover:bg-green-50 hover:border-green-400 text-green-600"
-            >
-              <FileOutput className="h-5 w-5" />
-              تحويل إلى فاتورة بيع
-            </Button>
-          )}
-          {isViewMode && currentStatus === "Converted" && (
-            <Button variant="outline" size="lg" disabled className="gap-2 opacity-50 cursor-not-allowed">
-              <FileOutput className="h-5 w-5" />
-              تم التحويل مسبقاً
-            </Button>
-          )}
         </div>
       </div>
 
@@ -326,7 +305,7 @@ export function QuotationForm({ quotationId, readOnly, onBack }: QuotationFormPr
                     <CustomerSelect
                       onSelect={(c) => setCustomer(c as Customer)}
                       selectedId={customer?.id}
-                      error={!customer ? "يرجى اختيار العميل" : ""}
+                      error={""}
                     />
                   </div>
 
@@ -364,7 +343,6 @@ export function QuotationForm({ quotationId, readOnly, onBack }: QuotationFormPr
                         <Select
                           value={currentStatus}
                           onValueChange={handleStatusChange}
-                          disabled={currentStatus === "Converted"}
                         >
                           <SelectTrigger className="w-36 bg-slate-50 border-slate-200">
                             <SelectValue />
@@ -397,7 +375,7 @@ export function QuotationForm({ quotationId, readOnly, onBack }: QuotationFormPr
                   onAddItem={addItem}
                   onRemoveItem={removeItem}
                   onUpdateItem={updateItem}
-                  disabled={!customer}
+                  disabled={false}
                   readOnly={isViewMode}
                 />
               </CardContent>
@@ -497,7 +475,7 @@ export function QuotationForm({ quotationId, readOnly, onBack }: QuotationFormPr
       <QuotationPrint
         code={quotationCode}
         date={quotationDate}
-        customerName={customer?.name || ""}
+        customerName={customer?.name || "عميل عام"}
         customerCode={customer?.code}
         customerPhone={customer?.phone}
         customerAddress={customer?.address}

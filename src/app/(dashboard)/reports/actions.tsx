@@ -1,10 +1,6 @@
-// app/(dashboard)/reports/actions.tsx
 "use server";
-
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-
-const prisma = new PrismaClient();
 
 // أنواع البيانات
 export type CustomerType = {
@@ -182,7 +178,7 @@ export async function getCustomerTransactions(
     });
 
     // تحويل الفواتير
-    const invoiceTransactions: TransactionType[] = invoices.map(inv => ({
+    const invoiceTransactions: TransactionType[] = (invoices || []).map(inv => ({
       id: `inv-${inv.id}`,
       date: inv.invoiceDate,
       createdAt: inv.createdAt,
@@ -413,10 +409,10 @@ export async function getAccountTransactions(
     const whereAccountFrom = accountType === 'safe' ? { fromSafeId: accountId } : { fromBankId: accountId };
     const whereAccountTo = accountType === 'safe' ? { toSafeId: accountId } : { toBankId: accountId };
 
-    // 1. حساب الرصيد الافتتاحي (كل المعاملات قبل من تاريخ)
+    // 1. حساب الرصيد الافتتاحي
     let openingBalance = 0;
     if (fromDate) {
-      const [prevReceipts, prevPayments, prevSalesReturns, prevPurchReturns, prevTransfersFrom, prevTransfersTo] = await Promise.all([
+      const [prevReceipts, prevPayments, prevSalesReturns, prevPurchReturns, prevTransfersFrom, prevTransfersTo, prevSalesInvoices, prevPurchInvoices] = await Promise.all([
         prisma.receiptVoucher.aggregate({
           where: { ...whereAccount, date: { lt: fromDate } },
           _sum: { amount: true }
@@ -441,18 +437,27 @@ export async function getAccountTransactions(
           where: { ...whereAccountTo, date: { lt: fromDate } },
           _sum: { amount: true }
         }),
+        prisma.salesInvoice.aggregate({
+          where: { ...whereAccount, invoiceDate: { lt: fromDate }, status: 'cash' },
+          _sum: { total: true }
+        }),
+        prisma.purchaseInvoice.aggregate({
+          where: { ...whereAccount, invoiceDate: { lt: fromDate }, status: 'cash' },
+          _sum: { total: true }
+        }),
       ]);
 
-      const totalDebit = (prevReceipts._sum.amount || 0) + (prevPurchReturns._sum.total || 0) + (prevTransfersTo._sum.amount || 0);
-      const totalCredit = (prevPayments._sum.amount || 0) + (prevSalesReturns._sum.total || 0) + (prevTransfersFrom._sum.amount || 0);
+      const totalDebit = (prevReceipts._sum.amount || 0) + (prevPurchReturns._sum.total || 0) + (prevTransfersTo._sum.amount || 0) + (prevSalesInvoices._sum.total || 0);
+      const totalCredit = (prevPayments._sum.amount || 0) + (prevSalesReturns._sum.total || 0) + (prevTransfersFrom._sum.amount || 0) + (prevPurchInvoices._sum.total || 0);
       openingBalance = totalDebit - totalCredit;
     }
 
     // 2. جلب المعاملات في الفترة المحددة
     const dateFilterVoucher = fromDate && toDate ? { date: { gte: fromDate, lte: toDate } } : {};
     const dateFilterReturn = fromDate && toDate ? { returnDate: { gte: fromDate, lte: toDate } } : {};
+    const dateFilterInvoice = fromDate && toDate ? { invoiceDate: { gte: fromDate, lte: toDate } } : {};
 
-    const [receipts, payments, salesReturns, purchReturns, transfersFrom, transfersTo] = await Promise.all([
+    const [receipts, payments, salesReturns, purchReturns, transfersFrom, transfersTo, salesInvoices, purchaseInvoices] = await Promise.all([
       prisma.receiptVoucher.findMany({
         where: { ...whereAccount, ...dateFilterVoucher },
         include: { customer: { select: { name: true } } },
@@ -483,22 +488,32 @@ export async function getAccountTransactions(
         include: { fromSafe: true, fromBank: true },
         orderBy: { date: 'asc' }
       }),
+      prisma.salesInvoice.findMany({
+        where: { ...whereAccount, ...dateFilterInvoice, status: 'cash' },
+        include: { customer: { select: { name: true } } },
+        orderBy: { invoiceDate: 'asc' }
+      }),
+      prisma.purchaseInvoice.findMany({
+        where: { ...whereAccount, ...dateFilterInvoice, status: 'cash' },
+        include: { supplier: { select: { name: true } } },
+        orderBy: { invoiceDate: 'asc' }
+      }),
     ]);
 
-    // 3. تحويل المعاملات    // تحويل الفواتير
-    const invoiceTransactions: TransactionType[] = invoices.map(inv => ({
-      id: `inv-${inv.id}`,
-      date: inv.invoiceDate,
-      createdAt: inv.createdAt,
-      type: inv.status === 'pending' ? 'مسودة' : 'فاتورة',
-      documentId: `INV-${inv.invoiceNumber}`,
-      description: inv.description || (inv.status === 'pending' ? `مسودة فاتورة بيع للعميل ${inv.customerName}` : `فاتورة بيع للعميل ${inv.customerName}`),
-      paymentMethod: inv.status === 'cash' ? 'نقدي' : inv.status === 'credit' ? 'آجل' : 'معلقة',
-      debit: inv.status === 'pending' ? 0 : inv.total,
-      credit: 0,
+    // 3. تحويل المعاملات
+    const mappedReceipts: TransactionType[] = receipts.map((r: any) => ({
+      id: `rec-${r.id}`,
+      date: r.date,
+      createdAt: r.createdAt,
+      type: 'سند قبض',
+      documentId: r.voucherNumber,
+      description: r.description || `قبض من العميل ${r.customer.name}`,
+      paymentMethod: accountType === 'safe' ? 'نقدي' : 'بنك',
+      debit: r.amount,
+      credit: 0
     }));
 
-    const mappedPayments: TransactionType[] = payments.map(p => ({
+    const mappedPayments: TransactionType[] = payments.map((p: any) => ({
       id: `pay-${p.id}`,
       date: p.date,
       createdAt: p.createdAt,
@@ -510,31 +525,31 @@ export async function getAccountTransactions(
       credit: p.amount
     }));
 
-    const mappedSalesReturns: TransactionType[] = salesReturns.map(r => ({
+    const mappedSalesReturns: TransactionType[] = salesReturns.map((r: any) => ({
       id: `sret-${r.id}`,
       date: r.returnDate,
       createdAt: r.createdAt,
-      type: 'مرتجع',
-      documentId: `SRET-${r.returnNumber}`,
+      type: 'مرتجع مبيعات',
+      documentId: `SR-${r.returnNumber}`,
       description: `مرتجع مبيعات من العميل ${r.customer.name}`,
       paymentMethod: 'نقدي',
       debit: 0,
       credit: r.total
     }));
 
-    const mappedPurchReturns: TransactionType[] = purchReturns.map(r => ({
+    const mappedPurchReturns: TransactionType[] = purchReturns.map((r: any) => ({
       id: `pret-${r.id}`,
       date: r.returnDate,
       createdAt: r.createdAt,
-      type: 'مرتجع',
-      documentId: `PRET-${r.returnNumber}`,
+      type: 'مرتجع مشتريات',
+      documentId: `PR-${r.returnNumber}`,
       description: `مرتجع مشتريات من المورد ${r.supplier.name}`,
       paymentMethod: 'نقدي',
       debit: r.total,
       credit: 0
     }));
 
-    const mappedTransfersFrom: TransactionType[] = transfersFrom.map(t => ({
+    const mappedTransfersFrom: TransactionType[] = transfersFrom.map((t: any) => ({
       id: `tr-out-${t.id}`,
       date: t.date,
       createdAt: t.createdAt,
@@ -546,7 +561,7 @@ export async function getAccountTransactions(
       credit: t.amount
     }));
 
-    const mappedTransfersTo: TransactionType[] = transfersTo.map(t => ({
+    const mappedTransfersTo: TransactionType[] = transfersTo.map((t: any) => ({
       id: `tr-in-${t.id}`,
       date: t.date,
       createdAt: t.createdAt,
@@ -558,6 +573,30 @@ export async function getAccountTransactions(
       credit: 0
     }));
 
+    const mappedSalesInvoices: TransactionType[] = salesInvoices.map((s: any) => ({
+      id: `si-${s.id}`,
+      date: s.invoiceDate,
+      createdAt: s.createdAt,
+      type: 'فاتورة مبيعات',
+      documentId: `INV-${s.invoiceNumber}`,
+      description: `فاتورة مبيعات كاش - ${s.customerName}`,
+      paymentMethod: 'نقدي',
+      debit: s.total,
+      credit: 0
+    }));
+
+    const mappedPurchaseInvoices: TransactionType[] = purchaseInvoices.map((p: any) => ({
+      id: `pi-${p.id}`,
+      date: p.invoiceDate,
+      createdAt: p.createdAt,
+      type: 'فاتورة مشتريات',
+      documentId: `PUR-${p.invoiceNumber}`,
+      description: `فاتورة مشتريات كاش - ${p.supplierName}`,
+      paymentMethod: 'نقدي',
+      debit: 0,
+      credit: p.total
+    }));
+
     // دمج وترتيب وحساب الرصيد التراكمي
     let allTransactions = [
       ...mappedReceipts,
@@ -565,30 +604,26 @@ export async function getAccountTransactions(
       ...mappedSalesReturns,
       ...mappedPurchReturns,
       ...mappedTransfersFrom,
-      ...mappedTransfersTo
+      ...mappedTransfersTo,
+      ...mappedSalesInvoices,
+      ...mappedPurchaseInvoices
     ].sort((a, b) => {
       const dateCompare = a.date.getTime() - b.date.getTime();
       if (dateCompare !== 0) return dateCompare;
       return a.createdAt.getTime() - b.createdAt.getTime();
     });
 
-    // فلترة حسب النوع إذا طلب
     if (filterType !== 'الكل') {
       allTransactions = allTransactions.filter(t => t.type === filterType);
     }
 
-    // حساب الرصيد التراكمي
     let currentBalance = openingBalance;
     allTransactions = allTransactions.map(t => {
       currentBalance += (t.debit - t.credit);
       return { ...t, runningBalance: currentBalance };
     });
 
-    return {
-      transactions: allTransactions,
-      openingBalance
-    };
-
+    return { transactions: allTransactions, openingBalance };
   } catch (error) {
     console.error("Error fetching account transactions:", error);
     return { transactions: [], openingBalance: 0 };

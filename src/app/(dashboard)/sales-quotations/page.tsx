@@ -19,14 +19,14 @@ import {
 import {
   DataTableToolbar, EmptyState, PaginationControls,
 } from "@/components/shared";
-import { getQuotations, deleteQuotation, markQuotationAsConverted } from "./actions";
+import { getQuotations, deleteQuotation } from "./actions";
 
 // ─── أنواع ───
 interface QuotationRow {
   id: number;
   code: string;
   customerName: string;
-  customerId: number;
+  customerId?: number | null;
   date: Date | string;
   total: number;
   status: string;
@@ -39,7 +39,6 @@ const statusMap: Record<string, { label: string; className: string }> = {
   Sent: { label: "مُرسل", className: "bg-blue-100 text-blue-700 border-blue-200" },
   Approved: { label: "مقبول", className: "bg-green-100 text-green-700 border-green-200" },
   Rejected: { label: "مرفوض", className: "bg-red-100 text-red-700 border-red-200" },
-  Converted: { label: "تم التحويل", className: "bg-purple-100 text-purple-700 border-purple-200" },
 };
 
 function StatusBadge({ status }: { status: string }) {
@@ -60,9 +59,6 @@ export default function SalesQuotationsPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [quotationToDelete, setQuotationToDelete] = useState<QuotationRow | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [convertDialogOpen, setConvertDialogOpen] = useState(false);
-  const [quotationToConvert, setQuotationToConvert] = useState<QuotationRow | null>(null);
-  const [converting, setConverting] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -96,7 +92,6 @@ export default function SalesQuotationsPage() {
         { label: "مُرسل", value: "Sent" },
         { label: "مقبول", value: "Approved" },
         { label: "مرفوض", value: "Rejected" },
-        { label: "تم التحويل", value: "Converted" },
       ],
     },
   ];
@@ -136,29 +131,6 @@ export default function SalesQuotationsPage() {
     }
   };
 
-  const openConvertDialog = (q: QuotationRow) => {
-    setQuotationToConvert(q);
-    setConvertDialogOpen(true);
-  };
-
-  const confirmConvert = async () => {
-    if (!quotationToConvert) return;
-    setConverting(true);
-    try {
-      await markQuotationAsConverted(quotationToConvert.id);
-      setQuotations((prev) =>
-        prev.map((q) => (q.id === quotationToConvert.id ? { ...q, status: "Converted" } : q))
-      );
-      setConvertDialogOpen(false);
-      toast.success("جاري التحويل إلى فاتورة...");
-      router.push(`/sales-invoices/create?fromQuotation=${quotationToConvert.id}`);
-    } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : "حدث خطأ أثناء التحويل";
-      toast.error(msg);
-    } finally {
-      setConverting(false);
-    }
-  };
 
   return (
     <>
@@ -170,7 +142,7 @@ export default function SalesQuotationsPage() {
               عروض الأسعار
             </h2>
             <p className="text-muted-foreground font-medium">
-              إدارة عروض الأسعار وتتبع حالتها وتحويلها إلى فواتير
+              إدارة عروض الأسعار وتتبع حالتها
             </p>
           </div>
           <Button asChild className="gap-2 shadow-md hover:shadow-lg transition-all">
@@ -281,27 +253,6 @@ export default function SalesQuotationsPage() {
                                 >
                                   <Trash2 className="h-4 w-4 text-destructive" />
                                 </Button>
-                                {q.status !== "Converted" ? (
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() => openConvertDialog(q)}
-                                    className="hover:bg-green-500/10 transition-all"
-                                    title="تحويل إلى فاتورة"
-                                  >
-                                    <FileOutput className="h-4 w-4 text-green-600" />
-                                  </Button>
-                                ) : (
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    disabled
-                                    className="opacity-50 cursor-not-allowed"
-                                    title="تم التحويل مسبقاً"
-                                  >
-                                    <FileOutput className="h-4 w-4 text-gray-400" />
-                                  </Button>
-                                )}
                               </div>
                             </TableCell>
                           </TableRow>
@@ -350,10 +301,16 @@ export default function SalesQuotationsPage() {
               <span className="font-bold text-foreground">
                 {quotationToDelete?.code}
               </span>{" "}
-              الخاص بالعميل{" "}
-              <span className="font-bold text-foreground">
-                {quotationToDelete?.customerName}
-              </span>
+              {quotationToDelete?.customerId ? (
+                <>
+                  الخاص بالعميل{" "}
+                  <span className="font-bold text-foreground">
+                    {quotationToDelete.customerName}
+                  </span>
+                </>
+              ) : (
+                "(عرض سعر عام)"
+              )}
               ؟
               <br />
               <span className="text-destructive font-semibold mt-2 block">
@@ -375,51 +332,6 @@ export default function SalesQuotationsPage() {
                 <>
                   <Trash2 className="h-4 w-4" />
                   حذف العرض
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* ─── حوار تأكيد التحويل ─── */}
-      <Dialog open={convertDialogOpen} onOpenChange={setConvertDialogOpen}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <div className="flex items-center gap-3 mb-2">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
-                <FileOutput className="h-6 w-6 text-green-600" />
-              </div>
-              <DialogTitle className="text-xl font-bold">
-                تحويل إلى فاتورة مبيعات
-              </DialogTitle>
-            </div>
-            <DialogDescription className="text-base leading-relaxed pt-2">
-              سيتم تحويل عرض السعر{" "}
-              <span className="font-bold text-foreground">
-                {quotationToConvert?.code}
-              </span>{" "}
-              إلى فاتورة مبيعات جديدة مع نسخ جميع الأصناف تلقائياً.
-              <br />
-              <span className="text-amber-600 font-semibold mt-2 block">
-                لن يكون بإمكانك تحويل هذا العرض مرة أخرى.
-              </span>
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="gap-2 sm:gap-0 mt-4">
-            <Button variant="outline" onClick={() => setConvertDialogOpen(false)} disabled={converting} className="font-medium">
-              إلغاء
-            </Button>
-            <Button onClick={confirmConvert} disabled={converting} className="gap-2 font-medium bg-green-600 hover:bg-green-700">
-              {converting ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  جاري التحويل...
-                </>
-              ) : (
-                <>
-                  <FileOutput className="h-4 w-4" />
-                  تحويل إلى فاتورة
                 </>
               )}
             </Button>

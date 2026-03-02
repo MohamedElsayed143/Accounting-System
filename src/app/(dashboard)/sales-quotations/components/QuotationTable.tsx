@@ -61,7 +61,7 @@ export function QuotationTable({
           {items.length === 0 ? (
             <TableRow>
               <TableCell colSpan={readOnly ? 5 : 6} className="text-center py-12 text-muted-foreground">
-                {disabled ? "يرجى اختيار العميل أولاً لإضافة الأصناف" : "لا توجد أصناف. ابحث عن منتج لإضافته."}
+                {"لا توجد أصناف. ابحث عن منتج لإضافته."}
               </TableCell>
             </TableRow>
           ) : (

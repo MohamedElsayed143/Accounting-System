@@ -414,8 +414,8 @@ enum QuotationStatus {
 model Quotation {
   id         Int              @id @default(autoincrement())
   code       String           @unique @db.VarChar(20)
-  customerId Int
-  customer   Customer         @relation(fields: [customerId], references: [id])
+  customerId Int?
+  customer   Customer?        @relation(fields: [customerId], references: [id])
   date       DateTime
   subtotal   Float
   discount   Float            @default(0)

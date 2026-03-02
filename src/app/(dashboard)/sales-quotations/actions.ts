@@ -32,9 +32,9 @@ export async function getQuotations() {
     return quotations.map((q) => ({
       id: q.id,
       code: q.code,
-      customerName: q.customer.name,
-      customerId: q.customer.id,
-      customerCode: q.customer.code,
+      customerName: q.customer?.name || "عميل عام",
+      customerId: q.customer?.id || null,
+      customerCode: q.customer?.code || null,
       date: q.date,
       subtotal: q.subtotal,
       discount: q.discount,
@@ -69,7 +69,7 @@ export async function getQuotationById(id: number) {
 
 // ─── إنشاء عرض سعر جديد ───
 export async function createQuotation(data: {
-  customerId: number;
+  customerId?: number | null;
   date: string;
   subtotal: number;
   discount: number;
@@ -84,7 +84,6 @@ export async function createQuotation(data: {
     total: number;
   }[];
 }) {
-  if (!data.customerId) throw new Error("يجب اختيار العميل أولاً");
   if (data.items.length === 0) throw new Error("لا يمكن حفظ عرض سعر فارغ");
 
   // التحقق من أن جميع المنتجات نشطة
@@ -101,7 +100,7 @@ export async function createQuotation(data: {
   const quotation = await prisma.quotation.create({
     data: {
       code,
-      customerId: data.customerId,
+      customerId: data.customerId || null,
       date: new Date(data.date),
       subtotal: data.subtotal,
       discount: data.discount,
@@ -128,7 +127,7 @@ export async function createQuotation(data: {
 export async function updateQuotation(
   id: number,
   data: {
-    customerId: number;
+    customerId?: number | null;
     date: string;
     subtotal: number;
     discount: number;
@@ -144,7 +143,6 @@ export async function updateQuotation(
     }[];
   }
 ) {
-  if (!data.customerId) throw new Error("يجب اختيار العميل أولاً");
   if (data.items.length === 0) throw new Error("لا يمكن حفظ عرض سعر فارغ");
 
   // التحقق من أن جميع المنتجات نشطة
@@ -159,7 +157,7 @@ export async function updateQuotation(
   const quotation = await prisma.quotation.update({
     where: { id },
     data: {
-      customerId: data.customerId,
+      customerId: data.customerId || null,
       date: new Date(data.date),
       subtotal: data.subtotal,
       discount: data.discount,
@@ -192,53 +190,11 @@ export async function deleteQuotation(id: number) {
 // ─── تحديث حالة عرض السعر ───
 export async function updateQuotationStatus(
   id: number,
-  status: "Draft" | "Sent" | "Approved" | "Rejected" | "Converted"
+  status: "Draft" | "Sent" | "Approved" | "Rejected"
 ) {
   await prisma.quotation.update({
     where: { id },
     data: { status },
   });
-  revalidatePath("/sales-quotations");
-}
-
-// ─── جلب بيانات العرض للتحويل إلى فاتورة ───
-export async function getQuotationForConversion(id: number) {
-  const quotation = await prisma.quotation.findUnique({
-    where: { id },
-    include: {
-      items: {
-        include: {
-          product: {
-            select: { id: true, name: true, code: true, sellPrice: true, unit: true, currentStock: true },
-          },
-        },
-      },
-      customer: {
-        select: { id: true, name: true, code: true },
-      },
-    },
-  });
-
-  if (!quotation) throw new Error("عرض السعر غير موجود");
-  if (quotation.status === "Converted") throw new Error("تم تحويل هذا العرض إلى فاتورة مسبقاً");
-
-  return quotation;
-}
-
-// ─── تحويل عرض سعر إلى فاتورة (تحديث الحالة فقط) ───
-export async function markQuotationAsConverted(id: number) {
-  const quotation = await prisma.quotation.findUnique({
-    where: { id },
-    select: { status: true },
-  });
-
-  if (!quotation) throw new Error("عرض السعر غير موجود");
-  if (quotation.status === "Converted") throw new Error("تم تحويل هذا العرض مسبقاً");
-
-  await prisma.quotation.update({
-    where: { id },
-    data: { status: "Converted" },
-  });
-
   revalidatePath("/sales-quotations");
 }

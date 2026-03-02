@@ -147,7 +147,7 @@ const otherNavItems = [
     href: "/reports",
     icon: BarChart3,
     subItems: [
-      { title: "كشف حساب العملاء/الموردين", href: "/reports" },
+      { title: "تقارير العملاء/الموردين", href: "/reports" },
       { title: "كشف حساب الخزنة", href: "/reports/treasury" },
       { title: "كشف حساب البنوك", href: "/reports/banks" },
     ],
