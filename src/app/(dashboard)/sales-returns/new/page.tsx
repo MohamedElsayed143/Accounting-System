@@ -43,7 +43,7 @@ import {
   type SalesReturnInput,
   getNextSalesReturnNumber,
 } from "../actions";
-import { getCustomers } from "../../reports/actions";
+import { getCustomers, getSafes } from "../../reports/actions";
 import { getSalesInvoiceWithReturns } from "../../sales-invoices/actions";
 import { getBanks } from "../../treasury/actions";
 import { getProducts, ProductData } from "../../inventory/products/actions";
@@ -54,6 +54,7 @@ export default function NewSalesReturnPage() {
   const [customers, setCustomers] = useState<any[]>([]);
   const [invoices, setInvoices] = useState<any[]>([]);
   const [banks, setBanks] = useState<any[]>([]);
+  const [safes, setSafes] = useState<any[]>([]);
   const [products, setProducts] = useState<ProductData[]>([]);
   const [items, setItems] = useState<any[]>([]);
   const [invoiceTotal, setInvoiceTotal] = useState(0);
@@ -71,7 +72,7 @@ export default function NewSalesReturnPage() {
     reason: "",
     status: "pending",
     refundMethod: "cash",
-    safeId: "1",
+    safeId: "",
     bankId: "",
     description: "",
   });
@@ -80,13 +81,21 @@ export default function NewSalesReturnPage() {
     Promise.all([
       getCustomers(),
       getBanks(true),
+      getSafes(),
       getNextSalesReturnNumber(),
       getProducts(),
-    ]).then(([customersData, banksData, nextNum, productsData]) => {
+    ]).then(([customersData, banksData, safesData, nextNum, productsData]) => {
       setCustomers(customersData);
       setBanks(banksData);
+      setSafes(safesData);
       setNextReturnNumber(nextNum);
       setProducts(productsData);
+
+      // تعيين الخزنة الرئيسية افتراضياً إن وجدت
+      const primarySafe = safesData.find((s: any) => s.isPrimary) || safesData[0];
+      if (primarySafe) {
+        setFormData(prev => ({ ...prev, safeId: primarySafe.id.toString() }));
+      }
     });
   }, []);
 
@@ -580,7 +589,7 @@ export default function NewSalesReturnPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="cash">💰 نقدي</SelectItem>
+                      <SelectItem value="cash">💰 نقدي (خزنة)</SelectItem>
                       <SelectItem value="bank">🏛️ بنك</SelectItem>
                       <SelectItem value="credit">📄 أجل</SelectItem>
                     </SelectContent>
@@ -589,12 +598,23 @@ export default function NewSalesReturnPage() {
 
                 {formData.refundMethod === "cash" && (
                   <div className="space-y-2">
-                    <Label>وسيلة الدفع</Label>
-                    <Input
-                      value="الخزنة الرئيسية"
-                      disabled
-                      className="bg-gray-100"
-                    />
+                    <Label>اختر الخزنة</Label>
+                    <Select value={formData.safeId} onValueChange={(v) => setFormData({...formData, safeId: v})}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="اختر الخزنة" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {safes.length > 0 ? (
+                          safes.map(safe => (
+                            <SelectItem key={safe.id} value={safe.id.toString()}>
+                              {safe.name} {safe.isPrimary ? "(الرئيسية)" : ""}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <div className="p-2 text-center text-sm text-muted-foreground">لا يوجد خزائن نشطة</div>
+                        )}
+                      </SelectContent>
+                    </Select>
                   </div>
                 )}
 
@@ -611,11 +631,15 @@ export default function NewSalesReturnPage() {
                         <SelectValue placeholder="اختر البنك" />
                       </SelectTrigger>
                       <SelectContent>
-                        {banks.map((bank) => (
-                          <SelectItem key={bank.id} value={bank.id.toString()}>
-                            {bank.name}
-                          </SelectItem>
-                        ))}
+                        {banks.length > 0 ? (
+                          banks.map((bank) => (
+                            <SelectItem key={bank.id} value={bank.id.toString()}>
+                              {bank.name}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <div className="p-2 text-center text-sm text-muted-foreground">لا يوجد بنوك نشطة</div>
+                        )}
                       </SelectContent>
                     </Select>
                   </div>

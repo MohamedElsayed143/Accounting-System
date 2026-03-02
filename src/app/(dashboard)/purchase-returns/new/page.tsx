@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { createPurchaseReturn, type PurchaseReturnInput } from "../actions";
-import { getSuppliers } from "../../reports/actions";
+import { getSuppliers, getSafes } from "../../reports/actions";
 import { getPurchaseInvoiceWithReturns } from "../../purchase-invoices/actions";
 import { getBanks } from "../../treasury/actions";
 import { getProducts, ProductData } from "../../inventory/products/actions";
@@ -25,6 +25,7 @@ export default function NewPurchaseReturnPage() {
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [invoices, setInvoices] = useState<any[]>([]);
   const [banks, setBanks] = useState<any[]>([]);
+  const [safes, setSafes] = useState<any[]>([]);
   const [products, setProducts] = useState<ProductData[]>([]);
   const [items, setItems] = useState<any[]>([]);
   const [invoiceTotal, setInvoiceTotal] = useState(0);
@@ -40,7 +41,7 @@ export default function NewPurchaseReturnPage() {
     reason: "",
     status: "pending",
     refundMethod: "cash",
-    safeId: "1",
+    safeId: "",
     bankId: "",
     description: "",
   });
@@ -49,11 +50,19 @@ export default function NewPurchaseReturnPage() {
     Promise.all([
       getSuppliers(),
       getBanks(true),
+      getSafes(),
       getProducts(),
-    ]).then(([suppliersData, banksData, productsData]) => {
+    ]).then(([suppliersData, banksData, safesData, productsData]) => {
       setSuppliers(suppliersData);
       setBanks(banksData);
+      setSafes(safesData);
       setProducts(productsData);
+
+      // تعيين الخزنة الرئيسية افتراضياً إن وجدت
+      const primarySafe = safesData.find((s: any) => s.isPrimary) || safesData[0];
+      if (primarySafe) {
+        setFormData(prev => ({ ...prev, safeId: primarySafe.id.toString() }));
+      }
     });
   }, []);
 
@@ -392,7 +401,7 @@ export default function NewPurchaseReturnPage() {
                     onChange={(e) => {
                       const discount = parseFloat(e.target.value) || 0;
                       const total = formData.subtotal + formData.totalTax - discount;
-                      setFormData(prev => ({ ...prev, discount: e.target.value, total }));
+                      setFormData(prev => ({ ...prev, discount, total }));
                     }}
                     className="bg-white dark:bg-slate-800"
                   />
@@ -423,12 +432,12 @@ export default function NewPurchaseReturnPage() {
 
                 <div className="space-y-2">
                   <Label>طريقة الرد</Label>
-                  <Select value={formData.refundMethod} onValueChange={(v) => setFormData({...formData, refundMethod: v, bankId: ''})}>
+                  <Select value={formData.refundMethod} onValueChange={(v) => setFormData({...formData, refundMethod: v})}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="cash">💰 نقدي (الخزنة الرئيسية)</SelectItem>
+                      <SelectItem value="cash">💰 نقدي (خزنة)</SelectItem>
                       <SelectItem value="bank">🏛️ بنك</SelectItem>
                       <SelectItem value="credit">📄 أجل (بدون تأثير على الرصيد)</SelectItem>
                     </SelectContent>
@@ -437,8 +446,23 @@ export default function NewPurchaseReturnPage() {
 
                 {formData.refundMethod === 'cash' && (
                   <div className="space-y-2">
-                    <Label>وسيلة الدفع</Label>
-                    <Input value="الخزنة الرئيسية" disabled className="bg-gray-100" />
+                    <Label>اختر الخزنة</Label>
+                    <Select value={formData.safeId} onValueChange={(v) => setFormData({...formData, safeId: v})}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="اختر الخزنة" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {safes.length > 0 ? (
+                          safes.map(safe => (
+                            <SelectItem key={safe.id} value={safe.id.toString()}>
+                              {safe.name} {safe.isPrimary ? "(الرئيسية)" : ""}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <div className="p-2 text-center text-sm text-muted-foreground">لا يوجد خزائن نشطة</div>
+                        )}
+                      </SelectContent>
+                    </Select>
                   </div>
                 )}
 
@@ -450,9 +474,13 @@ export default function NewPurchaseReturnPage() {
                         <SelectValue placeholder="اختر البنك" />
                       </SelectTrigger>
                       <SelectContent>
-                        {banks.map(bank => (
-                          <SelectItem key={bank.id} value={bank.id.toString()}>{bank.name}</SelectItem>
-                        ))}
+                        {banks.length > 0 ? (
+                          banks.map(bank => (
+                            <SelectItem key={bank.id} value={bank.id.toString()}>{bank.name}</SelectItem>
+                          ))
+                        ) : (
+                          <div className="p-2 text-center text-sm text-muted-foreground">لا يوجد بنوك نشطة</div>
+                        )}
                       </SelectContent>
                     </Select>
                   </div>

@@ -18,6 +18,7 @@ export interface AccountSummary {
   name: string;
   type: "safe" | "bank";
   balance: number;
+  isPrimary: boolean;
   accountNumber?: string | null;
   branch?: string | null;
 }
@@ -41,16 +42,29 @@ export interface InitialData {
 // دالة مساعدة للتأكد من وجود الخزنة الرئيسية
 async function ensureMainSafe() {
   const safe = await prisma.treasurySafe.findFirst({
-    where: { name: "الخزنة الرئيسية" }
+    where: { isPrimary: true }
   });
   
   if (!safe) {
-    // لو مش موجودة، أنشئها
+    // If not found by flag, try by name for backward compatibility
+    const oldMain = await prisma.treasurySafe.findFirst({
+      where: { name: "الخزنة الرئيسية" }
+    });
+
+    if (oldMain) {
+      return await prisma.treasurySafe.update({
+        where: { id: oldMain.id },
+        data: { isPrimary: true }
+      });
+    }
+
+    // If still not found, create it
     return await prisma.treasurySafe.create({
       data: {
         name: "الخزنة الرئيسية",
         balance: 0,
         description: "الخزنة الثابتة للنظام",
+        isPrimary: true,
       }
     });
   }
@@ -61,7 +75,10 @@ async function ensureMainSafe() {
 // 1. جلب بيانات الخزنة الرئيسية (البنوك النشطة فقط)
 export async function getTreasuryData() {
   const [safes, banks, recentReceipts, recentPayments] = await Promise.all([
-    prisma.treasurySafe.findMany({ orderBy: { createdAt: 'desc' } }),
+    prisma.treasurySafe.findMany({ 
+      where: { isActive: true },
+      orderBy: { createdAt: 'desc' } 
+    }),
     prisma.treasuryBank.findMany({ 
       where: { isActive: true }, // البنوك النشطة فقط
       orderBy: { createdAt: 'desc' } 
@@ -100,6 +117,7 @@ export async function getTreasuryData() {
       name: s.name, 
       type: "safe" as const, 
       balance: s.balance,
+      isPrimary: s.isPrimary,
       accountNumber: null,
       branch: null
     })),
@@ -108,6 +126,7 @@ export async function getTreasuryData() {
       name: b.name, 
       type: "bank" as const, 
       balance: b.balance,
+      isPrimary: false,
       accountNumber: b.accountNumber,
       branch: b.branch
     })),
@@ -224,7 +243,7 @@ export async function archiveBank(bankId: number) {
   }
 }
 
-// 4. جلب البيانات الأولية لسند الصرف (البنوك النشطة فقط)
+// 4. جلب البيانات الأولية لسند الصرف (البنوك والخزائن النشطة فقط)
 export async function getInitialData(): Promise<InitialData> {
   try {
     // تأكد من وجود الخزنة الرئيسية
@@ -236,6 +255,7 @@ export async function getInitialData(): Promise<InitialData> {
         select: { id: true, name: true, code: true }
       }),
       prisma.treasurySafe.findMany({ 
+        where: { isActive: true },
         orderBy: { name: "asc" },
         select: { id: true, name: true, balance: true }
       }),
@@ -573,50 +593,57 @@ export async function createReceiptVoucher(data: {
   }
 }
 
-// 10. جلب البنوك المؤرشفة
-export async function getArchivedBanks() {
+// 10. جلب الحسابات المؤرشفة (بنوك وخزائن)
+export async function getArchivedAccounts() {
   try {
-    const banks = await prisma.treasuryBank.findMany({
-      where: { isActive: false },
-      orderBy: { updatedAt: 'desc' },
-      include: {
-        receiptVouchers: {
-          take: 5,
-          orderBy: { date: 'desc' }
-        },
-        paymentVouchers: {
-          take: 5,
-          orderBy: { date: 'desc' }
-        }
-      }
-    });
+    const [banks, safes] = await Promise.all([
+      prisma.treasuryBank.findMany({
+        where: { isActive: false },
+        orderBy: { updatedAt: 'desc' },
+      }),
+      prisma.treasurySafe.findMany({
+        where: { isActive: false },
+        orderBy: { updatedAt: 'desc' },
+      })
+    ]);
 
-    return { success: true, banks };
+    return { 
+      success: true, 
+      banks: banks.map(b => ({ ...b, type: 'bank' as const })), 
+      safes: safes.map(s => ({ ...s, type: 'safe' as const })) 
+    };
   } catch (error) {
-    console.error("Error fetching archived banks:", error);
-    return { success: false, error: "فشل في جلب البنوك المؤرشفة" };
+    console.error("Error fetching archived accounts:", error);
+    return { success: false, error: "فشل في جلب الحسابات المؤرشفة" };
   }
 }
 
-// 11. إرجاع بنك من الأرشيف
-export async function restoreBank(bankId: number) {
+// 11. إرجاع حساب من الأرشيف
+export async function restoreAccount(id: number, type: 'safe' | 'bank') {
   try {
-    await prisma.treasuryBank.update({
-      where: { id: bankId },
-      data: { isActive: true }
-    });
+    if (type === 'bank') {
+      await prisma.treasuryBank.update({
+        where: { id },
+        data: { isActive: true }
+      });
+    } else {
+      await prisma.treasurySafe.update({
+        where: { id },
+        data: { isActive: true }
+      });
+    }
 
     revalidatePath("/treasury");
     revalidatePath("/treasury/archived");
     
-    return { success: true, message: "تم إرجاع البنك بنجاح" };
+    return { success: true, message: "تم إرجاع الحساب بنجاح" };
   } catch (error) {
-    console.error("Error restoring bank:", error);
-    return { success: false, error: "فشل في إرجاع البنك" };
+    console.error("Error restoring account:", error);
+    return { success: false, error: "فشل في إرجاع الحساب" };
   }
 }
 
-// 9. جلب بيانات العملاء والحسابات لسند القبض (البنوك النشطة فقط)
+// 9. جلب بيانات العملاء والحسابات لسند القبض (البنوك والخزائن النشطة فقط)
 export async function getReceiptInitialData() {
   try {
     // تأكد من وجود الخزنة الرئيسية
@@ -628,6 +655,7 @@ export async function getReceiptInitialData() {
         select: { id: true, name: true, code: true }
       }),
       prisma.treasurySafe.findMany({ 
+        where: { isActive: true },
         orderBy: { name: "asc" },
         select: { id: true, name: true, balance: true }
       }),
@@ -644,20 +672,65 @@ export async function getReceiptInitialData() {
     return { customers: [], safes: [], banks: [] };
   }
 }
-// دالة جديدة لجلب البنوك النشطة (اختيارياً مع فلترة حسب isActive)
+
+// 12. إنشاء خزنة جديدة
+export async function createSafe(data: { name: string; initialBalance: number; description?: string }) {
+  try {
+    await prisma.treasurySafe.create({
+      data: {
+        name: data.name,
+        balance: data.initialBalance || 0,
+        description: data.description || "",
+        isPrimary: false,
+        isActive: true,
+      },
+    });
+    revalidatePath("/treasury");
+    return { success: true };
+  } catch (error) {
+    console.error("Error creating safe:", error);
+    return { success: false, error: "فشل في إضافة الخزنة" };
+  }
+}
+
+// 13. أرشفة خزنة
+export async function archiveSafe(safeId: number) {
+  try {
+    const safe = await prisma.treasurySafe.findUnique({
+      where: { id: safeId }
+    });
+
+    if (!safe) return { success: false, error: "الخزنة غير موجودة" };
+    if (safe.isPrimary) return { success: false, error: "لا يمكن أرشفة الخزنة الرئيسية" };
+
+    // تحقق من وجود معاملات
+    const relatedVouchers = await prisma.paymentVoucher.count({ where: { safeId } });
+    const relatedReceipts = await prisma.receiptVoucher.count({ where: { safeId } });
+    
+    const hasTransactions = relatedVouchers > 0 || relatedReceipts > 0;
+
+    if (!hasTransactions) {
+      await prisma.treasurySafe.delete({ where: { id: safeId } });
+      revalidatePath("/treasury");
+      return { success: true, message: "تم حذف الخزنة نهائياً", deleted: true };
+    } else {
+      await prisma.treasurySafe.update({
+        where: { id: safeId },
+        data: { isActive: false }
+      });
+      revalidatePath("/treasury");
+      return { success: true, message: "تم أرشفة الخزنة", archived: true };
+    }
+  } catch (error) {
+    console.error("Error archiving safe:", error);
+    return { success: false, error: "فشل في أرشفة الخزنة" };
+  }
+}
 export async function getBanks(activeOnly: boolean = true) {
   try {
     const banks = await prisma.treasuryBank.findMany({
       where: activeOnly ? { isActive: true } : {},
       orderBy: { name: 'asc' },
-      select: {
-        id: true,
-        name: true,
-        accountNumber: true,
-        branch: true,
-        balance: true,
-        isActive: true,
-      },
     });
     return banks;
   } catch (error) {
@@ -665,6 +738,3 @@ export async function getBanks(activeOnly: boolean = true) {
     return [];
   }
 }
-
-// تأكد من تصديرها
-export { getBanks };

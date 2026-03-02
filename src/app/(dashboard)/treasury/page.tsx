@@ -22,6 +22,8 @@ import {
   type TreasuryStats,
 } from "./actions";
 import AddBankDialog from "./components/AddBankDialog";
+import AddSafeDialog from "./components/AddSafeDialog";
+import { archiveSafe } from "./actions";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -64,7 +66,9 @@ export default function TreasuryPage() {
   const [bankToArchive, setBankToArchive] = useState<AccountSummary | null>(
     null,
   );
+  const [safeToArchive, setSafeToArchive] = useState<AccountSummary | null>(null);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [showSafeConfirmDialog, setShowSafeConfirmDialog] = useState(false);
   const [archiveInfo, setArchiveInfo] = useState<{
     hasTransactions: boolean;
     transactionsCount: number;
@@ -129,6 +133,34 @@ export default function TreasuryPage() {
     }
   };
 
+  const handleArchiveSafeClick = (safe: AccountSummary) => {
+    setSafeToArchive(safe);
+    setShowSafeConfirmDialog(true);
+  };
+
+  const handleArchiveSafe = async () => {
+    if (!safeToArchive) return;
+
+    setIsArchiving(true);
+    try {
+      const result = await archiveSafe(safeToArchive.id);
+      if (result.success) {
+        toast.success(result.message);
+        setShowSafeConfirmDialog(false);
+        setSafeToArchive(null);
+        loadData();
+      } else {
+        toast.error(result.error);
+      }
+    } catch (error) {
+      toast.error("حدث خطأ غير متوقع");
+    } finally {
+      setIsArchiving(false);
+    }
+  };
+
+  const [showAddSafe, setShowAddSafe] = useState(false);
+
   if (!data)
     return <div className="p-10 text-center">جاري تحميل البيانات...</div>;
 
@@ -157,7 +189,7 @@ export default function TreasuryPage() {
             color="border-r-violet-500"
           />
           <StatCard
-            title="عدد الحسابات"
+            title="إجمالي الحسابات"
             amount={data.stats.totalAccounts}
             unit="حساب"
             icon={<Plus className="text-orange-600" />}
@@ -173,6 +205,14 @@ export default function TreasuryPage() {
             onClick={() => setShowAddBank(true)}
           >
             <Plus className="h-4 w-4" /> إضافة بنك جديد
+          </Button>
+
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={() => setShowAddSafe(true)}
+          >
+            <Plus className="h-4 w-4" /> إضافة خزنة جديدة
           </Button>
 
           {/* زر البنوك المؤرشفة */}
@@ -223,9 +263,16 @@ export default function TreasuryPage() {
                             <Landmark className="text-violet-600" />
                           )}
                         </div>
-                        <span className="text-xs font-bold px-2 py-1 bg-muted rounded-full">
-                          {acc.type === "safe" ? "خزنة" : "بنك"}
-                        </span>
+                        <div className="flex gap-2 items-center">
+                          {acc.isPrimary && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 bg-blue-600 text-white rounded-full">
+                              رئيسية
+                            </span>
+                          )}
+                          <span className="text-xs font-bold px-2 py-1 bg-muted rounded-full">
+                            {acc.type === "safe" ? "خزنة" : "بنك"}
+                          </span>
+                        </div>
                       </div>
                       <h3 className="font-bold text-lg mb-1">{acc.name}</h3>
                       <p className="text-2xl font-black text-slate-800">
@@ -255,6 +302,22 @@ export default function TreasuryPage() {
                       e.preventDefault();
                       e.stopPropagation();
                       handleArchiveClick(acc);
+                    }}
+                  >
+                    <Archive className="h-4 w-4 text-white cursor-pointer" />
+                  </Button>
+                )}
+
+                {/* زر أرشفة الخزنة (غير الرئيسية فقط) */}
+                {acc.type === "safe" && !acc.isPrimary && (
+                  <Button
+                    variant="secondary"
+                    size="icon"
+                    className="absolute -top-2 -left-2 h-8 w-8 rounded-full shadow-lg cursor-pointer bg-orange-500 hover:bg-orange-600"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleArchiveSafeClick(acc);
                     }}
                   >
                     <Archive className="h-4 w-4 text-white cursor-pointer" />
@@ -327,6 +390,12 @@ export default function TreasuryPage() {
         onSuccess={loadData}
       />
 
+      <AddSafeDialog
+        open={showAddSafe}
+        onOpenChange={setShowAddSafe}
+        onSuccess={loadData}
+      />
+
       {/* Alert Dialog لتأكيد أرشفة البنك */}
       <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
         <AlertDialogContent>
@@ -382,6 +451,52 @@ export default function TreasuryPage() {
               className="bg-orange-600 hover:bg-orange-700 cursor-pointer"
             >
               {isArchiving ? "جاري الأرشفة..." : "نعم، أرشفة البنك"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Alert Dialog لتأكيد أرشفة الخزنة */}
+      <AlertDialog open={showSafeConfirmDialog} onOpenChange={setShowSafeConfirmDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-orange-600">
+              <Archive className="h-5 w-5" />
+              تأكيد أرشفة الخزنة
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-4">
+                <p className="text-muted-foreground">
+                  هل أنت متأكد من أرشفة خزنة "{safeToArchive?.name}"؟
+                </p>
+
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                  <p className="text-yellow-800 font-bold mb-2">ℹ️ معلومات مهمة</p>
+                  <ul className="text-yellow-700 text-sm list-disc list-inside space-y-1">
+                    <li>الخزنة ستختفي من قائمة الحسابات النشطة</li>
+                    <li>المعاملات المرتبطة بها ستبقى محفوظة في النظام</li>
+                    <li>يمكنك استعادتها من الحسابات المؤرشفة</li>
+                  </ul>
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              className="cursor-pointer"
+              onClick={() => {
+                setShowSafeConfirmDialog(false);
+                setSafeToArchive(null);
+              }}
+            >
+              إلغاء
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleArchiveSafe}
+              disabled={isArchiving}
+              className="bg-orange-600 hover:bg-orange-700 cursor-pointer"
+            >
+              {isArchiving ? "جاري الأرشفة..." : "نعم، أرشفة الخزنة"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

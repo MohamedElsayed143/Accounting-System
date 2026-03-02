@@ -27,7 +27,7 @@ export type TransactionType = {
   id: string;
   date: Date;
   createdAt: Date;
-  type: "فاتورة" | "سند قبض" | "سند صرف" | "مرتجع";
+  type: string;
   documentId: string;
   description: string | null;
   paymentMethod: string;
@@ -353,5 +353,244 @@ export async function getSupplierTransactions(
   } catch (error) {
     console.error("Error fetching supplier transactions:", error);
     return [];
+  }
+}
+
+
+
+// 5. جلب الخزائن
+export async function getSafes() {
+  try {
+    return await prisma.treasurySafe.findMany({
+      where: { isActive: true },
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true, balance: true }
+    });
+  } catch (error) {
+    console.error("Error fetching safes:", error);
+    return [];
+  }
+}
+
+// 6. جلب البنوك
+export async function getBanks() {
+  try {
+    return await prisma.treasuryBank.findMany({
+      where: { isActive: true },
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true, balance: true, accountNumber: true }
+    });
+  } catch (error) {
+    console.error("Error fetching banks:", error);
+    return [];
+  }
+}
+
+// 7. جلب بيانات الحساب (خزنة أو بنك)
+export async function getAccountById(id: number, type: 'safe' | 'bank') {
+  try {
+    if (type === 'safe') {
+      return await prisma.treasurySafe.findUnique({ where: { id } });
+    } else {
+      return await prisma.treasuryBank.findUnique({ where: { id } });
+    }
+  } catch (error) {
+    console.error("Error fetching account:", error);
+    return null;
+  }
+}
+
+// 8. جلب معاملات الحساب (خزنة أو بنك) مع الرصيد الافتتاحي
+export async function getAccountTransactions(
+  accountId: number,
+  accountType: 'safe' | 'bank',
+  fromDate?: Date,
+  toDate?: Date,
+  filterType: string = 'الكل'
+) {
+  try {
+    const whereAccount = accountType === 'safe' ? { safeId: accountId } : { bankId: accountId };
+    const whereAccountFrom = accountType === 'safe' ? { fromSafeId: accountId } : { fromBankId: accountId };
+    const whereAccountTo = accountType === 'safe' ? { toSafeId: accountId } : { toBankId: accountId };
+
+    // 1. حساب الرصيد الافتتاحي (كل المعاملات قبل من تاريخ)
+    let openingBalance = 0;
+    if (fromDate) {
+      const [prevReceipts, prevPayments, prevSalesReturns, prevPurchReturns, prevTransfersFrom, prevTransfersTo] = await Promise.all([
+        prisma.receiptVoucher.aggregate({
+          where: { ...whereAccount, date: { lt: fromDate } },
+          _sum: { amount: true }
+        }),
+        prisma.paymentVoucher.aggregate({
+          where: { ...whereAccount, date: { lt: fromDate } },
+          _sum: { amount: true }
+        }),
+        prisma.salesReturn.aggregate({
+          where: { ...whereAccount, returnDate: { lt: fromDate } },
+          _sum: { total: true }
+        }),
+        prisma.purchaseReturn.aggregate({
+          where: { ...whereAccount, returnDate: { lt: fromDate } },
+          _sum: { total: true }
+        }),
+        prisma.treasuryTransfer.aggregate({
+          where: { ...whereAccountFrom, date: { lt: fromDate } },
+          _sum: { amount: true }
+        }),
+        prisma.treasuryTransfer.aggregate({
+          where: { ...whereAccountTo, date: { lt: fromDate } },
+          _sum: { amount: true }
+        }),
+      ]);
+
+      const totalDebit = (prevReceipts._sum.amount || 0) + (prevPurchReturns._sum.total || 0) + (prevTransfersTo._sum.amount || 0);
+      const totalCredit = (prevPayments._sum.amount || 0) + (prevSalesReturns._sum.total || 0) + (prevTransfersFrom._sum.amount || 0);
+      openingBalance = totalDebit - totalCredit;
+    }
+
+    // 2. جلب المعاملات في الفترة المحددة
+    const dateFilterVoucher = fromDate && toDate ? { date: { gte: fromDate, lte: toDate } } : {};
+    const dateFilterReturn = fromDate && toDate ? { returnDate: { gte: fromDate, lte: toDate } } : {};
+
+    const [receipts, payments, salesReturns, purchReturns, transfersFrom, transfersTo] = await Promise.all([
+      prisma.receiptVoucher.findMany({
+        where: { ...whereAccount, ...dateFilterVoucher },
+        include: { customer: { select: { name: true } } },
+        orderBy: { date: 'asc' }
+      }),
+      prisma.paymentVoucher.findMany({
+        where: { ...whereAccount, ...dateFilterVoucher },
+        include: { supplier: { select: { name: true } } },
+        orderBy: { date: 'asc' }
+      }),
+      prisma.salesReturn.findMany({
+        where: { ...whereAccount, ...dateFilterReturn },
+        include: { customer: { select: { name: true } } },
+        orderBy: { returnDate: 'asc' }
+      }),
+      prisma.purchaseReturn.findMany({
+        where: { ...whereAccount, ...dateFilterReturn },
+        include: { supplier: { select: { name: true } } },
+        orderBy: { returnDate: 'asc' }
+      }),
+      prisma.treasuryTransfer.findMany({
+        where: { ...whereAccountFrom, ...dateFilterVoucher },
+        include: { toSafe: true, toBank: true },
+        orderBy: { date: 'asc' }
+      }),
+      prisma.treasuryTransfer.findMany({
+        where: { ...whereAccountTo, ...dateFilterVoucher },
+        include: { fromSafe: true, fromBank: true },
+        orderBy: { date: 'asc' }
+      }),
+    ]);
+
+    // 3. تحويل المعاملات إلى تنسيق موحد
+    const mappedReceipts: TransactionType[] = receipts.map(r => ({
+      id: `rec-${r.id}`,
+      date: r.date,
+      createdAt: r.createdAt,
+      type: 'سند قبض',
+      documentId: r.voucherNumber,
+      description: r.description || `قبض من العميل ${r.customer.name}`,
+      paymentMethod: accountType === 'safe' ? 'نقدي' : 'بنك',
+      debit: r.amount,
+      credit: 0
+    }));
+
+    const mappedPayments: TransactionType[] = payments.map(p => ({
+      id: `pay-${p.id}`,
+      date: p.date,
+      createdAt: p.createdAt,
+      type: 'سند صرف',
+      documentId: p.voucherNumber,
+      description: p.description || `صرف للمورد ${p.supplier.name}`,
+      paymentMethod: accountType === 'safe' ? 'نقدي' : 'بنك',
+      debit: 0,
+      credit: p.amount
+    }));
+
+    const mappedSalesReturns: TransactionType[] = salesReturns.map(r => ({
+      id: `sret-${r.id}`,
+      date: r.returnDate,
+      createdAt: r.createdAt,
+      type: 'مرتجع',
+      documentId: `SRET-${r.returnNumber}`,
+      description: `مرتجع مبيعات من العميل ${r.customer.name}`,
+      paymentMethod: 'نقدي',
+      debit: 0,
+      credit: r.total
+    }));
+
+    const mappedPurchReturns: TransactionType[] = purchReturns.map(r => ({
+      id: `pret-${r.id}`,
+      date: r.returnDate,
+      createdAt: r.createdAt,
+      type: 'مرتجع',
+      documentId: `PRET-${r.returnNumber}`,
+      description: `مرتجع مشتريات من المورد ${r.supplier.name}`,
+      paymentMethod: 'نقدي',
+      debit: r.total,
+      credit: 0
+    }));
+
+    const mappedTransfersFrom: TransactionType[] = transfersFrom.map(t => ({
+      id: `tr-out-${t.id}`,
+      date: t.date,
+      createdAt: t.createdAt,
+      type: 'تحويل صادر',
+      documentId: t.transferNumber,
+      description: t.description || `تحويل إلى ${t.toSafe?.name || t.toBank?.name}`,
+      paymentMethod: 'تحويل',
+      debit: 0,
+      credit: t.amount
+    }));
+
+    const mappedTransfersTo: TransactionType[] = transfersTo.map(t => ({
+      id: `tr-in-${t.id}`,
+      date: t.date,
+      createdAt: t.createdAt,
+      type: 'تحويل وارد',
+      documentId: t.transferNumber,
+      description: t.description || `تحويل من ${t.fromSafe?.name || t.fromBank?.name}`,
+      paymentMethod: 'تحويل',
+      debit: t.amount,
+      credit: 0
+    }));
+
+    // دمج وترتيب وحساب الرصيد التراكمي
+    let allTransactions = [
+      ...mappedReceipts,
+      ...mappedPayments,
+      ...mappedSalesReturns,
+      ...mappedPurchReturns,
+      ...mappedTransfersFrom,
+      ...mappedTransfersTo
+    ].sort((a, b) => {
+      const dateCompare = a.date.getTime() - b.date.getTime();
+      if (dateCompare !== 0) return dateCompare;
+      return a.createdAt.getTime() - b.createdAt.getTime();
+    });
+
+    // فلترة حسب النوع إذا طلب
+    if (filterType !== 'الكل') {
+      allTransactions = allTransactions.filter(t => t.type === filterType);
+    }
+
+    // حساب الرصيد التراكمي
+    let currentBalance = openingBalance;
+    allTransactions = allTransactions.map(t => {
+      currentBalance += (t.debit - t.credit);
+      return { ...t, runningBalance: currentBalance };
+    });
+
+    return {
+      transactions: allTransactions,
+      openingBalance
+    };
+
+  } catch (error) {
+    console.error("Error fetching account transactions:", error);
+    return { transactions: [], openingBalance: 0 };
   }
 }

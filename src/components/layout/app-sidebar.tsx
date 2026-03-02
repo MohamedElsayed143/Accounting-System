@@ -15,6 +15,7 @@ import {
   Landmark,
   RotateCcw,
   Package,
+  ClipboardList,
 } from "lucide-react";
 import {
   Sidebar,
@@ -76,6 +77,15 @@ const invoiceNavItems = [
       { title: "إنشاء فاتورة جديدة", href: "/purchase-invoices/create" },
     ],
   },
+  {
+    title: "عروض الأسعار",
+    href: "/sales-quotations",
+    icon: ClipboardList,
+    subItems: [
+      { title: "جميع العروض", href: "/sales-quotations" },
+      { title: "إنشاء عرض سعر", href: "/sales-quotations/create" },
+    ],
+  },
 ];
 
 // ✅ قسم المرتجعات الجديد
@@ -130,6 +140,11 @@ const otherNavItems = [
     title: "التقارير",
     href: "/reports",
     icon: BarChart3,
+    subItems: [
+      { title: "كشف حساب العملاء/الموردين", href: "/reports" },
+      { title: "كشف حساب الخزنة", href: "/reports/treasury" },
+      { title: "كشف حساب البنوك", href: "/reports/banks" },
+    ],
   },
   {
     title: "الإعدادات",
@@ -380,18 +395,56 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               {otherNavItems.map((item) => (
-                <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton 
-                    asChild 
-                    isActive={isActive(item.href)}
-                    className="group hover:bg-primary/10 transition-all"
+                item.subItems ? (
+                  <Collapsible
+                    key={item.href}
+                    defaultOpen={isActive(item.href)}
+                    className="group/collapsible"
                   >
-                    <Link href={item.href} className="flex items-center gap-3">
-                      <item.icon className="h-4 w-4 group-hover:scale-110 transition-transform" />
-                      <span className="font-medium">{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
+                    <SidebarMenuItem>
+                      <CollapsibleTrigger asChild>
+                        <SidebarMenuButton 
+                          isActive={isActive(item.href)}
+                          className="group hover:bg-primary/10 transition-all"
+                        >
+                          <item.icon className="h-4 w-4 group-hover:scale-110 transition-transform" />
+                          <span className="font-medium">{item.title}</span>
+                          <ChevronDown className="mr-auto h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-180" />
+                        </SidebarMenuButton>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <SidebarMenuSub className="mr-4 border-r-2 border-primary/20">
+                          {item.subItems.map((subItem) => (
+                            <SidebarMenuSubItem key={subItem.href}>
+                              <SidebarMenuSubButton
+                                asChild
+                                isActive={pathname === subItem.href}
+                                className="hover:bg-primary/5 transition-all"
+                              >
+                                <Link href={subItem.href} className="text-sm font-medium">
+                                  {subItem.title}
+                                </Link>
+                              </SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                          ))}
+                        </SidebarMenuSub>
+                      </CollapsibleContent>
+                    </SidebarMenuItem>
+                  </Collapsible>
+                ) : (
+                  <SidebarMenuItem key={item.href}>
+                    <SidebarMenuButton 
+                      asChild 
+                      isActive={isActive(item.href)}
+                      className="group hover:bg-primary/10 transition-all"
+                    >
+                      <Link href={item.href} className="flex items-center gap-3">
+                        <item.icon className="h-4 w-4 group-hover:scale-110 transition-transform" />
+                        <span className="font-medium">{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                )
               ))}
             </SidebarMenu>
           </SidebarGroupContent>

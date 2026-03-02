@@ -22,6 +22,7 @@ model Customer {
   invoices        SalesInvoice[]
   receiptVouchers ReceiptVoucher[]
   salesReturns    SalesReturn[]
+  quotations      Quotation[]
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 }
@@ -126,10 +127,14 @@ model TreasurySafe {
   description     String?          @db.Text
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
+  isPrimary       Boolean          @default(false)
+  isActive        Boolean          @default(true)
   salesReturns    SalesReturn[] // مرتجعات مبيعات تم ردها إلى هذه الخزنة
   purchaseReturns PurchaseReturn[] // مرتجعات مشتريات تم سحبها من هذه الخزنة
   receiptVouchers ReceiptVoucher[]
   paymentVouchers PaymentVoucher[]
+  transfersFrom   TreasuryTransfer[] @relation("TransferFromSafe")
+  transfersTo     TreasuryTransfer[] @relation("TransferToSafe")
 }
 
 // ========== البنوك ==========
@@ -147,6 +152,8 @@ model TreasuryBank {
   purchaseReturns PurchaseReturn[] // مرتجعات مشتريات تم سحبها من هذا البنك
   receiptVouchers ReceiptVoucher[]
   paymentVouchers PaymentVoucher[]
+  transfersFrom   TreasuryTransfer[] @relation("TransferFromBank")
+  transfersTo     TreasuryTransfer[] @relation("TransferToBank")
 }
 
 // ========== سندات القبض ==========
@@ -352,6 +359,7 @@ model Product {
   stockMovements       StockMovement[]
   salesInvoiceItems    SalesInvoiceItem[]
   purchaseInvoiceItems PurchaseInvoiceItem[]
+  quotationItems       QuotationItem[]
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
 }
@@ -377,4 +385,75 @@ model StockMovement {
   @@index([movementType])
   @@index([createdAt])
   @@index([warehouseId])
+}
+
+// ========== عروض الأسعار ==========
+
+enum QuotationStatus {
+  Draft
+  Sent
+  Approved
+  Rejected
+  Converted
+}
+
+model Quotation {
+  id         Int              @id @default(autoincrement())
+  code       String           @unique @db.VarChar(20)
+  customerId Int
+  customer   Customer         @relation(fields: [customerId], references: [id])
+  date       DateTime
+  subtotal   Float
+  discount   Float            @default(0)
+  total      Float
+  notes      Json?
+  status     QuotationStatus  @default(Draft)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+  items      QuotationItem[]
+
+  @@index([customerId])
+  @@index([date])
+}
+
+model QuotationItem {
+  id          Int       @id @default(autoincrement())
+  quotationId Int
+  quotation   Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  productId   Int
+  product     Product   @relation(fields: [productId], references: [id])
+  description String    @db.VarChar(255)
+  quantity    Float
+  price       Float
+  discount    Float     @default(0)
+  total       Float
+}
+
+// ========== التحويلات بين الحسابات ==========
+model TreasuryTransfer {
+  id            Int           @id @default(autoincrement())
+  transferNumber String        @unique @db.VarChar(50)
+  date          DateTime
+  amount        Float
+  description   String?       @db.Text
+  
+  fromType      String        @db.VarChar(10) // "safe" or "bank"
+  fromSafeId    Int?
+  fromSafe      TreasurySafe? @relation("TransferFromSafe", fields: [fromSafeId], references: [id])
+  fromBankId    Int?
+  fromBank      TreasuryBank? @relation("TransferFromBank", fields: [fromBankId], references: [id])
+  
+  toType        String        @db.VarChar(10) // "safe" or "bank"
+  toSafeId      Int?
+  toSafe        TreasurySafe? @relation("TransferToSafe", fields: [toSafeId], references: [id])
+  toBankId      Int?
+  toBank        TreasuryBank? @relation("TransferToBank", fields: [toBankId], references: [id])
+  
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([fromSafeId])
+  @@index([fromBankId])
+  @@index([toSafeId])
+  @@index([toBankId])
 }
