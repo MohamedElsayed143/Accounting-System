@@ -13,13 +13,31 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { userProfile } from "@/mock-data";
+import { getAuthSession, logoutAction } from "@/app/login/actions";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 interface NavbarProps {
   title?: string;
 }
 
 export function Navbar({ title }: NavbarProps) {
+  const router = useRouter();
+  const [user, setUser] = useState<{ username: string; role: string } | null>(null);
+
+  useEffect(() => {
+    getAuthSession().then((session) => {
+      if (session?.user) {
+        setUser(session.user);
+      }
+    });
+  }, []);
+
+  const handleLogout = async () => {
+    await logoutAction();
+    router.push("/login");
+  };
+
   return (
     <header className="sticky top-0 z-40 flex h-16 items-center gap-4 border-b border-border/40 bg-background/95 px-6 backdrop-blur supports-[backdrop-filter]:bg-background/60 shadow-sm">
       <SidebarTrigger className="md:hidden hover:bg-primary/10 transition-all" />
@@ -56,32 +74,29 @@ export function Navbar({ title }: NavbarProps) {
         </Button>
 
         <DropdownMenu dir="rtl">
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              className="relative h-9 w-9 rounded-full p-0 hover:bg-primary/10 transition-all"
-            >
-              <Avatar className="h-9 w-9 ring-2 ring-primary/20 hover:ring-primary/40 transition-all">
-                <AvatarFallback className="bg-primary/10 text-primary text-sm font-bold">
-                  {userProfile.name
-                    .split(" ")
-                    .map((n) => n[0])
-                    .join("")}
-                </AvatarFallback>
-              </Avatar>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent className="w-56" align="end" forceMount>
-            <DropdownMenuLabel className="font-normal">
-              <div className="flex flex-col space-y-1">
-                <p className="text-sm font-bold leading-none">
-                  {userProfile.name}
-                </p>
-                <p className="text-xs leading-none text-muted-foreground font-medium">
-                  {userProfile.email}
-                </p>
-              </div>
-            </DropdownMenuLabel>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                className="relative h-9 w-9 rounded-full p-0 hover:bg-primary/10 transition-all"
+              >
+                <Avatar className="h-9 w-9 ring-2 ring-primary/20 hover:ring-primary/40 transition-all">
+                  <AvatarFallback className="bg-primary/10 text-primary text-sm font-bold uppercase">
+                    {user ? user.username.charAt(0) : "U"}
+                  </AvatarFallback>
+                </Avatar>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-56" align="end" forceMount>
+              <DropdownMenuLabel className="font-normal">
+                <div className="flex flex-col space-y-1">
+                  <p className="text-sm font-bold leading-none">
+                    {user ? user.username : "جاري التحميل..."}
+                  </p>
+                  <p className="text-xs leading-none text-muted-foreground font-medium">
+                    {user ? (user.role === "ADMIN" ? "مدير النظام" : "موظف") : ""}
+                  </p>
+                </div>
+              </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem className="cursor-pointer hover:bg-primary/10 transition-all gap-2">
               <User className="h-4 w-4" />
@@ -92,7 +107,10 @@ export function Navbar({ title }: NavbarProps) {
               <span className="font-medium">الإعدادات</span>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="cursor-pointer hover:bg-destructive/10 text-destructive transition-all gap-2">
+            <DropdownMenuItem 
+              className="cursor-pointer hover:bg-destructive/10 text-destructive transition-all gap-2"
+              onClick={handleLogout}
+            >
               <LogOut className="h-4 w-4" />
               <span className="font-medium">تسجيل الخروج</span>
             </DropdownMenuItem>

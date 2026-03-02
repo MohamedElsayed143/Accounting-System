@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { getAuthSession, logoutAction } from "@/app/login/actions";
 import {
   LayoutDashboard,
   Users,
@@ -18,6 +20,8 @@ import {
   ClipboardList,
   Clock,
   PieChart,
+  LogOut,
+  Zap,
 } from "lucide-react";
 import {
   Sidebar,
@@ -40,14 +44,16 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { userProfile } from "@/mock-data";
 
 const mainNavItems = [
   {
-    title: "لوحة التحكم",
-    href: "/dashboard",
-    icon: LayoutDashboard,
+    title: "الرئيسية",
+    href: "/statistics",
+    icon: PieChart,
   },
+];
+
+const directoryNavItems = [
   {
     title: "العملاء",
     href: "/customers",
@@ -144,11 +150,6 @@ const inventoryNavItem = {
 
 const otherNavItems = [
   {
-    title: "الإحصائيات",
-    href: "/statistics",
-    icon: PieChart,
-  },
-  {
     title: "التقارير",
     href: "/reports",
     icon: BarChart3,
@@ -159,7 +160,7 @@ const otherNavItems = [
     ],
   },
   {
-    title: "الإعدادات",
+    title: "إعدادات النظام",
     href: "/settings",
     icon: Settings,
   },
@@ -167,25 +168,40 @@ const otherNavItems = [
 
 export function AppSidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const [user, setUser] = useState<{ username: string; role: string } | null>(null);
+
+  useEffect(() => {
+    getAuthSession().then((session) => {
+      if (session?.user) {
+        setUser(session.user);
+      }
+    });
+  }, []);
+
+  const handleLogout = async () => {
+    await logoutAction();
+    router.push("/login");
+  };
 
   const isActive = (href: string) => {
-    if (href === "/dashboard") return pathname === href || pathname === "/";
+    if (href === "/statistics") return pathname === href || pathname === "/";
     return pathname.startsWith(href);
   };
 
   return (
     <Sidebar className="border-l border-border/40 shadow-sm">
       <SidebarHeader className="border-b border-border/40 px-4 py-4 bg-gradient-to-b from-primary/5 to-transparent">
-        <Link href="/dashboard" className="flex items-center gap-3 group">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary shadow-md group-hover:shadow-lg transition-all">
-            <Calculator className="h-5 w-5 text-primary-foreground" />
+        <Link href="/statistics" className="flex items-center gap-3 group">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 shadow-md group-hover:shadow-lg transition-all">
+            <Zap className="h-5 w-5 text-white" />
           </div>
           <div className="flex flex-col">
-            <span className="text-lg font-bold bg-gradient-to-l from-primary to-primary/70 bg-clip-text text-transparent">
-              دفاتر المحاسبة
+            <span className="text-xl font-black text-blue-600 dark:text-blue-500">
+              فاست
             </span>
-            <span className="text-xs text-muted-foreground font-medium">
-              نظام محاسبي متكامل
+            <span className="text-[10px] text-slate-500 font-semibold tracking-wider uppercase">
+              Fast System
             </span>
           </div>
         </Link>
@@ -199,6 +215,30 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               {mainNavItems.map((item) => (
+                <SidebarMenuItem key={item.href}>
+                  <SidebarMenuButton 
+                    asChild 
+                    isActive={isActive(item.href)}
+                    className="group hover:bg-primary/10 transition-all"
+                  >
+                    <Link href={item.href} className="flex items-center gap-3">
+                      <item.icon className="h-4 w-4 group-hover:scale-110 transition-transform" />
+                      <span className="font-medium">{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup className="mt-4">
+          <SidebarGroupLabel className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">
+            الدليل
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {directoryNavItems.map((item) => (
                 <SidebarMenuItem key={item.href}>
                   <SidebarMenuButton 
                     asChild 
@@ -478,23 +518,27 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="border-t border-border/40 p-4 bg-gradient-to-t from-primary/5 to-transparent">
+      <SidebarFooter className="border-t border-border/40 p-4 bg-gradient-to-t from-primary/5 to-transparent flex flex-row items-center justify-between">
         <div className="flex items-center gap-3 group cursor-pointer hover:bg-primary/5 p-2 rounded-lg transition-all">
           <Avatar className="h-10 w-10 ring-2 ring-primary/20 group-hover:ring-primary/40 transition-all">
             <AvatarFallback className="bg-primary/10 text-primary text-sm font-bold">
-              {userProfile.name
-                .split(" ")
-                .map((n) => n[0])
-                .join("")}
+              {user ? user.username.charAt(0).toUpperCase() : "U"}
             </AvatarFallback>
           </Avatar>
           <div className="flex flex-col">
-            <span className="text-sm font-bold">{userProfile.name}</span>
+            <span className="text-sm font-bold">{user ? user.username : "جاري التحميل..."}</span>
             <span className="text-xs text-muted-foreground font-medium">
-              {userProfile.role}
+              {user ? (user.role === "ADMIN" ? "مدير النظام" : "موظف") : ""}
             </span>
           </div>
         </div>
+        <button 
+          onClick={handleLogout}
+          className="p-2 text-slate-400 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors"
+          title="تسجيل الخروج"
+        >
+          <LogOut className="w-5 h-5" />
+        </button>
       </SidebarFooter>
     </Sidebar>
   );
