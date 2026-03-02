@@ -17,6 +17,7 @@ import {
   Package,
   ClipboardList,
   Clock,
+  PieChart,
 } from "lucide-react";
 import {
   Sidebar,
@@ -142,6 +143,11 @@ const inventoryNavItem = {
 };
 
 const otherNavItems = [
+  {
+    title: "الإحصائيات",
+    href: "/statistics",
+    icon: PieChart,
+  },
   {
     title: "التقارير",
     href: "/reports",
