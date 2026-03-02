@@ -186,29 +186,56 @@ export async function createPurchaseInvoice(data: {
       },
     });
 
-    // 4. إنشاء حركات مخزون وتحديث الرصيد الحالي (شراء = دخول +) وتحديث أسعار المنتج
-    for (const item of data.items) {
-      await tx.stockMovement.create({
-        data: {
-          productId: item.productId,
-          movementType: "PURCHASE",
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          reference: `فاتورة شراء #${data.invoiceNumber}`,
-          purchaseInvoiceId: invoice.id,
-        },
-      });
+    // 3.5 تحديث الخزنة أو البنك إذا كانت الفاتورة كاش (خصم للمشتريات) (فقط إذا لم تكن معلقة)
+    if (data.status === "cash" && (data.safeId || data.bankId)) {
+      if (data.safeId) {
+        // التحقق من الرصيد
+        const safe = await tx.treasurySafe.findUnique({ where: { id: data.safeId } });
+        if (!safe) throw new Error("الخزنة المختارة غير موجودة");
+        if (safe.balance < data.total) throw new Error(`رصيد الخزنة غير كافٍ (المتاح: ${safe.balance})`);
 
-      // تحديث الرصيد في بطاقة الصنف وتحديث الأسعار
-      await tx.product.update({
-        where: { id: item.productId },
-        data: { 
-          currentStock: { increment: item.quantity },
-          buyPrice: item.unitPrice,
-          sellPrice: item.sellingPrice,
-          profitMargin: item.profitMargin
-        }
-      });
+        await tx.treasurySafe.update({
+          where: { id: data.safeId },
+          data: { balance: { decrement: data.total } },
+        });
+      } else if (data.bankId) {
+        // التحقق من الرصيد
+        const bank = await tx.treasuryBank.findUnique({ where: { id: data.bankId } });
+        if (!bank) throw new Error("البنك المختار غير موجود");
+        if (bank.balance < data.total) throw new Error(`رصيد البنك غير كافٍ (المتاح: ${bank.balance})`);
+
+        await tx.treasuryBank.update({
+          where: { id: data.bankId },
+          data: { balance: { decrement: data.total } },
+        });
+      }
+    }
+
+    // 4. إنشاء حركات مخزون وتحديث الرصيد الحالي وتحديث أسعار المنتج (فقط إذا لم تكن معلقة)
+    if (data.status !== "pending") {
+      for (const item of data.items) {
+        await tx.stockMovement.create({
+          data: {
+            productId: item.productId,
+            movementType: "PURCHASE",
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            reference: `فاتورة شراء #${data.invoiceNumber}`,
+            purchaseInvoiceId: invoice.id,
+          },
+        });
+
+        // تحديث الرصيد في بطاقة الصنف وتحديث الأسعار
+        await tx.product.update({
+          where: { id: item.productId },
+          data: { 
+            currentStock: { increment: item.quantity },
+            buyPrice: item.unitPrice,
+            sellPrice: item.sellingPrice,
+            profitMargin: item.profitMargin
+          },
+        });
+      }
     }
 
     return invoice;
@@ -228,6 +255,8 @@ export async function updatePurchaseInvoice(
     discount: number;
     total: number;
     status: "cash" | "credit" | "pending";
+    safeId?: number;
+    bankId?: number;
     items: {
       description: string;
       quantity: number;
@@ -246,10 +275,35 @@ export async function updatePurchaseInvoice(
   if (!data.supplierId) throw new Error("يجب اختيار المورد أولاً");
 
   return prisma.$transaction(async (tx) => {
-    const existing = await tx.purchaseInvoice.findFirst({
-      where: { invoiceNumber: data.invoiceNumber, NOT: { id } },
+    const existingInvoice = await tx.purchaseInvoice.findUnique({
+      where: { id },
+      select: { status: true, total: true, safeId: true, bankId: true, invoiceNumber: true }
     });
-    if (existing) throw new Error(`رقم الفاتورة #${data.invoiceNumber} مستخدم مسبقاً`);
+
+    if (!existingInvoice) throw new Error("الفاتورة غير موجودة");
+
+    if (existingInvoice.invoiceNumber !== data.invoiceNumber) {
+      const numberTaken = await tx.purchaseInvoice.findUnique({
+        where: { invoiceNumber: data.invoiceNumber },
+        select: { id: true },
+      });
+      if (numberTaken) throw new Error(`رقم الفاتورة #${data.invoiceNumber} مستخدم مسبقاً`);
+    }
+
+    // 0. عكس أثر الخزنة القديم إذا كانت كاش
+    if (existingInvoice.status === "cash") {
+      if (existingInvoice.safeId) {
+        await tx.treasurySafe.update({
+          where: { id: existingInvoice.safeId },
+          data: { balance: { increment: existingInvoice.total } }
+        });
+      } else if (existingInvoice.bankId) {
+        await tx.treasuryBank.update({
+          where: { id: existingInvoice.bankId },
+          data: { balance: { increment: existingInvoice.total } }
+        });
+      }
+    }
 
     // 1. استرجاع الكميات القديمة لتعديل الرصيد
     const oldItems = await tx.purchaseInvoiceItem.findMany({
@@ -291,6 +345,8 @@ export async function updatePurchaseInvoice(
         discount: data.discount,
         total: data.total,
         status: data.status,
+        safeId: data.status === "cash" ? data.safeId : null,
+        bankId: data.status === "cash" ? data.bankId : null,
         topNotes: data.topNotes || [],
         notes: data.notes || [],
         items: {
@@ -308,6 +364,31 @@ export async function updatePurchaseInvoice(
         },
       },
     });
+
+    // 4. تطبيق أثر الخزنة الجديد إذا كانت كاش
+    if (data.status === "cash" && (data.safeId || data.bankId)) {
+      if (data.safeId) {
+        // التحقق من الرصيد
+        const safe = await tx.treasurySafe.findUnique({ where: { id: data.safeId } });
+        if (!safe) throw new Error("الخزنة المختارة غير موجودة");
+        if (safe.balance < data.total) throw new Error(`رصيد الخزنة غير كافٍ (المتاح: ${safe.balance})`);
+
+        await tx.treasurySafe.update({
+          where: { id: data.safeId },
+          data: { balance: { decrement: data.total } },
+        });
+      } else if (data.bankId) {
+        // التحقق من الرصيد
+        const bank = await tx.treasuryBank.findUnique({ where: { id: data.bankId } });
+        if (!bank) throw new Error("البنك المختار غير موجود");
+        if (bank.balance < data.total) throw new Error(`رصيد البنك غير كافٍ (المتاح: ${bank.balance})`);
+
+        await tx.treasuryBank.update({
+          where: { id: data.bankId },
+          data: { balance: { decrement: data.total } },
+        });
+      }
+    }
 
     for (const item of data.items) {
       await tx.stockMovement.create({

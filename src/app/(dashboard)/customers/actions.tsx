@@ -7,7 +7,10 @@ import { revalidatePath } from "next/cache";
 export async function getCustomers() {
   const customers = await prisma.customer.findMany({
     include: {
-      invoices: { select: { total: true } },
+      invoices: { 
+        where: { status: { not: "pending" } },
+        select: { total: true } 
+      },
       receiptVouchers: { select: { amount: true } },
       salesReturns: { select: { total: true } },
     },

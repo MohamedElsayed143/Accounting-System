@@ -3,7 +3,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
-import { Plus, Eye, Trash2, AlertTriangle } from "lucide-react";
+import { Plus, Eye, Trash2, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { Navbar } from "@/components/layout/navbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -30,6 +30,7 @@ import {
 } from "@/components/shared";
 import { getSalesInvoices, deleteSalesInvoice } from "./actions";
 import { useRouter } from "next/navigation";
+import { ProcessInvoiceDialog } from "../pending-invoices/components/ProcessInvoiceDialog";
 
 interface InvoiceRow {
   id: number;
@@ -82,6 +83,7 @@ export default function SalesInvoicesPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [invoiceToDelete, setInvoiceToDelete] = useState<InvoiceRow | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -303,6 +305,17 @@ export default function SalesInvoicesPage() {
                                 >
                                   <Trash2 className="h-4 w-4 text-destructive" />
                                 </Button>
+                                {invoice.status === 'pending' && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => setSelectedInvoice(invoice)}
+                                    className="hover:bg-orange-100 text-orange-600 transition-all"
+                                    title="تأكيد وحفظ"
+                                  >
+                                    <CheckCircle2 className="h-4 w-4" />
+                                  </Button>
+                                )}
                               </div>
                             </TableCell>
                           </TableRow>
@@ -391,6 +404,18 @@ export default function SalesInvoicesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {selectedInvoice && (
+        <ProcessInvoiceDialog
+          isOpen={!!selectedInvoice}
+          onClose={() => setSelectedInvoice(null)}
+          invoice={selectedInvoice}
+          type="sales"
+          onSuccess={() => {
+            getSalesInvoices().then((data) => setInvoices(data as InvoiceRow[]));
+          }}
+        />
+      )}
     </>
   );
 }

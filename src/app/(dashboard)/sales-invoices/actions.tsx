@@ -189,7 +189,7 @@ export async function createSalesInvoice(data: {
       },
     });
 
-    // 3.5 تحديث الخزنة أو البنك إذا كانت الفاتورة كاش
+    // 3.5 تحديث الخزنة أو البنك إذا كانت الفاتورة كاش (فقط إذا لم تكن معلقة)
     if (data.status === "cash" && (data.safeId || data.bankId)) {
       if (data.safeId) {
         await tx.treasurySafe.update({
@@ -204,18 +204,20 @@ export async function createSalesInvoice(data: {
       }
     }
 
-    // 4. إنشاء حركات مخزون
-    for (const item of data.items) {
-      await tx.stockMovement.create({
-        data: {
-          productId: item.productId,
-          movementType: "SALE",
-          quantity: -item.quantity,
-          unitPrice: item.unitPrice,
-          reference: `فاتورة بيع #${data.invoiceNumber}`,
-          salesInvoiceId: invoice.id,
-        },
-      });
+    // 4. إنشاء حركات مخزون (فقط إذا لم تكن معلقة)
+    if (data.status !== "pending") {
+      for (const item of data.items) {
+        await tx.stockMovement.create({
+          data: {
+            productId: item.productId,
+            movementType: "SALE",
+            quantity: -item.quantity,
+            unitPrice: item.unitPrice,
+            reference: `فاتورة بيع #${data.invoiceNumber}`,
+            salesInvoiceId: invoice.id,
+          },
+        });
+      }
     }
 
     revalidatePath("/sales-invoices");
@@ -237,6 +239,8 @@ export async function updateSalesInvoice(
     discount: number;
     total: number;
     status: "cash" | "credit" | "pending";
+    safeId?: number;
+    bankId?: number;
     items: {
       description: string;
       quantity: number;
@@ -253,10 +257,35 @@ export async function updateSalesInvoice(
   if (!data.customerId) throw new Error("يجب اختيار العميل أولاً");
 
   return prisma.$transaction(async (tx) => {
-    const existing = await tx.salesInvoice.findFirst({
-      where: { invoiceNumber: data.invoiceNumber, NOT: { id } },
+    const existingInvoice = await tx.salesInvoice.findUnique({
+      where: { id },
+      select: { status: true, total: true, safeId: true, bankId: true, invoiceNumber: true }
     });
-    if (existing) throw new Error(`رقم الفاتورة #${data.invoiceNumber} مستخدم مسبقاً`);
+
+    if (!existingInvoice) throw new Error("الفاتورة غير موجودة");
+
+    if (existingInvoice.invoiceNumber !== data.invoiceNumber) {
+      const numberTaken = await tx.salesInvoice.findUnique({
+        where: { invoiceNumber: data.invoiceNumber },
+        select: { id: true },
+      });
+      if (numberTaken) throw new Error(`رقم الفاتورة #${data.invoiceNumber} مستخدم مسبقاً`);
+    }
+
+    // 0. عكس أثر الخزنة القديم إذا كانت كاش
+    if (existingInvoice.status === "cash") {
+      if (existingInvoice.safeId) {
+        await tx.treasurySafe.update({
+          where: { id: existingInvoice.safeId },
+          data: { balance: { decrement: existingInvoice.total } }
+        });
+      } else if (existingInvoice.bankId) {
+        await tx.treasuryBank.update({
+          where: { id: existingInvoice.bankId },
+          data: { balance: { decrement: existingInvoice.total } }
+        });
+      }
+    }
 
     // 1. حذف الأصناف القديمة وحركات المخزون
     await tx.salesInvoiceItem.deleteMany({ where: { invoiceId: id } });
@@ -292,6 +321,8 @@ export async function updateSalesInvoice(
         discount: data.discount,
         total: data.total,
         status: data.status,
+        safeId: data.status === "cash" ? data.safeId : null,
+        bankId: data.status === "cash" ? data.bankId : null,
         topNotes: data.topNotes || [],
         notes: data.notes || [],
         items: {
@@ -308,6 +339,21 @@ export async function updateSalesInvoice(
         },
       },
     });
+
+    // 3.5 تطبيق أثر الخزنة الجديد إذا كانت كاش
+    if (data.status === "cash" && (data.safeId || data.bankId)) {
+      if (data.safeId) {
+        await tx.treasurySafe.update({
+          where: { id: data.safeId },
+          data: { balance: { increment: data.total } },
+        });
+      } else if (data.bankId) {
+        await tx.treasuryBank.update({
+          where: { id: data.bankId },
+          data: { balance: { increment: data.total } },
+        });
+      }
+    }
 
     // 4. إنشاء حركات مخزون جديدة
     for (const item of data.items) {

@@ -16,6 +16,7 @@ import {
   RotateCcw,
   Package,
   ClipboardList,
+  Clock,
 } from "lucide-react";
 import {
   Sidebar,
@@ -55,6 +56,11 @@ const mainNavItems = [
     title: "الموردين",
     href: "/suppliers",
     icon: Truck,
+  },
+  {
+    title: "الفواتير المعلقة",
+    href: "/pending-invoices",
+    icon: Clock,
   },
 ];
 
@@ -229,7 +235,7 @@ export function AppSidebar() {
                     </CollapsibleTrigger>
                     <CollapsibleContent>
                       <SidebarMenuSub className="mr-4 border-r-2 border-primary/20">
-                        {item.subItems.map((subItem) => (
+                        {item.subItems?.map((subItem) => (
                           <SidebarMenuSubItem key={subItem.href}>
                             <SidebarMenuSubButton
                               asChild

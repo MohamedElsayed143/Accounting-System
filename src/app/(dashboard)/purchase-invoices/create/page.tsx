@@ -10,6 +10,7 @@ import {
   History as HistoryIcon
 } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import { Navbar } from "@/components/layout/navbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -60,6 +61,7 @@ interface PurchaseInvoiceItemWithProduct {
   discount: number;
   total: number;
   productId?: number | null;
+  stockBalance?: number;
 }
 
 import { getProducts, ProductData } from "@/app/(dashboard)/inventory/products/actions";
@@ -217,6 +219,7 @@ function InvoiceFormStep({
         discount: 0,
         total: product.buyPrice * 1.14,
         productId: product.id,
+        stockBalance: product.currentStock,
       },
     ]);
   };
@@ -571,6 +574,7 @@ function InvoiceFormStep({
                   <TableHeader className="bg-slate-50">
                     <TableRow>
                       <TableHead className="text-right font-bold">الصنف</TableHead>
+                      <TableHead className="text-right font-bold w-24 text-blue-600 outline-none">الرصيد</TableHead>
                       <TableHead className="text-right font-bold w-24">الكمية *</TableHead>
                       <TableHead className="text-right font-bold w-24">سعر الشراء *</TableHead>
                       <TableHead className="text-right font-bold w-24 text-blue-600">سعر البيع</TableHead>
@@ -590,6 +594,14 @@ function InvoiceFormStep({
                               PID: {item.productId}
                             </span>
                           </div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <span className={cn(
+                            "font-bold px-2 py-1 rounded text-sm",
+                            (item.stockBalance || 0) <= 0 ? "bg-red-50 text-red-600" : "bg-blue-50 text-blue-600"
+                          )}>
+                            {item.stockBalance?.toLocaleString() || 0}
+                          </span>
                         </TableCell>
                         <TableCell>
                           <Input

@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
-import { Plus, Eye, Trash2, AlertTriangle } from "lucide-react";
+import { Plus, Eye, Trash2, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { Navbar } from "@/components/layout/navbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -29,6 +29,7 @@ import {
 } from "@/components/shared";
 import { getPurchaseInvoices, deletePurchaseInvoice, PurchaseInvoice } from "./actions";
 import { useRouter } from "next/navigation";
+import { ProcessInvoiceDialog } from "../pending-invoices/components/ProcessInvoiceDialog";
 
 const ITEMS_PER_PAGE = 8;
 
@@ -72,6 +73,7 @@ export default function PurchaseInvoicesPage() {
     null,
   );
   const [deleting, setDeleting] = useState(false);
+  const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -294,6 +296,17 @@ export default function PurchaseInvoicesPage() {
                                 >
                                   <Trash2 className="h-4 w-4 text-destructive" />
                                 </Button>
+                                {invoice.status === 'pending' && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => setSelectedInvoice(invoice)}
+                                    className="hover:bg-orange-100 text-orange-600 transition-all"
+                                    title="تأكيد وحفظ"
+                                  >
+                                    <CheckCircle2 className="h-4 w-4" />
+                                  </Button>
+                                )}
                               </div>
                             </TableCell>
                           </TableRow>
@@ -382,6 +395,18 @@ export default function PurchaseInvoicesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {selectedInvoice && (
+        <ProcessInvoiceDialog
+          isOpen={!!selectedInvoice}
+          onClose={() => setSelectedInvoice(null)}
+          invoice={selectedInvoice}
+          type="purchase"
+          onSuccess={() => {
+            getPurchaseInvoices().then((data) => setInvoices(data as PurchaseInvoice[]));
+          }}
+        />
+      )}
     </>
   );
 }

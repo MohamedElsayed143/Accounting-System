@@ -186,11 +186,11 @@ export async function getCustomerTransactions(
       id: `inv-${inv.id}`,
       date: inv.invoiceDate,
       createdAt: inv.createdAt,
-      type: 'فاتورة',
+      type: inv.status === 'pending' ? 'مسودة' : 'فاتورة',
       documentId: `INV-${inv.invoiceNumber}`,
-      description: inv.description || `فاتورة بيع للعميل ${inv.customerName}`,
-      paymentMethod: inv.status === 'cash' ? 'نقدي' : 'آجل',
-      debit: inv.total,
+      description: inv.description || (inv.status === 'pending' ? `مسودة فاتورة بيع للعميل ${inv.customerName}` : `فاتورة بيع للعميل ${inv.customerName}`),
+      paymentMethod: inv.status === 'cash' ? 'نقدي' : inv.status === 'credit' ? 'آجل' : 'معلقة',
+      debit: inv.status === 'pending' ? 0 : inv.total,
       credit: 0,
     }));
 
@@ -301,12 +301,12 @@ export async function getSupplierTransactions(
       id: `purch-${inv.id}`,
       date: inv.invoiceDate,
       createdAt: inv.createdAt,
-      type: 'فاتورة',
+      type: inv.status === 'pending' ? 'مسودة' : 'فاتورة',
       documentId: `PUR-${inv.invoiceNumber}`,
-      description: inv.description || `فاتورة شراء من المورد ${inv.supplierName}`,
-      paymentMethod: inv.status === 'cash' ? 'نقدي' : 'آجل',
-      debit: inv.total,
-      credit: 0,
+      description: inv.description || (inv.status === 'pending' ? `مسودة فاتورة شراء من المورد ${inv.supplierName}` : `فاتورة شراء من المورد ${inv.supplierName}`),
+      paymentMethod: inv.status === 'cash' ? 'نقدي' : inv.status === 'credit' ? 'آجل' : 'معلقة',
+      debit: 0,
+      credit: inv.status === 'pending' ? 0 : inv.total,
     }));
 
     // تحويل سندات الصرف
@@ -485,17 +485,17 @@ export async function getAccountTransactions(
       }),
     ]);
 
-    // 3. تحويل المعاملات إلى تنسيق موحد
-    const mappedReceipts: TransactionType[] = receipts.map(r => ({
-      id: `rec-${r.id}`,
-      date: r.date,
-      createdAt: r.createdAt,
-      type: 'سند قبض',
-      documentId: r.voucherNumber,
-      description: r.description || `قبض من العميل ${r.customer.name}`,
-      paymentMethod: accountType === 'safe' ? 'نقدي' : 'بنك',
-      debit: r.amount,
-      credit: 0
+    // 3. تحويل المعاملات    // تحويل الفواتير
+    const invoiceTransactions: TransactionType[] = invoices.map(inv => ({
+      id: `inv-${inv.id}`,
+      date: inv.invoiceDate,
+      createdAt: inv.createdAt,
+      type: inv.status === 'pending' ? 'مسودة' : 'فاتورة',
+      documentId: `INV-${inv.invoiceNumber}`,
+      description: inv.description || (inv.status === 'pending' ? `مسودة فاتورة بيع للعميل ${inv.customerName}` : `فاتورة بيع للعميل ${inv.customerName}`),
+      paymentMethod: inv.status === 'cash' ? 'نقدي' : inv.status === 'credit' ? 'آجل' : 'معلقة',
+      debit: inv.status === 'pending' ? 0 : inv.total,
+      credit: 0,
     }));
 
     const mappedPayments: TransactionType[] = payments.map(p => ({
