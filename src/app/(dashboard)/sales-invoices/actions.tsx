@@ -116,6 +116,8 @@ export async function createSalesInvoice(data: {
   discount: number;
   total: number;
   status: "cash" | "credit" | "pending";
+  safeId?: number;
+  bankId?: number;
   items: {
     description: string;
     quantity: number;
@@ -169,6 +171,8 @@ export async function createSalesInvoice(data: {
         discount: data.discount,
         total: data.total,
         status: data.status,
+        safeId: data.status === "cash" ? data.safeId : null,
+        bankId: data.status === "cash" ? data.bankId : null,
         topNotes: data.topNotes || [],
         notes: data.notes || [],
         items: {
@@ -184,6 +188,21 @@ export async function createSalesInvoice(data: {
         },
       },
     });
+
+    // 3.5 تحديث الخزنة أو البنك إذا كانت الفاتورة كاش
+    if (data.status === "cash" && (data.safeId || data.bankId)) {
+      if (data.safeId) {
+        await tx.treasurySafe.update({
+          where: { id: data.safeId },
+          data: { balance: { increment: data.total } },
+        });
+      } else if (data.bankId) {
+        await tx.treasuryBank.update({
+          where: { id: data.bankId },
+          data: { balance: { increment: data.total } },
+        });
+      }
+    }
 
     // 4. إنشاء حركات مخزون
     for (const item of data.items) {
@@ -313,6 +332,26 @@ export async function updateSalesInvoice(
 
 export async function deleteSalesInvoice(id: number) {
   await prisma.$transaction(async (tx) => {
+    // 0. جلب بيانات الفاتورة لمعرفة حالتها וחساباتها
+    const invoice = await tx.salesInvoice.findUnique({
+      where: { id },
+      select: { status: true, total: true, safeId: true, bankId: true }
+    });
+
+    if (invoice && invoice.status === "cash") {
+      if (invoice.safeId) {
+        await tx.treasurySafe.update({
+          where: { id: invoice.safeId },
+          data: { balance: { decrement: invoice.total } }
+        });
+      } else if (invoice.bankId) {
+        await tx.treasuryBank.update({
+          where: { id: invoice.bankId },
+          data: { balance: { decrement: invoice.total } }
+        });
+      }
+    }
+
     await tx.stockMovement.deleteMany({ where: { salesInvoiceId: id } });
     await tx.salesInvoice.delete({ where: { id } });
   });

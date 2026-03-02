@@ -676,6 +676,14 @@ export async function getReceiptInitialData() {
 // 12. إنشاء خزنة جديدة
 export async function createSafe(data: { name: string; initialBalance: number; description?: string }) {
   try {
+    // التحقق من تكرار الاسم
+    const existing = await prisma.treasurySafe.findFirst({
+      where: { name: data.name }
+    });
+    if (existing) {
+      return { success: false, error: "يوجد خزنة بنفس هذا الاسم بالفعل" };
+    }
+
     await prisma.treasurySafe.create({
       data: {
         name: data.name,

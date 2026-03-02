@@ -53,6 +53,11 @@ model SalesInvoice {
   discount      Float              @default(0)
   total         Float
   status        InvoiceStatus      @default(cash)
+  // ربط الخزنة/البنك للفواتير الكاش
+  safeId        Int?
+  safe          TreasurySafe?      @relation(fields: [safeId], references: [id])
+  bankId        Int?
+  bank          TreasuryBank?      @relation(fields: [bankId], references: [id])
   description   String?
   topNotes      Json?
   notes         Json?
@@ -88,6 +93,11 @@ model PurchaseInvoice {
   discount        Float                 @default(0)
   total           Float
   status          InvoiceStatus         @default(cash)
+  // ربط الخزنة/البنك للفواتير الكاش
+  safeId          Int?
+  safe            TreasurySafe?         @relation(fields: [safeId], references: [id])
+  bankId          Int?
+  bank            TreasuryBank?         @relation(fields: [bankId], references: [id])
   description     String?
   topNotes        Json?
   notes           Json?
@@ -131,6 +141,8 @@ model TreasurySafe {
   isActive        Boolean          @default(true)
   salesReturns    SalesReturn[] // مرتجعات مبيعات تم ردها إلى هذه الخزنة
   purchaseReturns PurchaseReturn[] // مرتجعات مشتريات تم سحبها من هذه الخزنة
+  salesInvoices    SalesInvoice[]   // فواتير مبيعات كاش دخلت هذه الخزنة
+  purchaseInvoices PurchaseInvoice[] // فواتير مشتريات كاش خرجت من هذه الخزنة
   receiptVouchers ReceiptVoucher[]
   paymentVouchers PaymentVoucher[]
   transfersFrom   TreasuryTransfer[] @relation("TransferFromSafe")
@@ -150,6 +162,8 @@ model TreasuryBank {
   updatedAt       DateTime         @updatedAt
   salesReturns    SalesReturn[] // مرتجعات مبيعات تم ردها إلى هذا البنك
   purchaseReturns PurchaseReturn[] // مرتجعات مشتريات تم سحبها من هذا البنك
+  salesInvoices    SalesInvoice[]   // فواتير مبيعات كاش دخلت هذا البنك
+  purchaseInvoices PurchaseInvoice[] // فواتير مشتريات كاش خرجت من هذا البنك
   receiptVouchers ReceiptVoucher[]
   paymentVouchers PaymentVoucher[]
   transfersFrom   TreasuryTransfer[] @relation("TransferFromBank")

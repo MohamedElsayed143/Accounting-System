@@ -11,6 +11,7 @@ import {
   Trash2,
   Archive,
   AlertTriangle,
+  ArrowLeftRight,
 } from "lucide-react";
 import { Navbar } from "@/components/layout/navbar";
 import { Card, CardContent } from "@/components/ui/card";
@@ -35,6 +36,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
+import TransferDialog from "./components/TransferDialog";
 
 // تعريف نوع المعاملات
 interface Transaction {
@@ -75,6 +77,7 @@ export default function TreasuryPage() {
     message: string;
   } | null>(null);
   const [isArchiving, setIsArchiving] = useState(false);
+  const [showTransfer, setShowTransfer] = useState(false);
 
   const loadData = () => {
     getTreasuryData().then(setData);
@@ -226,15 +229,22 @@ export default function TreasuryPage() {
           </Link>
 
           
-          <Link href="/treasury/receipt-voucher">
-            <Button className="bg-emerald-600 hover:bg-emerald-700">
-              + سند قبض جديد
+            <Button 
+                onClick={() => setShowTransfer(true)}
+                className="bg-blue-600 hover:bg-blue-700"
+            >
+              <ArrowLeftRight className="ml-2 h-4 w-4" />
+              تحويل أموال
             </Button>
-          </Link>
-          <Link href="/treasury/payment-voucher">
-            <Button variant="destructive">+ سند صرف جديد</Button>
-          </Link>
-        </div>
+            <Link href="/treasury/receipt-voucher">
+              <Button className="bg-emerald-600 hover:bg-emerald-700">
+                + سند قبض جديد
+              </Button>
+            </Link>
+            <Link href="/treasury/payment-voucher">
+              <Button variant="destructive">+ سند صرف جديد</Button>
+            </Link>
+          </div>
 
         {/* عرض الحسابات (خزائن وبنوك) */}
         <div>

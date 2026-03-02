@@ -31,10 +31,12 @@ export async function getInitialData(): Promise<InitialData> {
         select: { id: true, name: true, code: true }
       }),
       prisma.treasurySafe.findMany({ 
+        where: { isActive: true },
         orderBy: { name: "asc" },
         select: { id: true, name: true, balance: true }
       }),
       prisma.treasuryBank.findMany({ 
+        where: { isActive: true },
         orderBy: { name: "asc" },
         select: { id: true, name: true, balance: true }
       }),

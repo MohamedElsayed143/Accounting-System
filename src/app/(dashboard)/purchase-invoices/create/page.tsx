@@ -37,6 +37,7 @@ import {
   updatePurchaseInvoice,
   PurchaseInvoiceItem
 } from "../actions"; // ✅ المسار الصحيح
+import { getTreasuryData } from "@/app/(dashboard)/treasury/actions";
 import { PrintableInvoice } from "@/components/invoices/printable-invoice";
 import { ProductSelect } from "@/components/shared/ProductSelect";
 import { DynamicNotes } from "@/components/shared/DynamicNotes";
@@ -98,6 +99,11 @@ function InvoiceFormStep({
   const [topNotes, setTopNotes] = useState<string[]>([]);
   const [discount, setDiscount] = useState<number>(0);
   const [notes, setNotes] = useState<string[]>([]);
+  const [safes, setSafes] = useState<{ id: number; name: string; balance: number }[]>([]);
+  const [banks, setBanks] = useState<{ id: number; name: string; balance: number }[]>([]);
+  const [selectedSafeId, setSelectedSafeId] = useState<string>("");
+  const [selectedBankId, setSelectedBankId] = useState<string>("");
+  const [treasuryType, setTreasuryType] = useState<"safe" | "bank">("safe");
 
   // قائمة جميع المنتجات للاختيار منها
   const [products, setProducts] = useState<ProductData[]>([]);
@@ -109,6 +115,13 @@ function InvoiceFormStep({
   // تحميل المنتجات
   useEffect(() => {
     getProducts().then(setProducts);
+    getTreasuryData().then((data) => {
+      const allSafes = data.accounts.filter(acc => acc.type === "safe") as any[];
+      const allBanks = data.accounts.filter(acc => acc.type === "bank") as any[];
+      setSafes(allSafes);
+      setBanks(allBanks);
+      if (allSafes.length > 0) setSelectedSafeId(String(allSafes[0].id));
+    });
   }, []);
 
   // تحميل بيانات الفاتورة إذا كنا في وضع التعديل أو العرض
@@ -305,6 +318,8 @@ function InvoiceFormStep({
         discount: itemsDiscount + discount,
         total: grandTotal,
         status: paymentType,
+        safeId: paymentType === "cash" && treasuryType === "safe" ? Number(selectedSafeId) : undefined,
+        bankId: paymentType === "cash" && treasuryType === "bank" ? Number(selectedBankId) : undefined,
         topNotes,
         notes,
         items: items.map(({ description, quantity, unitPrice, sellingPrice, profitMargin, taxRate, discount, total, productId }) => ({
@@ -474,6 +489,69 @@ function InvoiceFormStep({
                     </div>
                   </div>
                 </div>
+
+                {paymentType === "cash" && (
+                  <div className="mt-4 pt-4 border-t flex flex-wrap items-end gap-4">
+                    <div className="space-y-1.5">
+                      <Label className="text-slate-600 text-sm font-bold">جهة الدفع (نقدي)</Label>
+                      <Select
+                        value={treasuryType}
+                        onValueChange={(v) => setTreasuryType(v as "safe" | "bank")}
+                        disabled={isViewMode}
+                      >
+                        <SelectTrigger className="w-32 bg-slate-50 border-slate-200">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="safe">خزنة</SelectItem>
+                          <SelectItem value="bank">بنك</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {treasuryType === "safe" ? (
+                      <div className="space-y-1.5 flex-1 max-w-[200px]">
+                        <Label className="text-slate-600 text-sm font-bold">اختر الخزنة</Label>
+                        <Select
+                          value={selectedSafeId}
+                          onValueChange={setSelectedSafeId}
+                          disabled={isViewMode || safes.length === 0}
+                        >
+                          <SelectTrigger className="bg-slate-50 border-slate-200">
+                            <SelectValue placeholder={safes.length === 0 ? "لا يوجد خزن" : "اختر الخزنة"} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {safes.map((s) => (
+                              <SelectItem key={s.id} value={String(s.id)}>
+                                {s.name} ({s.balance.toLocaleString()} ج.م)
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5 flex-1 max-w-[200px]">
+                        <Label className="text-slate-600 text-sm font-bold">اختر البنك</Label>
+                        <Select
+                          value={selectedBankId}
+                          onValueChange={setSelectedBankId}
+                          disabled={isViewMode || banks.length === 0}
+                        >
+                          <SelectTrigger className="bg-slate-50 border-slate-200">
+                            <SelectValue placeholder={banks.length === 0 ? "لا يوجد بنوك" : "اختر البنك"} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {banks.map((b) => (
+                              <SelectItem key={b.id} value={String(b.id)}>
+                                {b.name} ({b.balance.toLocaleString()} ج.م)
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
 

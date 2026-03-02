@@ -40,6 +40,7 @@ import {
   getSalesInvoiceWithReturns,
   updateSalesInvoice,
 } from "../actions";
+import { getTreasuryData } from "@/app/(dashboard)/treasury/actions";
 
 // ─── الأنواع ──────────────────────────────────────────────────────────────────
 interface Customer {
@@ -98,13 +99,26 @@ function InvoiceFormStep({
   const [topNotes, setTopNotes] = useState<string[]>([]);
   const [discount, setDiscount] = useState<number>(0); // Global discount
   const [notes, setNotes] = useState<string[]>([]);
+  const [safes, setSafes] = useState<{ id: number; name: string; balance: number }[]>([]);
+  const [banks, setBanks] = useState<{ id: number; name: string; balance: number }[]>([]);
+  const [selectedSafeId, setSelectedSafeId] = useState<string>("");
+  const [selectedBankId, setSelectedBankId] = useState<string>("");
+  const [treasuryType, setTreasuryType] = useState<"safe" | "bank">("safe");
 
   // قائمة جميع المنتجات
   const [products, setProducts] = useState<ProductData[]>([]);
 
-  // تحميل المنتجات
+  // تحميل المنتجات والخزائن
   useEffect(() => {
     getProducts().then(setProducts);
+    getTreasuryData().then((data) => {
+      const allSafes = data.accounts.filter(acc => acc.type === "safe") as any[];
+      const allBanks = data.accounts.filter(acc => acc.type === "bank") as any[];
+      setSafes(allSafes);
+      setBanks(allBanks);
+      // التحديد الافتراضي لأول خزنة
+      if (allSafes.length > 0) setSelectedSafeId(String(allSafes[0].id));
+    });
   }, []);
 
   const [returnsTotal, setReturnsTotal] = useState<number>(0);
@@ -296,6 +310,8 @@ function InvoiceFormStep({
         discount: itemsDiscount + discount,
         total: grandTotal,
         status: paymentType,
+        safeId: paymentType === "cash" && treasuryType === "safe" ? Number(selectedSafeId) : undefined,
+        bankId: paymentType === "cash" && treasuryType === "bank" ? Number(selectedBankId) : undefined,
         topNotes,
         notes,
         items: items.map(({ description, quantity, unitPrice, taxRate, discount, total, productId }) => {
@@ -472,7 +488,7 @@ function InvoiceFormStep({
                     </div>
 
                     <div className="space-y-1.5">
-                      <Label className="text-slate-600 text-sm font-bold">
+                      <Label className="text-slate-600 text-sm font-bold flex items-center gap-1">
                         تاريخ الفاتورة
                       </Label>
                       <Input
@@ -486,6 +502,75 @@ function InvoiceFormStep({
                     </div>
                   </div>
                 </div>
+
+                {paymentType === "cash" && (
+                  <div className="mt-4 pt-4 border-t flex flex-wrap items-end gap-4">
+                    <div className="space-y-1.5">
+                      <Label className="text-slate-600 text-sm font-bold">جهة الدفع (نقدي)</Label>
+                      <Select
+                        value={treasuryType}
+                        onValueChange={(v) => setTreasuryType(v as "safe" | "bank")}
+                        disabled={isViewMode}
+                      >
+                        <SelectTrigger className="w-32 bg-slate-50 border-slate-200">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="safe">خزنة</SelectItem>
+                          <SelectItem value="bank">بنك</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {treasuryType === "safe" ? (
+                      <div className="space-y-1.5 flex-1 max-w-[200px]">
+                        <Label className="text-slate-600 text-sm font-bold">اختر الخزنة</Label>
+                        <Select
+                          value={selectedSafeId}
+                          onValueChange={setSelectedSafeId}
+                          disabled={isViewMode || safes.length === 0}
+                        >
+                          <SelectTrigger className="bg-slate-50 border-slate-200">
+                            <SelectValue placeholder={safes.length === 0 ? "لا يوجد خزن" : "اختر الخزنة"} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {safes.map((s) => (
+                              <SelectItem key={s.id} value={String(s.id)}>
+                                {s.name} ({s.balance.toLocaleString()} ج.م)
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5 flex-1 max-w-[200px]">
+                        <Label className="text-slate-600 text-sm font-bold">اختر البنك</Label>
+                        <Select
+                          value={selectedBankId}
+                          onValueChange={setSelectedBankId}
+                          disabled={isViewMode || banks.length === 0}
+                        >
+                          <SelectTrigger className="bg-slate-50 border-slate-200">
+                            <SelectValue placeholder={banks.length === 0 ? "لا يوجد بنوك" : "اختر البنك"} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {banks.map((b) => (
+                              <SelectItem key={b.id} value={String(b.id)}>
+                                {b.name} ({b.balance.toLocaleString()} ج.م)
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                    {paymentType === "cash" && treasuryType === "safe" && safes.length === 0 && (
+                      <p className="text-xs text-red-500 font-bold mb-2">يرجى إضافة خزنة أولاً</p>
+                    )}
+                    {paymentType === "cash" && treasuryType === "bank" && banks.length === 0 && (
+                      <p className="text-xs text-red-500 font-bold mb-2">يرجى إضافة بنك أولاً</p>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
 

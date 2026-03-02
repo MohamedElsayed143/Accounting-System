@@ -118,6 +118,8 @@ export async function createPurchaseInvoice(data: {
   discount: number;
   total: number;
   status: "cash" | "credit" | "pending";
+  safeId?: number;
+  bankId?: number;
   items: {
     description: string;
     quantity: number;
@@ -164,6 +166,8 @@ export async function createPurchaseInvoice(data: {
         discount: data.discount,
         total: data.total,
         status: data.status,
+        safeId: data.status === "cash" ? data.safeId : null,
+        bankId: data.status === "cash" ? data.bankId : null,
         topNotes: data.topNotes || [],
         notes: data.notes || [],
         items: {
@@ -336,6 +340,26 @@ export async function updatePurchaseInvoice(
 // ─── حذف فاتورة (مع حذف حركات المخزون المرتبطة) ─────────────────────────
 export async function deletePurchaseInvoice(id: number) {
   await prisma.$transaction(async (tx) => {
+    // 0. جلب بيانات الفاتورة لمعرفة حالتها וחساباتها
+    const invoice = await tx.purchaseInvoice.findUnique({
+      where: { id },
+      select: { status: true, total: true, safeId: true, bankId: true }
+    });
+
+    if (invoice && invoice.status === "cash") {
+      if (invoice.safeId) {
+        await tx.treasurySafe.update({
+          where: { id: invoice.safeId },
+          data: { balance: { increment: invoice.total } }
+        });
+      } else if (invoice.bankId) {
+        await tx.treasuryBank.update({
+          where: { id: invoice.bankId },
+          data: { balance: { increment: invoice.total } }
+        });
+      }
+    }
+
     // تعديل الرصيد قبل الحذف
     const items = await tx.purchaseInvoiceItem.findMany({
       where: { invoiceId: id },
