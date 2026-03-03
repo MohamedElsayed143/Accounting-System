@@ -42,6 +42,7 @@ import {
   updateSalesInvoice,
 } from "../actions";
 import { getTreasuryData } from "@/app/(dashboard)/treasury/actions";
+import { getCompanySettingsAction } from "@/app/(dashboard)/settings/actions";
 
 // ─── الأنواع ──────────────────────────────────────────────────────────────────
 interface Customer {
@@ -106,13 +107,15 @@ function InvoiceFormStep({
   const [selectedSafeId, setSelectedSafeId] = useState<string>("");
   const [selectedBankId, setSelectedBankId] = useState<string>("");
   const [treasuryType, setTreasuryType] = useState<"safe" | "bank">("safe");
+  const [settings, setSettings] = useState<any>(null);
 
   // قائمة جميع المنتجات
   const [products, setProducts] = useState<ProductData[]>([]);
 
-  // تحميل المنتجات والخزائن
+  // تحميل المنتجات والخزائن والإعدادات
   useEffect(() => {
     getProducts().then(setProducts);
+    getCompanySettingsAction().then(setSettings);
     getTreasuryData().then((data) => {
       const allSafes = data.accounts.filter(acc => acc.type === "safe") as any[];
       const allBanks = data.accounts.filter(acc => acc.type === "bank") as any[];
@@ -795,21 +798,29 @@ function InvoiceFormStep({
       {/* ========== نسخة الطباعة (مضمنة بالكامل) ========== */}
       <PrintableInvoice
         invoiceNumber={invoiceNumber}
+        prefix={settings?.salesPrefix}
         date={invoiceDate}
         partnerName={customer?.name || ""}
         partnerLabel="العميل"
         title="فاتورة مبيعات"
-        items={items.map(item => ({
-          description: item.description,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          total: item.total
+        items={items.map(i => ({
+          description: i.description,
+          quantity: i.quantity,
+          unitPrice: i.unitPrice,
+          total: i.total
         }))}
         subtotal={subtotal}
         tax={totalTax}
-        total={returnsCount > 0 ? netTotal : grandTotal}
+        total={grandTotal}
         topNotes={topNotes}
         notes={notes}
+        companyName={settings?.companyName}
+        companyNameEn={settings?.companyNameEn}
+        companyLogo={settings?.companyLogo}
+        companyStamp={settings?.companyStamp}
+        showLogo={settings?.showLogoOnPrint}
+        showStamp={settings?.showStampOnPrint}
+        termsAndConditions={settings?.termsAndConditions}
       />
     </div>
   );

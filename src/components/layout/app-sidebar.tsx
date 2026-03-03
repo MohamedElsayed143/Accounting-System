@@ -192,7 +192,10 @@ export function AppSidebar() {
   return (
     <Sidebar className="border-l border-border/40 shadow-sm">
       <SidebarHeader className="border-b border-border/40 px-4 py-4 bg-gradient-to-b from-primary/5 to-transparent">
-        <Link href="/statistics" className="flex items-center gap-3 group">
+        <Link 
+          href={user?.role === "WORKER" ? "/sales-invoices" : "/statistics"} 
+          className="flex items-center gap-3 group"
+        >
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 shadow-md group-hover:shadow-lg transition-all">
             <Zap className="h-5 w-5 text-white" />
           </div>
@@ -208,29 +211,33 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent className="px-2 py-4">
-        <SidebarGroup>
-          <SidebarGroupLabel className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">
-            نظرة عامة
-          </SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {mainNavItems.map((item) => (
-                <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton 
-                    asChild 
-                    isActive={isActive(item.href)}
-                    className="group hover:bg-primary/10 transition-all"
-                  >
-                    <Link href={item.href} className="flex items-center gap-3">
-                      <item.icon className="h-4 w-4 group-hover:scale-110 transition-transform" />
-                      <span className="font-medium">{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {user?.role === "ADMIN" && (
+          <SidebarGroup>
+            <SidebarGroupLabel className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">
+              نظرة عامة
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {mainNavItems
+                  .filter(item => user?.role === "ADMIN" || item.href !== "/statistics")
+                  .map((item) => (
+                  <SidebarMenuItem key={item.href}>
+                    <SidebarMenuButton 
+                      asChild 
+                      isActive={isActive(item.href)}
+                      className="group hover:bg-primary/10 transition-all"
+                    >
+                      <Link href={item.href} className="flex items-center gap-3">
+                        <item.icon className="h-4 w-4 group-hover:scale-110 transition-transform" />
+                        <span className="font-medium">{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
 
         <SidebarGroup className="mt-4">
           <SidebarGroupLabel className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">
@@ -461,7 +468,9 @@ export function AppSidebar() {
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {otherNavItems.map((item) => (
+              {otherNavItems
+                .filter(item => user?.role === "ADMIN" || item.href !== "/settings")
+                .map((item) => (
                 item.subItems ? (
                   <Collapsible
                     key={item.href}

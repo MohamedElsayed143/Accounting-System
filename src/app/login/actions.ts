@@ -48,7 +48,7 @@ export async function loginAction(formData: FormData) {
 
     await setSessionCookie(session.id);
 
-    return { success: true };
+    return { success: true, role: user.role };
   } catch (error) {
     console.error("Login error:", error);
     return { error: "حدث خطأ غير متوقع. يرجى المحاولة لاحقاً." };

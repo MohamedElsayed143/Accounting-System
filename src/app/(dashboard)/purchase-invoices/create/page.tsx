@@ -39,6 +39,7 @@ import {
   PurchaseInvoiceItem
 } from "../actions"; // ✅ المسار الصحيح
 import { getTreasuryData } from "@/app/(dashboard)/treasury/actions";
+import { getCompanySettingsAction } from "@/app/(dashboard)/settings/actions";
 import { PrintableInvoice } from "@/components/invoices/printable-invoice";
 import { ProductSelect } from "@/components/shared/ProductSelect";
 import { DynamicNotes } from "@/components/shared/DynamicNotes";
@@ -109,14 +110,16 @@ function InvoiceFormStep({
 
   // قائمة جميع المنتجات للاختيار منها
   const [products, setProducts] = useState<ProductData[]>([]);
+  const [settings, setSettings] = useState<any>(null);
 
   // بيانات المرتجعات
   const [returnsTotal, setReturnsTotal] = useState<number>(0);
   const [returnsCount, setReturnsCount] = useState<number>(0);
 
-  // تحميل المنتجات
+  // تحميل المنتجات والإعدادات
   useEffect(() => {
     getProducts().then(setProducts);
+    getCompanySettingsAction().then(setSettings);
     getTreasuryData().then((data) => {
       const allSafes = data.accounts.filter(acc => acc.type === "safe") as any[];
       const allBanks = data.accounts.filter(acc => acc.type === "bank") as any[];
@@ -760,6 +763,7 @@ function InvoiceFormStep({
       {/* Printable Component */}
       <PrintableInvoice
         invoiceNumber={invoiceNumber}
+        prefix={settings?.purchasePrefix}
         date={invoiceDate}
         partnerName={supplier?.name || ""}
         partnerLabel="المورد"
@@ -775,6 +779,13 @@ function InvoiceFormStep({
         total={netTotal}
         topNotes={topNotes}
         notes={notes}
+        companyName={settings?.companyName}
+        companyNameEn={settings?.companyNameEn}
+        companyLogo={settings?.companyLogo}
+        companyStamp={settings?.companyStamp}
+        showLogo={settings?.showLogoOnPrint}
+        showStamp={settings?.showStampOnPrint}
+        termsAndConditions={settings?.termsAndConditions}
       />
     </div>
   );

@@ -30,6 +30,7 @@ import {
   getBestSellingProducts,
 } from "./actions";
 import { Navbar } from "@/components/layout/navbar";
+import { getAuthSession } from "@/app/login/actions";
 
 // ─────────────────────────────────────────────
 // Types
@@ -237,6 +238,12 @@ export default function StatisticsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
+      const session = await getAuthSession();
+      if (!session || session.user.role !== "ADMIN") {
+        window.location.href = "/sales-invoices";
+        return;
+      }
+
       const from = fromDate ? new Date(fromDate) : undefined;
       const to = toDate ? new Date(toDate) : undefined;
 

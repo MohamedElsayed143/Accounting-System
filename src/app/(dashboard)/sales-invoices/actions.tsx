@@ -204,7 +204,7 @@ export async function createSalesInvoice(data: {
       }
     }
 
-    // 4. إنشاء حركات مخزون (فقط إذا لم تكن معلقة)
+    // 4. إنشاء حركات مخزون وتحديث الرصيد الحالي (فقط إذا لم تكن معلقة)
     if (data.status !== "pending") {
       for (const item of data.items) {
         await tx.stockMovement.create({
@@ -216,6 +216,12 @@ export async function createSalesInvoice(data: {
             reference: `فاتورة بيع #${data.invoiceNumber}`,
             salesInvoiceId: invoice.id,
           },
+        });
+
+        // تحديث الرصيد الحالي للمنتج
+        await tx.product.update({
+          where: { id: item.productId },
+          data: { currentStock: { decrement: item.quantity } }
         });
       }
     }
@@ -287,7 +293,23 @@ export async function updateSalesInvoice(
       }
     }
 
-    // 1. حذف الأصناف القديمة وحركات المخزون
+    // 1. استرجاع الكميات القديمة لعكس أثرها على المخزون وحذف الأصناف القديمة وحركات المخزون
+    if (existingInvoice.status !== "pending") {
+      const oldItems = await tx.salesInvoiceItem.findMany({
+        where: { invoiceId: id },
+        select: { productId: true, quantity: true }
+      });
+
+      for (const oldItem of oldItems) {
+        if (oldItem.productId) {
+          await tx.product.update({
+            where: { id: oldItem.productId },
+            data: { currentStock: { increment: oldItem.quantity } }
+          });
+        }
+      }
+    }
+
     await tx.salesInvoiceItem.deleteMany({ where: { invoiceId: id } });
     await tx.stockMovement.deleteMany({ where: { salesInvoiceId: id } });
 
@@ -355,18 +377,26 @@ export async function updateSalesInvoice(
       }
     }
 
-    // 4. إنشاء حركات مخزون جديدة
-    for (const item of data.items) {
-      await tx.stockMovement.create({
-        data: {
-          productId: item.productId,
-          movementType: "SALE",
-          quantity: -item.quantity,
-          unitPrice: item.unitPrice,
-          reference: `فاتورة بيع #${data.invoiceNumber}`,
-          salesInvoiceId: invoice.id,
-        },
-      });
+    // 4. إنشاء حركات مخزون جديدة وتحديث الرصيد الحالي
+    if (data.status !== "pending") {
+      for (const item of data.items) {
+        await tx.stockMovement.create({
+          data: {
+            productId: item.productId,
+            movementType: "SALE",
+            quantity: -item.quantity,
+            unitPrice: item.unitPrice,
+            reference: `فاتورة بيع #${data.invoiceNumber}`,
+            salesInvoiceId: invoice.id,
+          },
+        });
+
+        // تحديث الرصيد الجديد
+        await tx.product.update({
+          where: { id: item.productId },
+          data: { currentStock: { decrement: item.quantity } }
+        });
+      }
     }
 
     revalidatePath("/sales-invoices");

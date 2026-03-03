@@ -29,6 +29,7 @@ import {
 } from "@/components/shared";
 import { getPurchaseInvoices, deletePurchaseInvoice, PurchaseInvoice } from "./actions";
 import { useRouter } from "next/navigation";
+import { getCompanySettingsAction } from "@/app/(dashboard)/settings/actions";
 import { ProcessInvoiceDialog } from "../pending-invoices/components/ProcessInvoiceDialog";
 
 const ITEMS_PER_PAGE = 8;
@@ -73,6 +74,7 @@ export default function PurchaseInvoicesPage() {
     null,
   );
   const [deleting, setDeleting] = useState(false);
+  const [prefix, setPrefix] = useState<string>("PUR");
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
   const router = useRouter();
 
@@ -80,6 +82,10 @@ export default function PurchaseInvoicesPage() {
     getPurchaseInvoices()
       .then((data) => setInvoices(data as PurchaseInvoice[]))
       .finally(() => setLoading(false));
+
+    getCompanySettingsAction().then(data => {
+      if (data?.purchasePrefix) setPrefix(data.purchasePrefix);
+    });
   }, []);
 
   const filteredInvoices = useMemo(() => {
@@ -235,8 +241,8 @@ export default function PurchaseInvoicesPage() {
                                 : "hover:bg-muted/20"
                             }
                           >
-                            <TableCell className="font-bold text-primary text-center">
-                              #{invoice.invoiceNumber}
+                            <TableCell className="font-bold text-primary text-center" dir="ltr">
+                              {prefix}-{String(invoice.invoiceNumber).padStart(4, "0")}
                             </TableCell>
                             <TableCell className="font-medium text-center">
                               {invoice.supplierName}
@@ -351,8 +357,8 @@ export default function PurchaseInvoicesPage() {
             </div>
             <DialogDescription className="text-base leading-relaxed pt-2">
               هل أنت متأكد من حذف الفاتورة{" "}
-              <span className="font-bold text-foreground">
-                #{invoiceToDelete?.invoiceNumber}
+              <span className="font-bold text-foreground" dir="ltr">
+                {prefix}-{String(invoiceToDelete?.invoiceNumber).padStart(4, "0")}
               </span>{" "}
               الخاصة بالمورد{" "}
               <span className="font-bold text-foreground">

@@ -24,7 +24,8 @@ export default function LoginPage() {
       setLoading(false);
     } else {
       toast.success("تم تسجيل الدخول بنجاح");
-      router.push("/dashboard");
+      const redirectPath = res.role === "WORKER" ? "/sales-invoices" : "/statistics";
+      router.push(redirectPath);
       router.refresh(); // Force a refresh to load session data
     }
   };

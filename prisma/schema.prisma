@@ -499,3 +499,20 @@ model Session {
 
   @@index([userId])
 }
+
+// ========== إعدادات الشركة والفواتير (Singleton) ==========
+model CompanySettings {
+  id                 Int      @id @default(1)
+  companyName        String?  @default("شركة المحاسبة الحديثة")
+  companyNameEn      String?  @default("Modern Accounting Co.")
+  companyLogo        String?  @db.Text
+  companyStamp       String?  @db.Text
+  showLogoOnPrint    Boolean  @default(true)
+  showStampOnPrint   Boolean  @default(true)
+  salesPrefix        String   @default("INV")
+  purchasePrefix     String   @default("PUR")
+  quotationPrefix    String   @default("QUO")
+  startNumber        Int      @default(1)
+  termsAndConditions String?  @db.Text
+  updatedAt          DateTime @updatedAt
+}

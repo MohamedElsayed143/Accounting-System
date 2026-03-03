@@ -20,6 +20,7 @@ import {
   DataTableToolbar, EmptyState, PaginationControls,
 } from "@/components/shared";
 import { getQuotations, deleteQuotation } from "./actions";
+import { getCompanySettingsAction } from "@/app/(dashboard)/settings/actions";
 
 // ─── أنواع ───
 interface QuotationRow {
@@ -59,12 +60,17 @@ export default function SalesQuotationsPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [quotationToDelete, setQuotationToDelete] = useState<QuotationRow | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [prefix, setPrefix] = useState<string>("QUO");
   const router = useRouter();
 
   useEffect(() => {
     getQuotations()
       .then((data) => setQuotations(data as QuotationRow[]))
       .finally(() => setLoading(false));
+
+    getCompanySettingsAction().then(data => {
+      if (data?.quotationPrefix) setPrefix(data.quotationPrefix);
+    });
   }, []);
 
   const filteredQuotations = useMemo(() => {
@@ -201,8 +207,8 @@ export default function SalesQuotationsPage() {
                                 : "hover:bg-muted/20"
                             }
                           >
-                            <TableCell className="font-bold text-primary text-center">
-                              {q.code}
+                            <TableCell className="font-bold text-primary text-center" dir="ltr">
+                              {prefix}-{String(q.code).padStart(4, "0")}
                             </TableCell>
                             <TableCell className="font-medium text-center">
                               {q.customerName}
@@ -298,8 +304,8 @@ export default function SalesQuotationsPage() {
             </div>
             <DialogDescription className="text-base leading-relaxed pt-2">
               هل أنت متأكد من حذف عرض السعر{" "}
-              <span className="font-bold text-foreground">
-                {quotationToDelete?.code}
+              <span className="font-bold text-foreground" dir="ltr">
+                {prefix}-{String(quotationToDelete?.code).padStart(4, "0")}
               </span>{" "}
               {quotationToDelete?.customerId ? (
                 <>

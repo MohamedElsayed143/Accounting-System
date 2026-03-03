@@ -26,11 +26,21 @@ import {
   Eye,
   EyeOff,
   AlertTriangle,
+  Users,
 } from "lucide-react";
 import { Loader2 } from "lucide-react";
 import { Navbar } from "@/components/layout/navbar";
-import { getSystemSettings, saveSystemSettings } from "./actions";
+import { getSystemSettings, saveSystemSettings, getUsers, createUser, deleteUser, getCompanySettingsAction, updateCompanySettingsAction } from "./actions";
 import { toast } from "sonner";
+import { getAuthSession } from "@/app/login/actions";
+import { useFormStatus } from "react-dom";
+import { 
+  UserPlus, 
+  Shield, 
+  Trash2,
+  Lock,
+  User as UserIcon
+} from "lucide-react";
 
 // ─────────────────────────────────────────────
 // Default settings shape
@@ -45,15 +55,13 @@ const DEFAULT: Settings = {
     taxId: "",
     commercialRegister: "",
     website: "",
-    logoBase64: "",
+    logoBase64: "", // We still use this temporarily in the UI state
     stampBase64: "",
   },
   invoice: {
     salesPrefix: "INV",
-    salesSuffix: "",
     startingNumber: 1,
     purchasePrefix: "PUR",
-    purchaseSuffix: "",
     quotationPrefix: "QUO",
     termsAndConditions:
       "جميع الأسعار شاملة الضريبة المضافة.\nيُرجى السداد خلال 30 يوماً من تاريخ الفاتورة.",
@@ -155,8 +163,8 @@ type Settings = {
     website: string; logoBase64: string; stampBase64: string;
   };
   invoice: {
-    salesPrefix: string; salesSuffix: string; startingNumber: number;
-    purchasePrefix: string; purchaseSuffix: string; quotationPrefix: string;
+    salesPrefix: string; startingNumber: number;
+    purchasePrefix: string; quotationPrefix: string;
     termsAndConditions: string; showLogoOnPrint: boolean; showStampOnPrint: boolean;
   };
   tax: {
@@ -363,15 +371,47 @@ function ImageUploader({ label, icon: Icon, value, onChange, hint }: {
   );
 }
 
+// ─────────────────────────────────────────────
+// Loading Button using useFormStatus
+// ─────────────────────────────────────────────
+function SaveChangesButton({ dirty, saved }: { dirty: boolean; saved: boolean }) {
+  const { pending } = useFormStatus();
+  
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all shadow-sm ${
+        saved 
+          ? "bg-emerald-600 text-white" 
+          : pending 
+            ? "bg-primary/70 text-primary-foreground cursor-wait" 
+            : "bg-primary text-primary-foreground hover:opacity-90"
+      }`}
+    >
+      {pending ? (
+        <>
+          <Loader2 className="w-4 h-4 animate-spin" /> جاري الحفظ...
+        </>
+      ) : saved ? (
+        <>
+          <CheckCircle2 className="w-4 h-4" /> تم الحفظ
+        </>
+      ) : (
+        <>
+          <Save className="w-4 h-4" /> حفظ الإعدادات
+        </>
+      )}
+    </button>
+  );
+}
 
-// ─────────────────────────────────────────────
-// Tabs
-// ─────────────────────────────────────────────
 const TABS = [
   { id: "company", label: "الشركة والفواتير", icon: Building2 },
   { id: "tax", label: "الضرائب والعملة", icon: Percent },
   { id: "inventory", label: "المخزون والخزينة", icon: Package },
   { id: "rbac", label: "الصلاحيات والأمان", icon: ShieldCheck },
+  { id: "users", label: "المستخدمون", icon: Users },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
 
@@ -383,6 +423,13 @@ type TabId = (typeof TABS)[number]["id"];
 export default function SystemSettingsPage() {
   const [tab, setTab] = useState<TabId>("company");
   const [s, setS] = useState<Settings>(DEFAULT);
+  const [sessionUser, setSessionUser] = useState<any>(null);
+  
+  // User Management State
+  const [users, setUsers] = useState<any[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [newUser, setNewUser] = useState({ username: "", password: "", role: "WORKER" });
+  const [addingUser, setAddingUser] = useState(false);
   const [isPending, startTransition] = React.useTransition();
   const [initialLoad, setInitialLoad] = useState(true);
   const [saved, setSaved] = useState(false);
@@ -392,7 +439,19 @@ export default function SystemSettingsPage() {
   useEffect(() => {
     async function load() {
       try {
-        const dbSettings = await getSystemSettings();
+        const session = await getAuthSession();
+        if (!session || session.user.role !== "ADMIN") {
+          toast.error("غير مصرح لك بدخول هذه الصفحة");
+          window.location.href = "/sales-invoices";
+          return;
+        }
+        setSessionUser(session.user);
+
+        const [dbSettings, companySettings] = await Promise.all([
+          getSystemSettings(),
+          getCompanySettingsAction()
+        ]);
+
         if (dbSettings) {
           setS((prev) => ({
             company: { ...prev.company, ...dbSettings.company },
@@ -400,6 +459,29 @@ export default function SystemSettingsPage() {
             tax: { ...prev.tax, ...dbSettings.tax },
             inventory: { ...prev.inventory, ...dbSettings.inventory },
             rbac: dbSettings.rbac ?? prev.rbac,
+          }));
+        }
+
+        if (companySettings) {
+          setS((prev) => ({
+            ...prev,
+            company: {
+              ...prev.company,
+              name: companySettings.companyName || prev.company.name,
+              nameEn: companySettings.companyNameEn || prev.company.nameEn,
+              logoBase64: companySettings.companyLogo || prev.company.logoBase64,
+              stampBase64: companySettings.companyStamp || prev.company.stampBase64,
+            },
+            invoice: {
+              ...prev.invoice,
+              salesPrefix: companySettings.salesPrefix,
+              purchasePrefix: companySettings.purchasePrefix,
+              quotationPrefix: companySettings.quotationPrefix,
+              startingNumber: companySettings.startNumber,
+              showLogoOnPrint: companySettings.showLogoOnPrint,
+              showStampOnPrint: companySettings.showStampOnPrint,
+              termsAndConditions: companySettings.termsAndConditions || prev.invoice.termsAndConditions,
+            }
           }));
         }
       } catch (err) {
@@ -410,6 +492,61 @@ export default function SystemSettingsPage() {
     }
     load();
   }, []);
+
+  // Fetch users when tab changes to users
+  useEffect(() => {
+    if (tab === "users") {
+      loadUsers();
+    }
+  }, [tab]);
+
+  const loadUsers = async () => {
+    setLoadingUsers(true);
+    try {
+      const data = await getUsers();
+      setUsers(data);
+    } catch (err) {
+      toast.error("فشل في تحميل المستخدمين");
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
+
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newUser.username || !newUser.password) return;
+    
+    setAddingUser(true);
+    try {
+      const res = await createUser(newUser);
+      if (res?.error) {
+        toast.error(res.error);
+      } else {
+        toast.success("تم إنشاء المستخدم بنجاح");
+        setNewUser({ username: "", password: "", role: "WORKER" });
+        loadUsers();
+      }
+    } catch (err) {
+      toast.error("حدث خطأ أثناء الإنشاء");
+    } finally {
+      setAddingUser(false);
+    }
+  };
+
+  const handleDeleteUser = async (id: number) => {
+    if (!confirm("هل أنت متأكد من حذف هذا المستخدم؟")) return;
+    try {
+      const res = await deleteUser(id);
+      if (res?.error) {
+        toast.error(res.error);
+      } else {
+        toast.success("تم حذف المستخدم");
+        loadUsers();
+      }
+    } catch (err) {
+      toast.error("حدث خطأ أثناء الحذف");
+    }
+  };
 
 
   const update = useCallback(<K extends keyof Settings>(
@@ -484,7 +621,29 @@ export default function SystemSettingsPage() {
   const handleSave = () => {
     startTransition(async () => {
       try {
+        // 1. Save general settings to SystemSettings JSON
         await saveSystemSettings(s);
+
+        // 2. Save company/invoice specific settings to dedicated model
+        const res = await updateCompanySettingsAction({
+          companyName: s.company.name,
+          companyNameEn: s.company.nameEn,
+          companyLogo: s.company.logoBase64,
+          companyStamp: s.company.stampBase64,
+          showLogoOnPrint: s.invoice.showLogoOnPrint,
+          showStampOnPrint: s.invoice.showStampOnPrint,
+          salesPrefix: s.invoice.salesPrefix,
+          purchasePrefix: s.invoice.purchasePrefix,
+          quotationPrefix: s.invoice.quotationPrefix,
+          startNumber: s.invoice.startingNumber,
+          termsAndConditions: s.invoice.termsAndConditions,
+        });
+
+        if (res?.error) {
+          toast.error(res.error);
+          return;
+        }
+
         setSaved(true);
         setDirty(false);
         toast.success("تم حفظ إعدادات النظام بنجاح");
@@ -512,34 +671,27 @@ export default function SystemSettingsPage() {
     <>
       <Navbar title="إعدادات النظام" />
       <div className="flex-1 p-4 md:p-6 bg-slate-50/40 dark:bg-transparent min-h-screen" dir="rtl">
-
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl bg-gradient-to-l from-primary/10 via-primary/5 to-transparent border border-primary/20 p-5 shadow-sm mb-6">
-          <div>
-            <h1 className="text-2xl font-bold bg-gradient-to-l from-primary to-primary/70 bg-clip-text text-transparent flex items-center gap-2">
-              <Settings className="w-7 h-7 text-primary" />
-              إعدادات النظام
-            </h1>
-            <p className="text-sm text-muted-foreground mt-1">تحكم كامل في سلوك النظام والعلامة التجارية</p>
+        {/* Header with Form for useFormStatus support */}
+        <form action={handleSave}>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl bg-gradient-to-l from-primary/10 via-primary/5 to-transparent border border-primary/20 p-5 shadow-sm mb-6">
+            <div>
+              <h1 className="text-2xl font-bold bg-gradient-to-l from-primary to-primary/70 bg-clip-text text-transparent flex items-center gap-2">
+                <Settings className="w-7 h-7 text-primary" />
+                إعدادات النظام
+              </h1>
+              <p className="text-sm text-muted-foreground mt-1">تحكم كامل في سلوك النظام والعلامة التجارية</p>
+            </div>
+            <div className="flex items-center gap-2">
+              {dirty && (
+                <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  تغييرات غير محفوظة
+                </span>
+              )}
+              <SaveChangesButton dirty={dirty} saved={saved} />
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            {dirty && (
-              <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
-                <AlertTriangle className="w-3.5 h-3.5" />
-                تغييرات غير محفوظة
-              </span>
-            )}
-            <button
-              onClick={handleSave}
-              disabled={isPending}
-              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all shadow-sm ${
-                saved ? "bg-emerald-600 text-white" : isPending ? "bg-primary/70 text-primary-foreground cursor-wait" : "bg-primary text-primary-foreground hover:opacity-90"
-              }`}
-            >
-              {isPending ? <><Loader2 className="w-4 h-4 animate-spin" /> جاري الحفظ...</> : saved ? <><CheckCircle2 className="w-4 h-4" /> تم الحفظ</> : <><Save className="w-4 h-4" /> حفظ الإعدادات</>}
-            </button>
-          </div>
-        </div>
+        </form>
 
         <div className="flex flex-col lg:flex-row gap-6">
           {/* ── Tab Sidebar ── */}
@@ -602,32 +754,45 @@ export default function SystemSettingsPage() {
                 </Card>
 
                 <Card title="ترقيم الفواتير" icon={Hash}>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     <Field label="بادئة فواتير المبيعات" hint="بادئة رقم الفاتورة">
                       <Input value={s.invoice.salesPrefix} onChange={(v) => update("invoice", "salesPrefix", v)} placeholder="INV" dir="ltr" />
-                    </Field>
-                    <Field label="رقم البداية" hint="أول رقم تسلسلي">
-                      <Input value={s.invoice.startingNumber} onChange={(v) => update("invoice", "startingNumber", Number(v))} type="number" placeholder="1" />
-                    </Field>
-                    <Field label="لاحقة (Suffix)" hint="اختياري — بعد الرقم">
-                      <Input value={s.invoice.salesSuffix} onChange={(v) => update("invoice", "salesSuffix", v)} placeholder="مثال: -EGY" dir="ltr" />
                     </Field>
                     <Field label="بادئة فواتير المشتريات">
                       <Input value={s.invoice.purchasePrefix} onChange={(v) => update("invoice", "purchasePrefix", v)} placeholder="PUR" dir="ltr" />
                     </Field>
-                    <Field label="لاحقة المشتريات">
-                      <Input value={s.invoice.purchaseSuffix} onChange={(v) => update("invoice", "purchaseSuffix", v)} placeholder="" dir="ltr" />
-                    </Field>
                     <Field label="بادئة عروض الأسعار">
                       <Input value={s.invoice.quotationPrefix} onChange={(v) => update("invoice", "quotationPrefix", v)} placeholder="QUO" dir="ltr" />
                     </Field>
+                    <Field label="رقم البداية" hint="أول رقم تسلسلي">
+                      <Input value={s.invoice.startingNumber} onChange={(v) => update("invoice", "startingNumber", Number(v))} type="number" placeholder="1" />
+                    </Field>
                   </div>
-                  {/* Preview */}
-                  <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3 flex flex-wrap gap-4 text-xs">
-                    <span className="text-slate-500">معاينة:</span>
-                    <span><span className="text-slate-400">مبيعات:</span> <strong className="font-mono text-primary">{s.invoice.salesPrefix}-{String(s.invoice.startingNumber).padStart(4, "0")}{s.invoice.salesSuffix}</strong></span>
-                    <span><span className="text-slate-400">مشتريات:</span> <strong className="font-mono text-primary">{s.invoice.purchasePrefix}-{String(s.invoice.startingNumber).padStart(4, "0")}{s.invoice.purchaseSuffix}</strong></span>
-                    <span><span className="text-slate-400">عرض سعر:</span> <strong className="font-mono text-primary">{s.invoice.quotationPrefix}-{String(s.invoice.startingNumber).padStart(4, "0")}</strong></span>
+                  {/* Reactive Preview */}
+                  <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 space-y-3">
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                      <Eye className="w-3.5 h-3.5" /> معاينة أرقام الفواتير القادمة
+                    </p>
+                    <div className="flex flex-wrap gap-6 text-sm">
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[10px] text-slate-400 font-bold uppercase">قسيمة مبيعات</span>
+                        <strong className="font-mono text-primary bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 px-3 py-1.5 rounded-lg shadow-sm">
+                          {s.invoice.salesPrefix}-{String(s.invoice.startingNumber).padStart(4, "0")}
+                        </strong>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[10px] text-slate-400 font-bold uppercase">قسيمة مشتريات</span>
+                        <strong className="font-mono text-primary bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 px-3 py-1.5 rounded-lg shadow-sm">
+                          {s.invoice.purchasePrefix}-{String(s.invoice.startingNumber).padStart(4, "0")}
+                        </strong>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[10px] text-slate-400 font-bold uppercase">عرض سعر</span>
+                        <strong className="font-mono text-primary bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 px-3 py-1.5 rounded-lg shadow-sm">
+                          {s.invoice.quotationPrefix}-{String(s.invoice.startingNumber).padStart(4, "0")}
+                        </strong>
+                      </div>
+                    </div>
                   </div>
                 </Card>
 
@@ -882,6 +1047,102 @@ export default function SystemSettingsPage() {
                   </span>
                 </div>
               </Card>
+            )}
+
+            {/* ══ Tab: Users ══ */}
+            {tab === "users" && (
+              <div className="space-y-6">
+                <Card title="إضافة مستخدم جديد" icon={UserPlus}>
+                  <form onSubmit={handleCreateUser} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                    <Field label="اسم المستخدم">
+                      <Input 
+                        value={newUser.username} 
+                        onChange={(v) => setNewUser({ ...newUser, username: v })}
+                        placeholder="أدخل اسم المستخدم"
+                      />
+                    </Field>
+                    <Field label="كلمة المرور">
+                      <div className="relative">
+                        <Input 
+                          value={newUser.password} 
+                          onChange={(v) => setNewUser({ ...newUser, password: v })}
+                          type="password"
+                          placeholder="••••••••"
+                        />
+                        <Lock className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
+                      </div>
+                    </Field>
+                    <Field label="الدور (الصلاحية)">
+                      <Select 
+                        value={newUser.role}
+                        onChange={(v) => setNewUser({ ...newUser, role: v })}
+                        options={[
+                          { value: "WORKER", label: "موظف" },
+                          { value: "ADMIN", label: "مدير" },
+                        ]}
+                      />
+                    </Field>
+                    <button
+                      type="submit"
+                      disabled={addingUser}
+                      className="h-[42px] flex items-center justify-center gap-2 bg-primary text-white rounded-xl font-bold hover:opacity-90 disabled:opacity-50 transition-all shadow-sm"
+                    >
+                      {addingUser ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                      إنشاء الحساب
+                    </button>
+                  </form>
+                </Card>
+
+                <Card title="قائمة المستخدمين" icon={Users}>
+                  {loadingUsers ? (
+                    <div className="flex justify-center p-8">
+                      <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto rounded-xl border border-slate-100 dark:border-slate-800">
+                      <table className="w-full text-sm text-right">
+                        <thead>
+                          <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-100 dark:border-slate-800">
+                            <th className="px-5 py-3 font-bold text-slate-700 dark:text-slate-300">المستخدم</th>
+                            <th className="px-5 py-3 font-bold text-slate-700 dark:text-slate-300">الصلاحية</th>
+                            <th className="px-5 py-3 font-bold text-slate-700 dark:text-slate-300 text-center">الإجراءات</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
+                          {users.map((u) => (
+                            <tr key={u.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
+                              <td className="px-5 py-3">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+                                    <UserIcon className="w-4 h-4 text-slate-500" />
+                                  </div>
+                                  <span className="font-medium text-slate-900 dark:text-white">{u.username}</span>
+                                </div>
+                              </td>
+                              <td className="px-5 py-3">
+                                <span className={`px-2.5 py-1 rounded-lg text-xs font-bold ${
+                                  u.role === "ADMIN" ? "bg-blue-100 text-blue-700" : "bg-emerald-100 text-emerald-700"
+                                }`}>
+                                  {u.role === "ADMIN" ? "مدير" : "موظف"}
+                                </span>
+                              </td>
+                              <td className="px-5 py-3 text-center">
+                                <button
+                                  onClick={() => handleDeleteUser(u.id)}
+                                  className="p-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-lg transition-all"
+                                  title="حذف المستخدم"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </Card>
+              </div>
             )}
 
             {/* ── Sticky save on dirty ── */}

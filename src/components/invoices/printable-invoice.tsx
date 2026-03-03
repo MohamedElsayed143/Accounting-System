@@ -9,7 +9,8 @@ interface InvoiceItem {
 }
 
 interface PrintableInvoiceProps {
-  invoiceNumber: number;
+  invoiceNumber: string | number;
+  prefix?: string;
   date: string | Date;
   partnerName: string;
   partnerLabel: string; // "العميل" or "المورد"
@@ -20,25 +21,50 @@ interface PrintableInvoiceProps {
   total: number;
   topNotes?: string[];
   notes?: string[];
+  // Company Settings
+  companyName?: string;
+  companyNameEn?: string;
+  companyLogo?: string | null;
+  companyStamp?: string | null;
+  showLogo?: boolean;
+  showStamp?: boolean;
+  termsAndConditions?: string;
 }
 
 export const PrintableInvoice = React.forwardRef<HTMLDivElement, PrintableInvoiceProps>(
-  ({ invoiceNumber, date, partnerName, partnerLabel, title, items, subtotal, tax, total, topNotes, notes }, ref) => {
+  ({ 
+    invoiceNumber, prefix, date, partnerName, partnerLabel, title, 
+    items, subtotal, tax, total, topNotes, notes,
+    companyName = "شركة المحاسبة الحديثة",
+    companyNameEn = "Modern Accounting Co.",
+    companyLogo,
+    companyStamp,
+    showLogo = true,
+    showStamp = true,
+    termsAndConditions
+  }, ref) => {
     return (
-      <div ref={ref} className="hidden print:block print:p-10 bg-white text-black min-h-screen" dir="rtl">
+      <div ref={ref} className="hidden print:block print:p-10 bg-white text-black min-h-screen relative" dir="rtl">
         {/* Header Section */}
         <div className="flex justify-between items-start border-b-4 border-primary pb-6 mb-8">
-          <div className="space-y-1">
-            <h1 className="text-4xl font-black text-primary mb-2 tracking-tight">{title}</h1>
-            <div className="flex flex-col">
-              <span className="text-xl font-bold text-slate-800">مصنع الطوب الحديث</span>
-              <span className="text-sm text-slate-500">لجميع أنواع طوب البناء والتشيد</span>
+          <div className="flex items-start gap-4">
+            {showLogo && companyLogo && (
+              <img src={companyLogo} alt="Logo" className="w-20 h-20 object-contain rounded-lg" />
+            )}
+            <div className="space-y-1">
+              <h1 className="text-4xl font-black text-primary mb-2 tracking-tight">{title}</h1>
+              <div className="flex flex-col">
+                <span className="text-xl font-bold text-slate-800">{companyName}</span>
+                <span className="text-xs text-slate-500 font-medium tracking-wide uppercase">{companyNameEn}</span>
+              </div>
             </div>
           </div>
-          <div className="text-left bg-slate-50 p-4 rounded-xl border border-slate-100">
+          <div className="text-left bg-slate-50 p-4 rounded-xl border border-slate-100 min-w-[200px]">
             <div className="flex flex-col items-end">
               <span className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">رقم الفاتورة</span>
-              <span className="text-2xl font-black text-primary">#{invoiceNumber}</span>
+              <span className="text-2xl font-black text-primary" dir="ltr">
+                {prefix ? `${prefix}-` : ""}{String(invoiceNumber).padStart(4, "0")}
+              </span>
               <div className="mt-2 text-sm text-slate-600 font-medium">
                 التاريخ: {format(new Date(date), "yyyy/MM/dd")}
               </div>
@@ -113,12 +139,12 @@ export const PrintableInvoice = React.forwardRef<HTMLDivElement, PrintableInvoic
           </table>
         </div>
 
-        {/* Totals Section */}
-        <div className="flex justify-between items-start gap-8">
-          <div className="flex-1">
+        {/* Totals & Terms Section */}
+        <div className="flex justify-between items-stretch gap-8 min-h-[150px]">
+          <div className="flex-1 flex flex-col gap-4">
              {/* Bottom Notes */}
             {notes && notes.length > 0 && notes.some(n => n.trim() !== "") && (
-              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl h-full">
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl">
                 <h4 className="font-bold text-sm text-slate-600 mb-2">ملاحظات الفاتورة:</h4>
                 <div className="space-y-1">
                   {notes.filter(n => n.trim() !== "").map((note, i) => (
@@ -127,27 +153,47 @@ export const PrintableInvoice = React.forwardRef<HTMLDivElement, PrintableInvoic
                 </div>
               </div>
             )}
+
+            {/* Terms and Conditions */}
+            {termsAndConditions && (
+              <div className="p-4 border-2 border-dashed border-slate-200 rounded-xl mt-auto">
+                <h4 className="font-bold text-xs text-slate-400 uppercase mb-2">الشروط والأحكام:</h4>
+                <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap">{termsAndConditions}</p>
+              </div>
+            )}
           </div>
           
-          <div className="w-80 bg-slate-900 text-white rounded-2xl p-6 space-y-4 shadow-xl">
-            <div className="flex justify-between text-sm text-slate-400">
-              <span>الإجمالي الفرعي:</span>
-              <span className="font-bold">{subtotal.toLocaleString("ar-EG")} ج.م</span>
+          <div className="w-80 flex flex-col gap-4">
+            <div className="bg-slate-900 text-white rounded-2xl p-6 space-y-4 shadow-xl flex-1">
+              <div className="flex justify-between text-sm text-slate-400">
+                <span>الإجمالي الفرعي:</span>
+                <span className="font-bold">{subtotal.toLocaleString("ar-EG")} ج.م</span>
+              </div>
+              <div className="flex justify-between text-sm text-slate-400">
+                <span>قيمة الضريبة:</span>
+                <span className="font-bold">{tax.toLocaleString("ar-EG")} ج.م</span>
+              </div>
+              <div className="border-t border-white/10 pt-4 flex justify-between items-center bg-white/5 -mx-6 px-6 -mb-6 py-6 mt-4">
+                <span className="text-base font-bold text-white/80">المبلغ الإجمالي</span>
+                <span className="text-2xl font-black text-green-400">{total.toLocaleString("ar-EG")} ج.م</span>
+              </div>
             </div>
-            <div className="flex justify-between text-sm text-slate-400">
-              <span>قيمة الضريبة:</span>
-              <span className="font-bold">{tax.toLocaleString("ar-EG")} ج.م</span>
-            </div>
-            <div className="border-t border-white/10 pt-4 flex justify-between items-center bg-white/5 -mx-6 px-6 -mb-6 py-6 mt-4">
-              <span className="text-base font-bold text-white/80">المبلغ الإجمالي</span>
-              <span className="text-2xl font-black text-green-400">{total.toLocaleString("ar-EG")} ج.م</span>
-            </div>
+
+            {/* Company Stamp */}
+            {showStamp && companyStamp && (
+              <div className="flex justify-center items-center py-4">
+                <div className="relative group">
+                  <img src={companyStamp} alt="Stamp" className="w-32 h-32 object-contain opacity-80" />
+                  <div className="absolute inset-0 border-4 border-slate-200/20 rounded-full scale-110 pointer-events-none" />
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
         {/* Footer */}
-        <div className="mt-20 flex flex-col items-center justify-center border-t border-slate-100 pt-10">
-          <p className="text-sm font-bold text-slate-400 tracking-widest uppercase">شكراً لتعاملكم مع مصنع الطوب الحديث</p>
+        <div className="mt-16 flex flex-col items-center justify-center border-t border-slate-100 pt-8">
+          <p className="text-sm font-bold text-slate-400 tracking-widest uppercase">شكراً لتعاملكم مع {companyName}</p>
         </div>
       </div>
     );

@@ -30,6 +30,7 @@ import {
 } from "@/components/shared";
 import { getSalesInvoices, deleteSalesInvoice } from "./actions";
 import { useRouter } from "next/navigation";
+import { getCompanySettingsAction } from "@/app/(dashboard)/settings/actions";
 import { ProcessInvoiceDialog } from "../pending-invoices/components/ProcessInvoiceDialog";
 
 interface InvoiceRow {
@@ -84,12 +85,17 @@ export default function SalesInvoicesPage() {
   const [invoiceToDelete, setInvoiceToDelete] = useState<InvoiceRow | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
+  const [prefix, setPrefix] = useState<string>("INV");
   const router = useRouter();
 
   useEffect(() => {
     getSalesInvoices()
       .then((data) => setInvoices(data as InvoiceRow[]))
       .finally(() => setLoading(false));
+    
+    getCompanySettingsAction().then(data => {
+      if (data?.salesPrefix) setPrefix(data.salesPrefix);
+    });
   }, []);
 
   const filteredInvoices = useMemo(() => {
@@ -244,8 +250,8 @@ export default function SalesInvoicesPage() {
                                 : "hover:bg-muted/20"
                             }
                           >
-                            <TableCell className="font-bold text-primary text-center">
-                              #{invoice.invoiceNumber}
+                            <TableCell className="font-bold text-primary text-center" dir="ltr">
+                              {prefix}-{String(invoice.invoiceNumber).padStart(4, "0")}
                             </TableCell>
                             <TableCell className="font-medium text-center">
                               {invoice.customerName}
@@ -360,8 +366,8 @@ export default function SalesInvoicesPage() {
             </div>
             <DialogDescription className="text-base leading-relaxed pt-2">
               هل أنت متأكد من حذف الفاتورة{" "}
-              <span className="font-bold text-foreground">
-                #{invoiceToDelete?.invoiceNumber}
+              <span className="font-bold text-foreground" dir="ltr">
+                {prefix}-{String(invoiceToDelete?.invoiceNumber).padStart(4, "0")}
               </span>{" "}
               الخاصة بالعميل{" "}
               <span className="font-bold text-foreground">

@@ -164,44 +164,42 @@ export async function createPurchaseReturn(data: PurchaseReturnInput) {
         include: { items: true },
       });
 
-      // ✅ إنشاء حركات مخزون (مرتجع شراء = خروج -) - فقط إذا كان المرتجع آجل (deferred)
-      if (data.refundMethod === 'credit') {
-        for (const returnItem of data.items) {
-          if (!returnItem.invoiceItemId) continue;
-          const invoiceItem = invoice.items.find(i => i.id === returnItem.invoiceItemId);
-          if (!(invoiceItem as any)?.productId) continue;
+      // ✅ إنشاء حركات مخزون وتحديث الرصيد الحالي (مرتجع شراء = خروج -) - يعمل لجميع طرق الرد
+      for (const returnItem of data.items) {
+        if (!returnItem.invoiceItemId) continue;
+        const invoiceItem = invoice.items.find(i => i.id === returnItem.invoiceItemId);
+        if (!(invoiceItem as any)?.productId) continue;
 
-          const productId = (invoiceItem as any).productId;
+        const productId = (invoiceItem as any).productId;
 
-          // فحص المخزون — منع الرصيد السالب
-          const product = await tx.product.findUnique({
-            where: { id: productId },
-            select: { name: true, currentStock: true }
-          });
+        // فحص المخزون — منع الرصيد السالب
+        const product = await tx.product.findUnique({
+          where: { id: productId },
+          select: { name: true, currentStock: true }
+        });
 
-          if (!product) throw new Error("الصنف غير موجود");
+        if (!product) throw new Error("الصنف غير موجود");
 
-          if (product.currentStock < returnItem.quantity) {
-            throw new Error(`لا يوجد رصيد كافي في المخزون — المتوفر: ${product.currentStock}, المطلوب: ${returnItem.quantity}`);
-          }
-
-          await tx.stockMovement.create({
-            data: {
-              productId,
-              movementType: "PURCHASE_RETURN",
-              quantity: -returnItem.quantity, // خروج
-              unitPrice: returnItem.unitPrice,
-              reference: `مرتجع شراء #${returnNumber}`,
-              purchaseReturnId: purchaseReturn.id,
-            },
-          });
-
-          // تحديث الرصيد الحالي (خصم)
-          await tx.product.update({
-            where: { id: productId },
-            data: { currentStock: { decrement: returnItem.quantity } }
-          });
+        if (product.currentStock < returnItem.quantity) {
+          throw new Error(`لا يوجد رصيد كافي في المخزون — المتوفر: ${product.currentStock}, المطلوب: ${returnItem.quantity}`);
         }
+
+        await tx.stockMovement.create({
+          data: {
+            productId,
+            movementType: "PURCHASE_RETURN",
+            quantity: -returnItem.quantity, // خروج
+            unitPrice: returnItem.unitPrice,
+            reference: `مرتجع شراء #${returnNumber}`,
+            purchaseReturnId: purchaseReturn.id,
+          },
+        });
+
+        // تحديث الرصيد الحالي (خصم)
+        await tx.product.update({
+          where: { id: productId },
+          data: { currentStock: { decrement: returnItem.quantity } }
+        });
       }
 
       // تحديث رصيد الخزنة/البنك مباشرة (بدون إنشاء سند قبض لأن سندات القبض مرتبطة بالعملاء وليس الموردين)
@@ -262,21 +260,19 @@ export async function deletePurchaseReturn(id: number) {
       });
       if (!purchaseReturn) throw new Error("المرتجع غير موجود");
 
-      // 2. عكس حركات المخزون (كان - خروج، سيصبح + دخول) وتحديث الرصيد - فقط للمرتجع الآجل
-      if (purchaseReturn.refundMethod === 'credit') {
-        for (const returnItem of purchaseReturn.items) {
-          if (!returnItem.invoiceItemId) continue;
-          const invoiceItem = purchaseReturn.invoice.items.find(i => i.id === returnItem.invoiceItemId);
-          if (!(invoiceItem as any)?.productId) continue;
+      // 2. عكس حركات المخزون (كان - خروج، سيصبح + دخول) وتحديث الرصيد - لجميع طرق الرد
+      for (const returnItem of purchaseReturn.items) {
+        if (!returnItem.invoiceItemId) continue;
+        const invoiceItem = purchaseReturn.invoice.items.find(i => i.id === returnItem.invoiceItemId);
+        if (!(invoiceItem as any)?.productId) continue;
 
-          const productId = (invoiceItem as any).productId;
+        const productId = (invoiceItem as any).productId;
 
-          // إضافة للرصيد (لأننا نحذف المرتجع الذي أخرج كمية من المخزون)
-          await tx.product.update({
-            where: { id: productId },
-            data: { currentStock: { increment: returnItem.quantity } }
-          });
-        }
+        // إضافة للرصيد (لأننا نحذف المرتجع الذي أخرج كمية من المخزون)
+        await tx.product.update({
+          where: { id: productId },
+          data: { currentStock: { increment: returnItem.quantity } }
+        });
       }
 
       // 3. عكس حركة الخزنة/البنك (كان + قبض، سيصبح - صرف)
