@@ -17,6 +17,7 @@ import { AccountSearchDropdown } from "../components/AccountSearchDropdown";
 import { LedgerTable } from "../components/LedgerTable";
 import { PrintableStatement } from "../components/PrintableStatement";
 import { getAccountTransactions } from "../actions";
+import { getCompanySettingsAction } from "../../settings/actions";
 import type { TransactionType } from "../actions";
 
 export default function BankReportPage() {
@@ -27,6 +28,7 @@ export default function BankReportPage() {
   const [transactions, setTransactions] = useState<TransactionType[]>([]);
   const [openingBalance, setOpeningBalance] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+  const [companySettings, setCompanySettings] = useState<any>(null);
 
   const fetchTransactions = async () => {
     if (!selectedBank) return;
@@ -47,6 +49,10 @@ export default function BankReportPage() {
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    getCompanySettingsAction().then(setCompanySettings);
+  }, []);
 
   useEffect(() => {
     if (selectedBank) {
@@ -220,6 +226,12 @@ export default function BankReportPage() {
           toDate={toDate ? new Date(toDate) : undefined}
           transactions={transactions}
           openingBalance={openingBalance}
+          companyName={companySettings?.companyName}
+          companyNameEn={companySettings?.companyNameEn}
+          companyLogo={companySettings?.companyLogo}
+          companyStamp={companySettings?.companyStamp}
+          showLogo={companySettings?.showLogoOnPrint}
+          showStamp={companySettings?.showStampOnPrint}
         />
       )}
     </div>

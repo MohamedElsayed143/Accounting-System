@@ -29,6 +29,7 @@ import {
   getReturnsSummary,
   getBestSellingProducts,
 } from "./actions";
+import { getCompanySettingsAction } from "../settings/actions";
 import { Navbar } from "@/components/layout/navbar";
 import { getAuthSession } from "@/app/login/actions";
 
@@ -112,7 +113,7 @@ function KPICard({
 // ─────────────────────────────────────────────
 // Mini Bar Chart (pure CSS)
 // ─────────────────────────────────────────────
-function MiniBarChart({ data }: { data: MonthlyData }) {
+function MiniBarChart({ data, companySettings }: { data: MonthlyData; companySettings: any }) {
   const maxVal = Math.max(...data.flatMap((d) => [d.revenue, d.purchases]), 1);
   return (
     <div className="flex items-end gap-1 h-40 px-2">
@@ -123,13 +124,13 @@ function MiniBarChart({ data }: { data: MonthlyData }) {
             <div
               className="flex-1 rounded-t bg-emerald-400 dark:bg-emerald-500 transition-all duration-500 hover:opacity-80 relative"
               style={{ height: `${(d.revenue / maxVal) * 100}%` }}
-              title={`مبيعات: ${fmt(d.revenue)} ج.م`}
+              title={`مبيعات: ${fmt(d.revenue)} ${companySettings?.currencyCode || "ج.م"}`}
             />
             {/* Purchases bar */}
             <div
               className="flex-1 rounded-t bg-rose-400 dark:bg-rose-500 transition-all duration-500 hover:opacity-80"
               style={{ height: `${(d.purchases / maxVal) * 100}%` }}
-              title={`مشتريات: ${fmt(d.purchases)} ج.م`}
+              title={`مشتريات: ${fmt(d.purchases)} ${companySettings?.currencyCode || "ج.م"}`}
             />
           </div>
           <span className="text-[9px] text-slate-400 text-center leading-tight">
@@ -144,7 +145,7 @@ function MiniBarChart({ data }: { data: MonthlyData }) {
 // ─────────────────────────────────────────────
 // Donut Chart (SVG)
 // ─────────────────────────────────────────────
-function DonutChart({ slices }: { slices: PaymentSlice[] }) {
+function DonutChart({ slices, companySettings }: { slices: PaymentSlice[]; companySettings: any }) {
   const total = slices.reduce((s, x) => s + x.value, 0);
   if (total === 0) {
     return (
@@ -199,7 +200,7 @@ function DonutChart({ slices }: { slices: PaymentSlice[] }) {
               <span className="text-xs text-slate-600 dark:text-slate-400">{s.label}</span>
             </div>
             <span className="text-xs font-bold text-slate-900 dark:text-white">
-              {fmt(s.value)} <span className="font-normal text-slate-400">ج.م</span>
+              {fmt(s.value)} <span className="font-normal text-slate-400">{companySettings?.currencyCode || "ج.م"}</span>
             </span>
           </div>
         ))}
@@ -234,6 +235,11 @@ export default function StatisticsPage() {
   const [activity, setActivity] = useState<Activity[]>([]);
   const [returnsSummary, setReturnsSummary] = useState<ReturnsSummary | null>(null);
   const [bestSelling, setBestSelling] = useState<BestProduct[]>([]);
+  const [companySettings, setCompanySettings] = useState<any>(null);
+
+  useEffect(() => {
+    getCompanySettingsAction().then(setCompanySettings);
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -378,7 +384,7 @@ export default function StatisticsPage() {
             <>
               <KPICard
                 title="إجمالي المبيعات"
-                value={`${fmt(summary.totalRevenue)} ج.م`}
+                value={`${fmt(summary.totalRevenue)} ${companySettings?.currencyCode || "ج.م"}`}
                 sub={`${summary.salesCount} فاتورة`}
                 icon={ShoppingBag}
                 trend="up"
@@ -388,7 +394,7 @@ export default function StatisticsPage() {
               />
               <KPICard
                 title="إجمالي المشتريات"
-                value={`${fmt(summary.totalPurchases)} ج.م`}
+                value={`${fmt(summary.totalPurchases)} ${companySettings?.currencyCode || "ج.م"}`}
                 sub={`${summary.purchasesCount} فاتورة`}
                 icon={ShoppingCart}
                 trend="down"
@@ -398,7 +404,7 @@ export default function StatisticsPage() {
               />
               <KPICard
                 title="صافي الربح"
-                value={`${fmt(summary.netProfit)} ج.م`}
+                value={`${fmt(summary.netProfit)} ${companySettings?.currencyCode || "ج.م"}`}
                 icon={TrendingUp}
                 trend={summary.netProfit >= 0 ? "up" : "down"}
                 trendLabel={summary.netProfit >= 0 ? "ربح" : "خسارة"}
@@ -421,7 +427,7 @@ export default function StatisticsPage() {
               />
               <KPICard
                 title="رصيد الخزينة"
-                value={`${fmt(summary.treasuryBalance)} ج.م`}
+                value={`${fmt(summary.treasuryBalance)} ${companySettings?.currencyCode || "ج.م"}`}
                 icon={Landmark}
                 color="text-cyan-600"
                 bg="bg-cyan-100"
@@ -435,19 +441,19 @@ export default function StatisticsPage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-100 dark:border-slate-800 shadow-sm">
               <p className="text-xs font-bold text-slate-500 uppercase mb-1">مرتجعات مبيعات</p>
-              <p className="text-xl font-bold text-rose-600">{fmt(returnsSummary.salesReturnsTotal)} ج.م</p>
+              <p className="text-xl font-bold text-rose-600">{fmt(returnsSummary.salesReturnsTotal)} {companySettings?.currencyCode || "ج.م"}</p>
               <p className="text-xs text-slate-400">{returnsSummary.salesReturnsCount} مرتجع</p>
             </div>
             <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-100 dark:border-slate-800 shadow-sm">
               <p className="text-xs font-bold text-slate-500 uppercase mb-1">مرتجعات مشتريات</p>
-              <p className="text-xl font-bold text-emerald-600">{fmt(returnsSummary.purchaseReturnsTotal)} ج.م</p>
+              <p className="text-xl font-bold text-emerald-600">{fmt(returnsSummary.purchaseReturnsTotal)} {companySettings?.currencyCode || "ج.م"}</p>
               <p className="text-xs text-slate-400">{returnsSummary.purchaseReturnsCount} مرتجع</p>
             </div>
             {summary && (
               <>
                 <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-100 dark:border-slate-800 shadow-sm">
                   <p className="text-xs font-bold text-slate-500 uppercase mb-1">فواتير معلقة</p>
-                  <p className="text-xl font-bold text-amber-600">{fmt(summary.pendingTotal)} ج.م</p>
+                  <p className="text-xl font-bold text-amber-600">{fmt(summary.pendingTotal)} {companySettings?.currencyCode || "ج.م"}</p>
                   <p className="text-xs text-slate-400">{summary.pendingCount} فاتورة</p>
                 </div>
                 <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-100 dark:border-slate-800 shadow-sm">
@@ -486,7 +492,7 @@ export default function StatisticsPage() {
             {loading ? (
               <Skeleton className="w-full h-40" />
             ) : (
-              <MiniBarChart data={monthly} />
+              <MiniBarChart data={monthly} companySettings={companySettings} />
             )}
           </div>
 
@@ -499,7 +505,7 @@ export default function StatisticsPage() {
             {loading ? (
               <Skeleton className="w-full h-32" />
             ) : (
-              <DonutChart slices={paymentMethods} />
+              <DonutChart slices={paymentMethods} companySettings={companySettings} />
             )}
             {!loading && paymentMethods.length > 0 && (
               <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 space-y-1">
@@ -550,7 +556,7 @@ export default function StatisticsPage() {
                           <p className="text-xs text-slate-500">{c.count} فاتورة</p>
                         </div>
                         <p className="text-sm font-bold text-emerald-700 dark:text-emerald-400 shrink-0">
-                          {fmt(c.total)} <span className="text-xs font-normal">ج.م</span>
+                          {fmt(c.total)} <span className="text-xs font-normal">{companySettings?.currencyCode || "ج.م"}</span>
                         </p>
                       </div>
                       <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1.5">
@@ -600,7 +606,7 @@ export default function StatisticsPage() {
                           <p className="text-xs text-slate-500">{s.count} فاتورة</p>
                         </div>
                         <p className="text-sm font-bold text-rose-700 dark:text-rose-400 shrink-0">
-                          {fmt(s.total)} <span className="text-xs font-normal">ج.م</span>
+                          {fmt(s.total)} <span className="text-xs font-normal">{companySettings?.currencyCode || "ج.م"}</span>
                         </p>
                       </div>
                       <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1.5">
@@ -721,7 +727,7 @@ export default function StatisticsPage() {
                       </div>
                       <div className="text-left shrink-0 space-y-1">
                         <p className={`text-sm font-bold ${isSale ? "text-emerald-700" : "text-rose-700"}`}>
-                          {fmt(a.total)} <span className="text-xs font-normal">ج.م</span>
+                          {fmt(a.total)} <span className="text-xs font-normal">{companySettings?.currencyCode || "ج.م"}</span>
                         </p>
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${sl.cls}`}>
                           {sl.text}

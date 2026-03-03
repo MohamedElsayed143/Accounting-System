@@ -32,30 +32,15 @@ import {
   getSupplierTransactions,
   getCustomerById,
   getSupplierById,
+  type CustomerType,
+  type TransactionType,
 } from "./actions";
+import { getCompanySettingsAction } from "../settings/actions";
+import { PrintableStatement } from "./components/PrintableStatement";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
-// --- Types ---
-type CustomerType = {
-  id: number;
-  code: number;
-  name: string;
-  phone: string | null;
-  type: "customer" | "supplier";
-};
-
-type TransactionType = {
-  id: string;
-  date: Date;
-  createdAt: Date;
-  type: "فاتورة" | "سند قبض" | "سند صرف" | "مرتجع";
-  documentId: string;
-  description: string | null;
-  paymentMethod: string;
-  debit: number;
-  credit: number;
-  runningBalance?: number;
-};
+// --- Types imported from actions.tsx ---
 
 // --- Loading Skeleton ---
 const TableSkeleton = () => (
@@ -252,9 +237,11 @@ const CustomerSearchDropdown = ({
 // --- Transaction Details Modal ---
 const TransactionModal = ({
   transaction,
+  companySettings,
   onClose,
 }: {
   transaction: TransactionType | null;
+  companySettings: any;
   onClose: () => void;
 }) => {
   if (!transaction) return null;
@@ -366,7 +353,7 @@ const TransactionModal = ({
                   </span>
                   <span className="text-lg font-bold text-emerald-600">
                     +{transaction.debit.toLocaleString("ar-EG")}{" "}
-                    <span className="text-xs">ج.م</span>
+                    <span className="text-xs">{companySettings?.currencyCode || "ج.م"}</span>
                   </span>
                 </div>
               )}
@@ -377,7 +364,7 @@ const TransactionModal = ({
                   </span>
                   <span className="text-lg font-bold text-rose-600">
                     -{transaction.credit.toLocaleString("ar-EG")}{" "}
-                    <span className="text-xs">ج.م</span>
+                    <span className="text-xs">{companySettings?.currencyCode || "ج.م"}</span>
                   </span>
                 </div>
               )}
@@ -421,6 +408,7 @@ export default function AccountStatementPage() {
   >([]);
   const [fromDate, setFromDate] = useState<string>("");
   const [toDate, setToDate] = useState<string>("");
+  const [companySettings, setCompanySettings] = useState<any>(null);
   const itemsPerPage = 10;
 
   const searchParams = useSearchParams();
@@ -441,6 +429,10 @@ export default function AccountStatementPage() {
         });
     }
   }, [searchParams]);
+
+  useEffect(() => {
+    getCompanySettingsAction().then(setCompanySettings);
+  }, []);
 
   const loadTransactions = async () => {
     if (!selectedEntity) return;
@@ -601,84 +593,7 @@ export default function AccountStatementPage() {
         </div>
       </div>
 
-      {/* ============================================================ */}
-      {/* PRINT HEADER - يظهر فقط عند الطباعة                          */}
-      {/* ============================================================ */}
-      <div className="hidden print:block">
-        {/* شريط العنوان الرئيسي */}
-        <div className="print-header-bar">
-          <div className="print-company-logo">
-            <span className="print-company-initials">ش</span>
-          </div>
-          <div>
-            <h1 className="print-company-name">شركة المحاسبة الحديثة</h1>
-            <p className="print-report-title">كشف حساب تفصيلي</p>
-          </div>
-          <div className="print-header-meta">
-            <div className="print-meta-row">
-              <span className="print-meta-label">تاريخ الطباعة</span>
-              <span className="print-meta-value">
-                {new Date().toLocaleDateString("ar-EG", {
-                  year: "numeric",
-                  month: "long",
-                  day: "numeric",
-                })}
-              </span>
-            </div>
-            <div className="print-meta-row">
-              <span className="print-meta-label">نوع الحساب</span>
-              <span className="print-meta-value">
-                {reportType === "customer" ? "حساب عميل" : "حساب مورد"}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* بطاقة معلومات العميل/المورد */}
-        {selectedEntity && (
-          <div className="print-entity-card">
-            <div className="print-entity-info">
-              <div className="print-entity-avatar">
-                {selectedEntity.name.charAt(0)}
-              </div>
-              <div>
-                <p className="print-entity-name">{selectedEntity.name}</p>
-                <div className="print-entity-details">
-                  <span>
-                    كود: <strong>{selectedEntity.code}</strong>
-                  </span>
-                  {selectedEntity.phone && (
-                    <span>📱 {selectedEntity.phone}</span>
-                  )}
-                </div>
-              </div>
-            </div>
-            <div className="print-period-info">
-              {(fromDate || toDate) && (
-                <>
-                  {fromDate && (
-                    <span>
-                      من:{" "}
-                      <strong>
-                        {new Date(fromDate).toLocaleDateString("ar-EG")}
-                      </strong>
-                    </span>
-                  )}
-                  {toDate && (
-                    <span>
-                      إلى:{" "}
-                      <strong>
-                        {new Date(toDate).toLocaleDateString("ar-EG")}
-                      </strong>
-                    </span>
-                  )}
-                </>
-              )}
-              {!fromDate && !toDate && <span>جميع الفترات</span>}
-            </div>
-          </div>
-        )}
-      </div>
+      {/* Print View is handled by PrintableStatement below */}
 
       {/* Filters Section */}
       <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 print:hidden">
@@ -851,7 +766,7 @@ export default function AccountStatementPage() {
             <p className={`text-xl font-bold mt-1 ${item.color}`}>
               {item.isCount ? item.value : item.value.toLocaleString("ar-EG")}
               {!item.isCount && (
-                <span className="text-xs font-normal"> ج.م</span>
+                <span className="text-xs font-normal"> {companySettings?.currencyCode || "ج.م"}</span>
               )}
             </p>
           </div>
@@ -946,54 +861,7 @@ export default function AccountStatementPage() {
         </table>
       </div>
 
-      {/* جدول الطباعة - يظهر فقط في الطباعة */}
-      <div className="hidden print:block print:overflow-visible">
-        <table className="print-table">
-          <thead>
-            <tr>
-              <th>التاريخ</th>
-              <th>النوع</th>
-              <th>رقم المستند</th>
-              <th>البيان</th>
-              <th>طريقة الدفع</th>
-              <th>مدين (+)</th>
-              <th>دائن (-)</th>
-              <th>الرصيد</th>
-            </tr>
-          </thead>
-          <tbody>
-            {displayTransactions.map((row, idx) => (
-              <tr key={row.id}>
-                <td>{new Date(row.date).toLocaleDateString('ar-EG', { 
-                  weekday: 'long', 
-                  year: 'numeric', 
-                  month: 'long', 
-                  day: 'numeric' 
-                })}</td>
-                <td>
-                  <span className={`print-type-badge ${row.type === 'فاتورة' ? 'print-invoice' : row.type === 'سند قبض' ? 'print-receipt' : row.type === 'سند صرف' ? 'print-payment' : 'print-return'}`}>
-                    {row.type}
-                  </span>
-                </td>
-                <td>{row.documentId}</td>
-                <td>{row.description}</td>
-                <td>{row.paymentMethod}</td>
-                <td className="print-debit">{row.debit > 0 ? row.debit.toLocaleString('ar-EG') : '—'}</td>
-                <td className="print-credit">{row.credit > 0 ? row.credit.toLocaleString('ar-EG') : '—'}</td>
-                <td className="print-balance">{row.runningBalance?.toLocaleString('ar-EG')}</td>
-              </tr>
-            ))}
-          </tbody>
-          <tfoot>
-            <tr>
-              <td colSpan={5}>الإجمالي الكلي</td>
-              <td className="print-debit">{summary.debit.toLocaleString('ar-EG')}</td>
-              <td className="print-credit">{summary.credit.toLocaleString('ar-EG')}</td>
-              <td className="print-balance">{summary.current.toLocaleString('ar-EG')}</td>
-            </tr>
-          </tfoot>
-        </table>
-      </div>
+      {/* Print View handled by component at the bottom */}
 
       {/* حالة عدم وجود بيانات */}
       {displayTransactions.length === 0 && !isLoading && (
@@ -1049,18 +917,28 @@ export default function AccountStatementPage() {
   )}
 </div>
 
-      {/* Print Footer */}
-      <div className="hidden print:block print-footer">
-        <div className="print-footer-line"></div>
-        <div className="print-footer-content">
-          <span>تم إنشاء التقرير بواسطة نظام المحاسبة الحديثة</span>
-          <span>صفحة 1</span>
-          <span>{new Date().toLocaleDateString("ar-EG")}</span>
-        </div>
-      </div>
+      {/* New Printable Version using Branding */}
+      {selectedEntity && (
+        <PrintableStatement
+          title={`كشف حساب ${reportType === "customer" ? "عميل" : "مورد"}`}
+          accountName={selectedEntity.name}
+          accountInfo={`كود: ${selectedEntity.code}${selectedEntity.phone ? ` | موبايل: ${selectedEntity.phone}` : ""}`}
+          fromDate={fromDate ? new Date(fromDate) : undefined}
+          toDate={toDate ? new Date(toDate) : undefined}
+          transactions={displayTransactions}
+          openingBalance={summary.prev}
+          companyName={companySettings?.companyName}
+          companyNameEn={companySettings?.companyNameEn}
+          companyLogo={companySettings?.companyLogo}
+          companyStamp={companySettings?.companyStamp}
+          showLogo={companySettings?.showLogoOnPrint}
+          showStamp={companySettings?.showStampOnPrint}
+        />
+      )}
 
       <TransactionModal
         transaction={selectedTransaction}
+        companySettings={companySettings}
         onClose={() => setSelectedTransaction(null)}
       />
 

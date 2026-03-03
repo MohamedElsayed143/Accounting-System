@@ -19,6 +19,7 @@ interface PrintableInvoiceProps {
   subtotal: number;
   tax: number;
   total: number;
+  currencyCode?: string;
   topNotes?: string[];
   notes?: string[];
   // Company Settings
@@ -34,7 +35,7 @@ interface PrintableInvoiceProps {
 export const PrintableInvoice = React.forwardRef<HTMLDivElement, PrintableInvoiceProps>(
   ({ 
     invoiceNumber, prefix, date, partnerName, partnerLabel, title, 
-    items, subtotal, tax, total, topNotes, notes,
+    items, subtotal, tax, total, currencyCode = "ج.م", topNotes, notes,
     companyName = "شركة المحاسبة الحديثة",
     companyNameEn = "Modern Accounting Co.",
     companyLogo,
@@ -167,15 +168,15 @@ export const PrintableInvoice = React.forwardRef<HTMLDivElement, PrintableInvoic
             <div className="bg-slate-900 text-white rounded-2xl p-6 space-y-4 shadow-xl flex-1">
               <div className="flex justify-between text-sm text-slate-400">
                 <span>الإجمالي الفرعي:</span>
-                <span className="font-bold">{subtotal.toLocaleString("ar-EG")} ج.م</span>
+                <span className="font-bold">{subtotal.toLocaleString("ar-EG")} {currencyCode}</span>
               </div>
               <div className="flex justify-between text-sm text-slate-400">
                 <span>قيمة الضريبة:</span>
-                <span className="font-bold">{tax.toLocaleString("ar-EG")} ج.م</span>
+                <span className="font-bold">{tax.toLocaleString("ar-EG")} {currencyCode}</span>
               </div>
               <div className="border-t border-white/10 pt-4 flex justify-between items-center bg-white/5 -mx-6 px-6 -mb-6 py-6 mt-4">
                 <span className="text-base font-bold text-white/80">المبلغ الإجمالي</span>
-                <span className="text-2xl font-black text-green-400">{total.toLocaleString("ar-EG")} ج.م</span>
+                <span className="text-2xl font-black text-green-400">{total.toLocaleString("ar-EG")} {currencyCode}</span>
               </div>
             </div>
 

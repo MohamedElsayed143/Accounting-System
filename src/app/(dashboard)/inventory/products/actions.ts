@@ -9,6 +9,7 @@ export interface ProductData extends Product {
   category: { id: number; name: string } | null;
   currentStock: number;
   profitMargin: number;
+  taxRate: number;
 }
 
 // دالة مساعدة لتوليد كود فريد للمنتج
@@ -73,6 +74,7 @@ export async function createProduct(data: {
   buyPrice: number;
   sellPrice: number;
   profitMargin: number;
+  taxRate: number;
   categoryId?: number;
 }) {
   if (!data.code.trim()) throw new Error("كود الصنف مطلوب");
@@ -95,6 +97,7 @@ export async function createProduct(data: {
         buyPrice: data.buyPrice,
         sellPrice: data.sellPrice,
         profitMargin: data.profitMargin,
+        taxRate: data.taxRate,
         minStock: 0,
         categoryId: data.categoryId || null,
         isActive: true,
@@ -114,6 +117,7 @@ export async function updateProduct(
     buyPrice: number;
     sellPrice: number;
     profitMargin: number;
+    taxRate: number;
     categoryId?: number;
   }
 ) {
@@ -130,6 +134,7 @@ export async function updateProduct(
       buyPrice: data.buyPrice,
       sellPrice: data.sellPrice,
       profitMargin: data.profitMargin,
+      taxRate: data.taxRate,
       categoryId: data.categoryId || null,
     },
   });

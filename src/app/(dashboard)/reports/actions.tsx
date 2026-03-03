@@ -177,13 +177,16 @@ export async function getCustomerTransactions(
       orderBy: { returnDate: 'asc' }
     });
 
+    // جلب إعدادات الشركة للبادئات
+    const settings = await prisma.companySettings.findUnique({ where: { id: 1 } });
+
     // تحويل الفواتير
     const invoiceTransactions: TransactionType[] = (invoices || []).map(inv => ({
       id: `inv-${inv.id}`,
       date: inv.invoiceDate,
       createdAt: inv.createdAt,
       type: inv.status === 'pending' ? 'مسودة' : 'فاتورة',
-      documentId: `INV-${inv.invoiceNumber}`,
+      documentId: `${settings?.salesPrefix || 'INV'}-${String(inv.invoiceNumber).padStart(4, "0")}`,
       description: inv.description || (inv.status === 'pending' ? `مسودة فاتورة بيع للعميل ${inv.customerName}` : `فاتورة بيع للعميل ${inv.customerName}`),
       paymentMethod: inv.status === 'cash' ? 'نقدي' : inv.status === 'credit' ? 'آجل' : 'معلقة',
       debit: inv.status === 'pending' ? 0 : inv.total,
@@ -209,7 +212,7 @@ export async function getCustomerTransactions(
       date: ret.returnDate,
       createdAt: ret.createdAt,
       type: 'مرتجع',
-      documentId: `RET-${ret.returnNumber}`,
+      documentId: `RET-${String(ret.returnNumber).padStart(4, "0")}`,
       description: `مرتجع مبيعات - ${ret.reason || 'بدون سبب'}`,
       paymentMethod: ret.refundMethod === 'cash' ? 'نقدي' : ret.refundMethod === 'bank' ? 'بنك' : 'آجل',
       debit: 0,
@@ -292,13 +295,16 @@ export async function getSupplierTransactions(
       orderBy: { returnDate: 'asc' }
     });
 
+    // جلب إعدادات الشركة للبادئات
+    const settings = await prisma.companySettings.findUnique({ where: { id: 1 } });
+
     // تحويل الفواتير
     const invoiceTransactions: TransactionType[] = invoices.map(inv => ({
       id: `purch-${inv.id}`,
       date: inv.invoiceDate,
       createdAt: inv.createdAt,
       type: inv.status === 'pending' ? 'مسودة' : 'فاتورة',
-      documentId: `PUR-${inv.invoiceNumber}`,
+      documentId: `${settings?.purchasePrefix || 'PUR'}-${String(inv.invoiceNumber).padStart(4, "0")}`,
       description: inv.description || (inv.status === 'pending' ? `مسودة فاتورة شراء من المورد ${inv.supplierName}` : `فاتورة شراء من المورد ${inv.supplierName}`),
       paymentMethod: inv.status === 'cash' ? 'نقدي' : inv.status === 'credit' ? 'آجل' : 'معلقة',
       debit: 0,
@@ -324,7 +330,7 @@ export async function getSupplierTransactions(
       date: ret.returnDate,
       createdAt: ret.createdAt,
       type: 'مرتجع',
-      documentId: `RET-${ret.returnNumber}`,
+      documentId: `RET-${String(ret.returnNumber).padStart(4, "0")}`,
       description: `مرتجع مشتريات - ${ret.reason || 'بدون سبب'}`,
       paymentMethod: ret.refundMethod === 'cash' ? 'نقدي' : ret.refundMethod === 'bank' ? 'بنك' : 'آجل',
       debit: 0,
@@ -500,6 +506,9 @@ export async function getAccountTransactions(
       }),
     ]);
 
+    // جلب إعدادات الشركة للبادئات
+    const settings = await prisma.companySettings.findUnique({ where: { id: 1 } });
+
     // 3. تحويل المعاملات
     const mappedReceipts: TransactionType[] = receipts.map((r: any) => ({
       id: `rec-${r.id}`,
@@ -530,7 +539,7 @@ export async function getAccountTransactions(
       date: r.returnDate,
       createdAt: r.createdAt,
       type: 'مرتجع مبيعات',
-      documentId: `SR-${r.returnNumber}`,
+      documentId: `SR-${String(r.returnNumber).padStart(4, "0")}`,
       description: `مرتجع مبيعات من العميل ${r.customer.name}`,
       paymentMethod: 'نقدي',
       debit: 0,
@@ -542,7 +551,7 @@ export async function getAccountTransactions(
       date: r.returnDate,
       createdAt: r.createdAt,
       type: 'مرتجع مشتريات',
-      documentId: `PR-${r.returnNumber}`,
+      documentId: `PR-${String(r.returnNumber).padStart(4, "0")}`,
       description: `مرتجع مشتريات من المورد ${r.supplier.name}`,
       paymentMethod: 'نقدي',
       debit: r.total,
@@ -578,7 +587,7 @@ export async function getAccountTransactions(
       date: s.invoiceDate,
       createdAt: s.createdAt,
       type: 'فاتورة مبيعات',
-      documentId: `INV-${s.invoiceNumber}`,
+      documentId: `${settings?.salesPrefix || 'INV'}-${String(s.invoiceNumber).padStart(4, "0")}`,
       description: `فاتورة مبيعات كاش - ${s.customerName}`,
       paymentMethod: 'نقدي',
       debit: s.total,
@@ -590,7 +599,7 @@ export async function getAccountTransactions(
       date: p.invoiceDate,
       createdAt: p.createdAt,
       type: 'فاتورة مشتريات',
-      documentId: `PUR-${p.invoiceNumber}`,
+      documentId: `${settings?.purchasePrefix || 'PUR'}-${String(p.invoiceNumber).padStart(4, "0")}`,
       description: `فاتورة مشتريات كاش - ${p.supplierName}`,
       paymentMethod: 'نقدي',
       debit: 0,

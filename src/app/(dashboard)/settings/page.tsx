@@ -30,7 +30,16 @@ import {
 } from "lucide-react";
 import { Loader2 } from "lucide-react";
 import { Navbar } from "@/components/layout/navbar";
-import { getSystemSettings, saveSystemSettings, getUsers, createUser, deleteUser, getCompanySettingsAction, updateCompanySettingsAction } from "./actions";
+import { 
+  getSystemSettings, 
+  saveSystemSettings, 
+  getUsers, 
+  createUser, 
+  deleteUser, 
+  getCompanySettingsAction, 
+  updateCompanySettingsAction,
+  updateFinancialSettingsAction
+} from "./actions";
 import { toast } from "sonner";
 import { getAuthSession } from "@/app/login/actions";
 import { useFormStatus } from "react-dom";
@@ -71,16 +80,13 @@ const DEFAULT: Settings = {
   tax: {
     enabled: true,
     name: "ضريبة القيمة المضافة",
-    nameShort: "VAT",
-    rate: 14,
-    inclusive: false, // false = exclusive (taxe added on top)
-    applyByDefault: true,
+    rate: 15,
+    type: "EXCLUSIVE",
   },
   inventory: {
     allowNegativeStock: false,
     autoAdjustInventory: false,
-    currency: "EGP",
-    currencySymbol: "ج.م",
+    currency: "ج.م",
     decimalPrecision: 2,
     lowStockThreshold: 5,
   },
@@ -168,13 +174,17 @@ type Settings = {
     termsAndConditions: string; showLogoOnPrint: boolean; showStampOnPrint: boolean;
   };
   tax: {
-    enabled: boolean; name: string; nameShort: string;
-    rate: number; inclusive: boolean; applyByDefault: boolean;
+    enabled: boolean; 
+    name: string;
+    rate: number; 
+    type: "INCLUSIVE" | "EXCLUSIVE";
   };
   inventory: {
-    allowNegativeStock: boolean; autoAdjustInventory: boolean;
-    currency: string; currencySymbol: string;
-    decimalPrecision: number; lowStockThreshold: number;
+    allowNegativeStock: boolean; 
+    autoAdjustInventory: boolean;
+    currency: string;
+    decimalPrecision: number; 
+    lowStockThreshold: number;
   };
   rbac: {
     roles: Record<string, { label: string; permissions: Record<string, boolean> }>;
@@ -481,6 +491,18 @@ export default function SystemSettingsPage() {
               showLogoOnPrint: companySettings.showLogoOnPrint,
               showStampOnPrint: companySettings.showStampOnPrint,
               termsAndConditions: companySettings.termsAndConditions || prev.invoice.termsAndConditions,
+            },
+            tax: {
+              ...prev.tax,
+              enabled: companySettings.taxEnabled,
+              name: companySettings.taxName,
+              rate: companySettings.taxPercentage,
+              type: companySettings.taxType,
+            },
+            inventory: {
+              ...prev.inventory,
+              currency: companySettings.currencyCode,
+              decimalPrecision: companySettings.decimalPlaces,
             }
           }));
         }
@@ -639,8 +661,18 @@ export default function SystemSettingsPage() {
           termsAndConditions: s.invoice.termsAndConditions,
         });
 
-        if (res?.error) {
-          toast.error(res.error);
+        // 3. Save financial settings (Tax & Currency)
+        const resFinancial = await updateFinancialSettingsAction({
+          taxEnabled: s.tax.enabled,
+          taxName: s.tax.name,
+          taxPercentage: s.tax.rate,
+          taxType: s.tax.type,
+          currencyCode: s.inventory.currency,
+          decimalPlaces: s.inventory.decimalPrecision,
+        });
+
+        if (res?.error || resFinancial?.error) {
+          toast.error(res?.error || resFinancial?.error);
           return;
         }
 
@@ -829,16 +861,13 @@ export default function SystemSettingsPage() {
 
                   {s.tax.enabled && (
                     <div className="space-y-4 pt-2 border-t border-slate-100 dark:border-slate-800 mt-2">
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <Field label="اسم الضريبة" hint="مثال: ضريبة القيمة المضافة">
                           <Input value={s.tax.name} onChange={(v) => update("tax", "name", v)} placeholder="ضريبة القيمة المضافة" />
                         </Field>
-                        <Field label="الاختصار" hint="يظهر في العناوين">
-                          <Input value={s.tax.nameShort} onChange={(v) => update("tax", "nameShort", v)} placeholder="VAT" dir="ltr" />
-                        </Field>
                         <Field label="نسبة الضريبة (%)">
                           <div className="relative">
-                            <Input value={s.tax.rate} onChange={(v) => update("tax", "rate", Number(v))} type="number" placeholder="14" />
+                            <Input value={s.tax.rate} onChange={(v) => update("tax", "rate", Number(v))} type="number" placeholder="15" />
                             <Percent className="absolute left-3 top-3 w-4 h-4 text-slate-400 pointer-events-none" />
                           </div>
                         </Field>
@@ -849,8 +878,8 @@ export default function SystemSettingsPage() {
                         <div className="grid grid-cols-2 gap-3">
                           <button
                             type="button"
-                            onClick={() => update("tax", "inclusive", false)}
-                            className={`p-4 rounded-xl border-2 text-right transition-all ${!s.tax.inclusive ? "border-primary bg-primary/10" : "border-slate-200 dark:border-slate-700 hover:border-primary/40"}`}
+                            onClick={() => update("tax", "type", "EXCLUSIVE")}
+                            className={`p-4 rounded-xl border-2 text-right transition-all ${s.tax.type === "EXCLUSIVE" ? "border-primary bg-primary/10" : "border-slate-200 dark:border-slate-700 hover:border-primary/40"}`}
                           >
                             <p className="font-bold text-sm text-slate-900 dark:text-white">حصرية (Exclusive)</p>
                             <p className="text-xs text-slate-500 mt-1">الضريبة تُضاف فوق السعر</p>
@@ -858,8 +887,8 @@ export default function SystemSettingsPage() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => update("tax", "inclusive", true)}
-                            className={`p-4 rounded-xl border-2 text-right transition-all ${s.tax.inclusive ? "border-primary bg-primary/10" : "border-slate-200 dark:border-slate-700 hover:border-primary/40"}`}
+                            onClick={() => update("tax", "type", "INCLUSIVE")}
+                            className={`p-4 rounded-xl border-2 text-right transition-all ${s.tax.type === "INCLUSIVE" ? "border-primary bg-primary/10" : "border-slate-200 dark:border-slate-700 hover:border-primary/40"}`}
                           >
                             <p className="font-bold text-sm text-slate-900 dark:text-white">شاملة (Inclusive)</p>
                             <p className="text-xs text-slate-500 mt-1">الضريبة مدمجة في السعر</p>
@@ -867,50 +896,52 @@ export default function SystemSettingsPage() {
                           </button>
                         </div>
                       </div>
-
-                      <Toggle
-                        checked={s.tax.applyByDefault}
-                        onChange={(v) => update("tax", "applyByDefault", v)}
-                        label="تطبيق الضريبة افتراضياً على بنود الفاتورة الجديدة"
-                      />
                     </div>
                   )}
                 </Card>
 
                 <Card title="إعدادات العملة والأرقام" icon={Landmark}>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <Field label="العملة الافتراضية">
                       <Select
                         value={s.inventory.currency}
                         onChange={(v) => update("inventory", "currency", v)}
                         options={[
-                          { value: "EGP", label: "🇪🇬 جنيه مصري (EGP)" },
-                          { value: "SAR", label: "🇸🇦 ريال سعودي (SAR)" },
-                          { value: "AED", label: "🇦🇪 درهم إماراتي (AED)" },
-                          { value: "KWD", label: "🇰🇼 دينار كويتي (KWD)" },
-                          { value: "USD", label: "🇺🇸 دولار أمريكي (USD)" },
-                          { value: "EUR", label: "🇪🇺 يورو (EUR)" },
-                          { value: "GBP", label: "🇬🇧 جنيه إسترليني (GBP)" },
+                          { value: "ج.م", label: "🇪🇬 جنيه مصري (ج.م)" },
+                          { value: "ر.س", label: "🇸🇦 ريال سعودي (ر.س)" },
+                          { value: "د.إ", label: "🇦🇪 درهم إماراتي (د.إ)" },
+                          { value: "د.ك", label: "🇰🇼 دينار كويتي (د.ك)" },
+                          { value: "د.أ", label: "🇺🇸 دولار أمريكي (د.أ)" },
+                          { value: "يورو", label: "🇪🇺 يورو (يورو)" },
                         ]}
                       />
-                    </Field>
-                    <Field label="رمز العملة" hint="يظهر في الجداول">
-                      <Input value={s.inventory.currencySymbol} onChange={(v) => update("inventory", "currencySymbol", v)} placeholder="ج.م" />
                     </Field>
                     <Field label="الدقة العشرية" hint="عدد الخانات بعد الفاصلة">
                       <Select
                         value={s.inventory.decimalPrecision}
                         onChange={(v) => update("inventory", "decimalPrecision", Number(v))}
                         options={[
-                          { value: 0, label: "0 — بدون كسور (100)" },
-                          { value: 2, label: "2 — مبدئي (100.00)" },
-                          { value: 3, label: "3 — دقيق (100.000)" },
+                          { value: 0, label: "0 — بدون كسور (1,235)" },
+                          { value: 1, label: "1 — خانة واحدة (1,234.6)" },
+                          { value: 2, label: "2 — مبدئي (1,234.57)" },
+                          { value: 3, label: "3 — دقيق (1,234.568)" },
                         ]}
                       />
                     </Field>
                   </div>
-                  <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3 text-xs text-slate-500">
-                    معاينة: <strong className="text-primary">{(1234.5678).toLocaleString("ar-EG", { minimumFractionDigits: s.inventory.decimalPrecision, maximumFractionDigits: s.inventory.decimalPrecision })} {s.inventory.currencySymbol}</strong>
+                  {/* Reactive Live Preview */}
+                  <div className="mt-4 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-800">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">معاينة تنسيق العملة</p>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-2xl font-black text-primary">
+                        {(1234.5678).toLocaleString("en-US", { 
+                          minimumFractionDigits: s.inventory.decimalPrecision, 
+                          maximumFractionDigits: s.inventory.decimalPrecision 
+                        })}
+                      </span>
+                      <span className="text-sm font-bold text-slate-500">{s.inventory.currency}</span>
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-1 italic">مثال لمبلغ تجريبي متأثر بالدقة العشرية</p>
                   </div>
                 </Card>
               </>

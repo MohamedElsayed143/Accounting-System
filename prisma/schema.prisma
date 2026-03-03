@@ -365,6 +365,7 @@ model Product {
   buyPrice             Float                 @default(0)
   sellPrice            Float                 @default(0)
   profitMargin         Float                 @default(0)
+  taxRate              Float                 @default(0)
   minStock             Float                 @default(0)
   currentStock         Float                 @default(0)
   isActive             Boolean               @default(true)
@@ -500,6 +501,11 @@ model Session {
   @@index([userId])
 }
 
+enum TaxType {
+  INCLUSIVE
+  EXCLUSIVE
+}
+
 // ========== إعدادات الشركة والفواتير (Singleton) ==========
 model CompanySettings {
   id                 Int      @id @default(1)
@@ -514,5 +520,15 @@ model CompanySettings {
   quotationPrefix    String   @default("QUO")
   startNumber        Int      @default(1)
   termsAndConditions String?  @db.Text
-  updatedAt          DateTime @updatedAt
+
+  // Financial Settings
+  taxEnabled    Boolean @default(true)
+  taxName       String  @default("VAT")
+  taxPercentage Float   @default(15)
+  taxType       TaxType @default(EXCLUSIVE)
+
+  currencyCode  String @default("ج.م")
+  decimalPlaces Int    @default(2)
+
+  updatedAt DateTime @updatedAt
 }

@@ -219,9 +219,9 @@ function InvoiceFormStep({
         quantity: 1,
         unitPrice: product.sellPrice,
         profitMargin: product.profitMargin || 0,
-        taxRate: 0,
+        taxRate: product.taxRate || 0,
         discount: 0,
-        total: product.sellPrice * 1.14,
+        total: product.sellPrice * (1 + (product.taxRate || 0) / 100),
         productId: product.id,
         stockBalance: product.currentStock,
       },
@@ -542,7 +542,7 @@ function InvoiceFormStep({
                           <SelectContent>
                             {safes.map((s) => (
                               <SelectItem key={s.id} value={String(s.id)}>
-                                {s.name} ({s.balance.toLocaleString()} ج.م)
+                                {s.name} ({s.balance.toLocaleString()} {settings?.currencyCode || "ج.م"})
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -562,7 +562,7 @@ function InvoiceFormStep({
                           <SelectContent>
                             {banks.map((b) => (
                               <SelectItem key={b.id} value={String(b.id)}>
-                                {b.name} ({b.balance.toLocaleString()} ج.م)
+                                {b.name} ({b.balance.toLocaleString()} {settings?.currencyCode || "ج.م"})
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -678,7 +678,7 @@ function InvoiceFormStep({
                           />
                         </TableCell>
                         <TableCell className="font-bold text-primary text-sm whitespace-nowrap">
-                          {item.total.toLocaleString("ar-EG")} ج.م
+                          {item.total.toLocaleString("ar-EG")} {settings?.currencyCode || "ج.م"}
                         </TableCell>
                         <TableCell>
                           {!isViewMode && (
@@ -720,20 +720,20 @@ function InvoiceFormStep({
                 <div className="flex justify-between text-slate-400 text-sm">
                   <span>الإجمالي قبل الضريبة:</span>
                   <span className="text-white font-mono">
-                    {subtotal.toLocaleString("ar-EG")} ج.م
+                    {subtotal.toLocaleString("ar-EG")} {settings?.currencyCode || "ج.م"}
                   </span>
                 </div>
                 <div className="flex justify-between text-slate-400 text-sm">
                   <span>إجمالي الضرائب:</span>
                   <span className="text-orange-400 font-mono">
-                    +{totalTax.toLocaleString("ar-EG")} ج.م
+                    +{totalTax.toLocaleString("ar-EG")} {settings?.currencyCode || "ج.م"}
                   </span>
                 </div>
                 <div className="space-y-1.5 pt-2">
                   <div className="flex justify-between text-slate-400 text-sm mb-1">
                     <span>خصم إضافي:</span>
                     <span className="text-red-400 font-mono">
-                      -{discount.toLocaleString("ar-EG")} ج.م
+                      -{discount.toLocaleString("ar-EG")} {settings?.currencyCode || "ج.م"}
                     </span>
                   </div>
                   <Input
@@ -751,7 +751,7 @@ function InvoiceFormStep({
                     <div className="flex justify-between text-slate-400 text-sm">
                       <span>إجمالي المرتجعات:</span>
                       <span className="text-red-400 font-mono">
-                        -{returnsTotal.toLocaleString("ar-EG")} ج.م
+                        -{returnsTotal.toLocaleString("ar-EG")} {settings?.currencyCode || "ج.م"}
                       </span>
                     </div>
                     <div className="flex justify-between text-slate-400 text-sm">
@@ -767,7 +767,7 @@ function InvoiceFormStep({
                 <div className="pt-2">
                   <p className="text-xs text-slate-400 mb-1">الصافي النهائي:</p>
                   <p className="text-3xl font-black text-green-400">
-                    {netTotal.toLocaleString("ar-EG")} ج.م
+                    {netTotal.toLocaleString("ar-EG")} {settings?.currencyCode || "ج.م"}
                   </p>
                 </div>
               </div>
@@ -812,6 +812,7 @@ function InvoiceFormStep({
         subtotal={subtotal}
         tax={totalTax}
         total={grandTotal}
+        currencyCode={settings?.currencyCode}
         topNotes={topNotes}
         notes={notes}
         companyName={settings?.companyName}

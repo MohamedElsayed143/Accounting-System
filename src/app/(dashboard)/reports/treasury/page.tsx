@@ -19,6 +19,7 @@ import { AccountSearchDropdown } from "../components/AccountSearchDropdown";
 import { LedgerTable } from "../components/LedgerTable";
 import { PrintableStatement } from "../components/PrintableStatement";
 import { getAccountTransactions, getAccountById } from "../actions";
+import { getCompanySettingsAction } from "../../settings/actions";
 import type { TransactionType } from "../actions";
 
 export default function TreasuryReportPage() {
@@ -29,6 +30,7 @@ export default function TreasuryReportPage() {
   const [transactions, setTransactions] = useState<TransactionType[]>([]);
   const [openingBalance, setOpeningBalance] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+  const [companySettings, setCompanySettings] = useState<any>(null);
 
   const fetchTransactions = async () => {
     if (!selectedSafe) return;
@@ -49,6 +51,10 @@ export default function TreasuryReportPage() {
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    getCompanySettingsAction().then(setCompanySettings);
+  }, []);
 
   useEffect(() => {
     if (selectedSafe) {
@@ -221,6 +227,12 @@ export default function TreasuryReportPage() {
           toDate={toDate ? new Date(toDate) : undefined}
           transactions={transactions}
           openingBalance={openingBalance}
+          companyName={companySettings?.companyName}
+          companyNameEn={companySettings?.companyNameEn}
+          companyLogo={companySettings?.companyLogo}
+          companyStamp={companySettings?.companyStamp}
+          showLogo={companySettings?.showLogoOnPrint}
+          showStamp={companySettings?.showStampOnPrint}
         />
       )}
     </div>

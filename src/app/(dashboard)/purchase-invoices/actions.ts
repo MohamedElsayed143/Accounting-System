@@ -232,7 +232,8 @@ export async function createPurchaseInvoice(data: {
             currentStock: { increment: item.quantity },
             buyPrice: item.unitPrice,
             sellPrice: item.sellingPrice,
-            profitMargin: item.profitMargin
+            profitMargin: item.profitMargin,
+            taxRate: item.taxRate
           },
         });
       }
@@ -409,7 +410,8 @@ export async function updatePurchaseInvoice(
           currentStock: { increment: item.quantity },
           buyPrice: item.unitPrice,
           sellPrice: item.sellingPrice,
-          profitMargin: item.profitMargin
+          profitMargin: item.profitMargin,
+          taxRate: item.taxRate
         }
       });
     }
