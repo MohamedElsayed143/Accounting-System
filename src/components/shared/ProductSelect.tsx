@@ -113,7 +113,7 @@ export function ProductSelect({ onSelect, disabled, onlyInStock = false }: Produ
                       "font-bold",
                       product.currentStock <= 0 ? "text-red-500" : "text-green-600"
                     )}>
-                      المتوفر: {product.currentStock} {product.unit}
+                      المتوفر: {Math.max(0, product.currentStock)} {product.unit}
                     </span>
                   </div>
                 </CommandItem>

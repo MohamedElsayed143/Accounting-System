@@ -61,7 +61,16 @@ export async function finalizeSalesInvoice(id: number, paymentData: {
     // 3. إنشاء حركات المخزون وتحديث الرصيد
     for (const item of invoice.items) {
       if (!item.productId) continue;
-      
+
+      // فحص الرصيد الحالي قبل التخصيم
+      const product = await tx.product.findUnique({
+        where: { id: item.productId },
+        select: { currentStock: true }
+      });
+      const currentVal = product?.currentStock ?? 0;
+      const actualDeduct = Math.min(currentVal, item.quantity);
+      const shortage = item.quantity - actualDeduct;
+
       await tx.stockMovement.create({
         data: {
           productId: item.productId,
@@ -73,10 +82,26 @@ export async function finalizeSalesInvoice(id: number, paymentData: {
         },
       });
 
-      await tx.product.update({
-        where: { id: item.productId },
-        data: { currentStock: { decrement: item.quantity } },
-      });
+      if (shortage > 0) {
+        await tx.stockMovement.create({
+          data: {
+            productId: item.productId,
+            movementType: "ADJUSTMENT",
+            quantity: shortage,
+            unitPrice: 0,
+            reference: `تعديل تلقائي رصيد سالب #${invoice.invoiceNumber}`,
+            notes: "تمت التسوية آلياً لأن الرصيد لا يمكن أن يقل عن الصفر",
+            salesInvoiceId: invoice.id,
+          },
+        });
+      }
+
+      if (actualDeduct > 0) {
+        await tx.product.update({
+          where: { id: item.productId },
+          data: { currentStock: { decrement: actualDeduct } },
+        });
+      }
     }
 
     revalidatePath("/pending-invoices");

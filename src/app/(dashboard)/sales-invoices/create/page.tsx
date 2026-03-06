@@ -42,7 +42,7 @@ import {
   updateSalesInvoice,
 } from "../actions";
 import { getTreasuryData } from "@/app/(dashboard)/treasury/actions";
-import { getCompanySettingsAction } from "@/app/(dashboard)/settings/actions";
+import { getSystemSettings, getCompanySettingsAction } from "@/app/(dashboard)/settings/actions";
 
 // ─── الأنواع ──────────────────────────────────────────────────────────────────
 interface Customer {
@@ -108,6 +108,8 @@ function InvoiceFormStep({
   const [selectedBankId, setSelectedBankId] = useState<string>("");
   const [treasuryType, setTreasuryType] = useState<"safe" | "bank">("safe");
   const [settings, setSettings] = useState<any>(null);
+  const [systemSettings, setSystemSettings] = useState<any>(null);
+  const [showZeroStock, setShowZeroStock] = useState(false);
 
   // قائمة جميع المنتجات
   const [products, setProducts] = useState<ProductData[]>([]);
@@ -116,6 +118,7 @@ function InvoiceFormStep({
   useEffect(() => {
     getProducts().then(setProducts);
     getCompanySettingsAction().then(setSettings);
+    getSystemSettings().then(setSystemSettings);
     getTreasuryData().then((data) => {
       const allSafes = data.accounts.filter(acc => acc.type === "safe") as any[];
       const allBanks = data.accounts.filter(acc => acc.type === "bank") as any[];
@@ -211,6 +214,9 @@ function InvoiceFormStep({
 
   const addItem = (product: ProductData) => {
     if (isViewMode) return;
+    if (product.currentStock <= 0) {
+      toast.warning(`تنبيه: سيتم بيع الصنف "${product.name}" بدون رصيد كافٍ`);
+    }
     setItems((prev) => [
       ...prev,
       {
@@ -335,11 +341,21 @@ function InvoiceFormStep({
       };
 
       if (isEditMode && invoiceId) {
-        await updateSalesInvoice(Number(invoiceId), invoiceData);
+        const result = await updateSalesInvoice(Number(invoiceId), invoiceData);
         toast.success(`تم تحديث الفاتورة #${invoiceNumber} بنجاح`);
+        if (result.stockWarnings && result.stockWarnings.length > 0) {
+          result.stockWarnings.forEach((w) => {
+            toast.warning(`تنبيه: لا يوجد مخزون كافٍ للصنف "${w}"`, { duration: 6000 });
+          });
+        }
       } else {
-        await createSalesInvoice(invoiceData);
+        const result = await createSalesInvoice(invoiceData);
         toast.success(`تم حفظ الفاتورة #${invoiceNumber} بنجاح`);
+        if (result.stockWarnings && result.stockWarnings.length > 0) {
+          result.stockWarnings.forEach((w) => {
+            toast.warning(`تنبيه: لا يوجد مخزون كافٍ للصنف "${w}"`, { duration: 6000 });
+          });
+        }
       }
       router.push("/sales-invoices");
     } catch (err: unknown) {
@@ -586,8 +602,25 @@ function InvoiceFormStep({
                   <div className="w-2 h-6 bg-orange-500 rounded-full" /> تفاصيل الأصناف
                 </CardTitle>
                 {!isViewMode && (
-                  <div className="w-72">
-                    <ProductSelect onSelect={addItem} disabled={loading} onlyInStock={true} />
+                  <div className="flex items-center gap-4">
+                    {systemSettings?.inventory?.allowNegativeStock && (
+                      <label className="flex items-center gap-2 text-sm font-medium text-slate-600 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg cursor-pointer hover:bg-slate-100 transition-colors">
+                        <input
+                          type="checkbox"
+                          className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary cursor-pointer"
+                          checked={showZeroStock}
+                          onChange={(e) => setShowZeroStock(e.target.checked)}
+                        />
+                        عرض أصناف الرصيد الصفري
+                      </label>
+                    )}
+                    <div className="w-72">
+                      <ProductSelect 
+                        onSelect={addItem} 
+                        disabled={loading} 
+                        onlyInStock={!(systemSettings?.inventory?.allowNegativeStock && showZeroStock)} 
+                      />
+                    </div>
                   </div>
                 )}
               </CardHeader>
@@ -622,7 +655,7 @@ function InvoiceFormStep({
                             "font-bold px-2 py-1 rounded text-sm",
                             (item.stockBalance || 0) <= 0 ? "bg-red-50 text-red-600" : "bg-blue-50 text-blue-600"
                           )}>
-                            {item.stockBalance?.toLocaleString() || 0}
+                            {Math.max(0, item.stockBalance || 0).toLocaleString()}
                           </span>
                         </TableCell>
                         <TableCell>

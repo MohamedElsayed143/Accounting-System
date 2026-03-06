@@ -22,6 +22,7 @@ const ITEMS_PER_PAGE = 10;
 
 export default function StockPage() {
   const [rows, setRows] = useState<StockRow[]>([]);
+  const [alertsEnabled, setAlertsEnabled] = useState(true);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -30,7 +31,10 @@ export default function StockPage() {
   const load = () => {
     setLoading(true);
     getStockLevels()
-      .then(setRows)
+      .then((data) => {
+        setRows(data.rows);
+        setAlertsEnabled(data.alertsEnabled);
+      })
       .catch(() => toast.error("فشل تحميل المخزون"))
       .finally(() => setLoading(false));
   };
@@ -82,6 +86,21 @@ export default function StockPage() {
           </Button>
         </div>
 
+        {/* Low-Stock Alert Banner */}
+        {!loading && alertsEnabled && lowCount > 0 && (
+          <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-xl shadow-sm">
+            <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-amber-800 mb-1">
+                تنبيه: {lowCount} {lowCount === 1 ? "صنف" : "أصناف"} وصل{lowCount === 1 ? " " : "ت "}إلى الحد الأدنى أو ما دونه
+              </p>
+              <p className="text-xs text-amber-700 leading-relaxed">
+                {rows.filter(r => r.isLow).map(r => r.name).join(" · ")}
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Summary Chips */}
         <div className="flex flex-wrap gap-3">
           <div className="flex items-center gap-2 bg-card border rounded-lg px-4 py-2 shadow-sm">
@@ -94,7 +113,7 @@ export default function StockPage() {
             <span className="text-sm font-medium text-muted-foreground">إجمالي القيمة:</span>
             <span className="font-bold text-green-600">{totalValue.toLocaleString("ar-EG")} ج.م</span>
           </div>
-          {lowCount > 0 && (
+          {alertsEnabled && lowCount > 0 && (
             <button
               onClick={() => setShowLowOnly(!showLowOnly)}
               className={`flex items-center gap-2 border rounded-lg px-4 py-2 shadow-sm transition-all ${

@@ -3,6 +3,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { getSystemSettings } from "@/app/(dashboard)/settings/actions";
 
 // دالة مساعدة لحساب الرصيد الحالي لمنتج
 async function getCurrentStock(productId: number, tx?: any) {
@@ -133,7 +134,13 @@ export async function createSalesInvoice(data: {
   if (!data.customerId) throw new Error("يجب اختيار العميل أولاً");
   if (data.items.length === 0) throw new Error("لا يمكن حفظ فاتورة فارغة");
 
-  return prisma.$transaction(async (tx) => {
+  // جلب الإعدادات مرة واحدة خارج المعاملة
+  const settings = await getSystemSettings();
+  const allowNegativeStock = settings?.inventory?.allowNegativeStock ?? false;
+
+  const stockWarnings: string[] = [];
+
+  const result = await prisma.$transaction(async (tx) => {
     // 1. التحقق من رقم الفاتورة
     const taken = await tx.salesInvoice.findUnique({
       where: { invoiceNumber: data.invoiceNumber },
@@ -141,7 +148,7 @@ export async function createSalesInvoice(data: {
     });
     if (taken) throw new Error(`رقم الفاتورة #${data.invoiceNumber} مستخدم مسبقاً`);
 
-    // 2. التحقق من الأصناف (يجب أن تكون نشطة) وفحص المخزون
+    // 2. التحقق من الأصناف وفحص المخزون
     for (const item of data.items) {
       if (!item.productId) {
         throw new Error("يجب اختيار منتج لكل صنف");
@@ -152,10 +159,15 @@ export async function createSalesInvoice(data: {
       });
       if (!product) throw new Error(`الصنف المختار غير متوفر أو تم إيقاف التعامل معه`);
 
-      // حساب الرصيد الحالي
       const currentStock = await getCurrentStock(item.productId, tx);
       if (currentStock < item.quantity) {
-        throw new Error(`لا يوجد رصيد كافي للصنف ${product.name} — المتوفر: ${currentStock}`);
+        if (!allowNegativeStock) {
+          // منع البيع إذا لم يكن السماح بالمخزون السالب مفعلاً
+          throw new Error(`لا يوجد رصيد كافي للصنف ${product.name} — المتوفر: ${currentStock}`);
+        } else {
+          // السماح بالبيع مع تسجيل تحذير
+          stockWarnings.push(`${product.name} (المتوفر: ${currentStock})`);
+        }
       }
     }
 
@@ -189,7 +201,7 @@ export async function createSalesInvoice(data: {
       },
     });
 
-    // 3.5 تحديث الخزنة أو البنك إذا كانت الفاتورة كاش (فقط إذا لم تكن معلقة)
+    // 3.5 تحديث الخزنة أو البنك إذا كانت الفاتورة كاش
     if (data.status === "cash" && (data.safeId || data.bankId)) {
       if (data.safeId) {
         await tx.treasurySafe.update({
@@ -204,9 +216,19 @@ export async function createSalesInvoice(data: {
       }
     }
 
-    // 4. إنشاء حركات مخزون وتحديث الرصيد الحالي (فقط إذا لم تكن معلقة)
+    // 4. إنشاء حركات مخزون وتحديث الرصيد الحالي
     if (data.status !== "pending") {
       for (const item of data.items) {
+        // فحص الرصيد الحالي قبل التخصيم
+        const product = await tx.product.findUnique({
+          where: { id: item.productId },
+          select: { currentStock: true }
+        });
+        const currentVal = product?.currentStock ?? 0;
+        const actualDeduct = Math.min(currentVal, item.quantity);
+        const shortage = item.quantity - actualDeduct;
+
+        // الحركة الأساسية (المبيعات) - تسجل بالكامل للتقارير
         await tx.stockMovement.create({
           data: {
             productId: item.productId,
@@ -218,11 +240,28 @@ export async function createSalesInvoice(data: {
           },
         });
 
-        // تحديث الرصيد الحالي للمنتج
-        await tx.product.update({
-          where: { id: item.productId },
-          data: { currentStock: { decrement: item.quantity } }
-        });
+        // حركة تسوية تعويضية إذا كان الرصيد سينخفض عن الصفر
+        if (shortage > 0) {
+          await tx.stockMovement.create({
+            data: {
+              productId: item.productId,
+              movementType: "ADJUSTMENT",
+              quantity: shortage,
+              unitPrice: 0,
+              reference: `تعديل تلقائي رصيد سالب #${data.invoiceNumber}`,
+              notes: "تمت التسوية آلياً لأن الرصيد لا يمكن أن يقل عن الصفر",
+              salesInvoiceId: invoice.id,
+            },
+          });
+        }
+
+        // تحديث الرصيد الفعلي (لا يقل عن الصفر)
+        if (actualDeduct > 0) {
+          await tx.product.update({
+            where: { id: item.productId },
+            data: { currentStock: { decrement: actualDeduct } }
+          });
+        }
       }
     }
 
@@ -231,6 +270,8 @@ export async function createSalesInvoice(data: {
 
     return invoice;
   });
+
+  return { invoice: result, stockWarnings };
 }
 
 export async function updateSalesInvoice(
@@ -262,7 +303,12 @@ export async function updateSalesInvoice(
 ) {
   if (!data.customerId) throw new Error("يجب اختيار العميل أولاً");
 
-  return prisma.$transaction(async (tx) => {
+  // جلب الإعدادات مرة واحدة خارج المعاملة
+  const settings = await getSystemSettings();
+  const allowNegativeStock = settings?.inventory?.allowNegativeStock ?? false;
+  const stockWarnings: string[] = [];
+
+  const result = await prisma.$transaction(async (tx) => {
     const existingInvoice = await tx.salesInvoice.findUnique({
       where: { id },
       select: { status: true, total: true, safeId: true, bankId: true, invoiceNumber: true }
@@ -293,18 +339,25 @@ export async function updateSalesInvoice(
       }
     }
 
-    // 1. استرجاع الكميات القديمة لعكس أثرها على المخزون وحذف الأصناف القديمة وحركات المخزون
+    // 1. عكس أثر الحركات القديمة على المخزون بالاعتماد على مجموع حركات الفاتورة السابقة
     if (existingInvoice.status !== "pending") {
-      const oldItems = await tx.salesInvoiceItem.findMany({
-        where: { invoiceId: id },
+      const oldMovements = await tx.stockMovement.findMany({
+        where: { salesInvoiceId: id },
         select: { productId: true, quantity: true }
       });
 
-      for (const oldItem of oldItems) {
-        if (oldItem.productId) {
+      // تجميع الأثر حسب المنتج
+      const oldImpacts: Record<number, number> = {};
+      for (const mv of oldMovements) {
+        oldImpacts[mv.productId] = (oldImpacts[mv.productId] || 0) + mv.quantity;
+      }
+
+      // عكس الأثر: إذا كان المجموع سالباً (خصم) نزيده، وإذا كان موجباً ننقصه
+      for (const [pId, qty] of Object.entries(oldImpacts)) {
+        if (qty !== 0) {
           await tx.product.update({
-            where: { id: oldItem.productId },
-            data: { currentStock: { increment: oldItem.quantity } }
+            where: { id: Number(pId) },
+            data: { currentStock: { increment: -qty } }
           });
         }
       }
@@ -326,7 +379,11 @@ export async function updateSalesInvoice(
 
       const currentStock = await getCurrentStock(item.productId, tx);
       if (currentStock < item.quantity) {
-        throw new Error(`رصيد غير كافي للصنف ${product.name} — المتوفر: ${currentStock}`);
+        if (!allowNegativeStock) {
+          throw new Error(`رصيد غير كافي للصنف ${product.name} — المتوفر: ${currentStock}`);
+        } else {
+          stockWarnings.push(`${product.name} (المتوفر: ${currentStock})`);
+        }
       }
     }
 
@@ -380,6 +437,14 @@ export async function updateSalesInvoice(
     // 4. إنشاء حركات مخزون جديدة وتحديث الرصيد الحالي
     if (data.status !== "pending") {
       for (const item of data.items) {
+        const product = await tx.product.findUnique({
+          where: { id: item.productId },
+          select: { currentStock: true }
+        });
+        const currentVal = product?.currentStock ?? 0;
+        const actualDeduct = Math.min(currentVal, item.quantity);
+        const shortage = item.quantity - actualDeduct;
+
         await tx.stockMovement.create({
           data: {
             productId: item.productId,
@@ -391,11 +456,26 @@ export async function updateSalesInvoice(
           },
         });
 
-        // تحديث الرصيد الجديد
-        await tx.product.update({
-          where: { id: item.productId },
-          data: { currentStock: { decrement: item.quantity } }
-        });
+        if (shortage > 0) {
+          await tx.stockMovement.create({
+            data: {
+              productId: item.productId,
+              movementType: "ADJUSTMENT",
+              quantity: shortage,
+              unitPrice: 0,
+              reference: `تعديل تلقائي رصيد سالب #${data.invoiceNumber}`,
+              notes: "تمت التسوية آلياً لأن الرصيد لا يمكن أن يقل عن الصفر",
+              salesInvoiceId: invoice.id,
+            },
+          });
+        }
+
+        if (actualDeduct > 0) {
+          await tx.product.update({
+            where: { id: item.productId },
+            data: { currentStock: { decrement: actualDeduct } }
+          });
+        }
       }
     }
 
@@ -404,6 +484,8 @@ export async function updateSalesInvoice(
 
     return invoice;
   });
+
+  return { invoice: result, stockWarnings };
 }
 
 export async function deleteSalesInvoice(id: number) {
@@ -414,18 +496,41 @@ export async function deleteSalesInvoice(id: number) {
       select: { status: true, total: true, safeId: true, bankId: true }
     });
 
-    if (invoice && invoice.status === "cash") {
-      if (invoice.safeId) {
-        await tx.treasurySafe.update({
-          where: { id: invoice.safeId },
-          data: { balance: { decrement: invoice.total } }
+    if (invoice) {
+        // 1. عكس أثر المبالغ المالية إذا كانت الفاتورة كاش
+        if (invoice.status === "cash") {
+          if (invoice.safeId) {
+            await tx.treasurySafe.update({
+              where: { id: invoice.safeId },
+              data: { balance: { decrement: invoice.total } }
+            });
+          } else if (invoice.bankId) {
+            await tx.treasuryBank.update({
+              where: { id: invoice.bankId },
+              data: { balance: { decrement: invoice.total } }
+            });
+          }
+        }
+
+        // 2. عكس أثر المخزون قبل الحذف
+        const movements = await tx.stockMovement.findMany({
+          where: { salesInvoiceId: id },
+          select: { productId: true, quantity: true }
         });
-      } else if (invoice.bankId) {
-        await tx.treasuryBank.update({
-          where: { id: invoice.bankId },
-          data: { balance: { decrement: invoice.total } }
-        });
-      }
+
+        const impacts: Record<number, number> = {};
+        for (const m of movements) {
+          impacts[m.productId] = (impacts[m.productId] || 0) + m.quantity;
+        }
+
+        for (const [pId, qty] of Object.entries(impacts)) {
+          if (qty !== 0) {
+            await tx.product.update({
+              where: { id: Number(pId) },
+              data: { currentStock: { increment: -qty } }
+            });
+          }
+        }
     }
 
     await tx.stockMovement.deleteMany({ where: { salesInvoiceId: id } });

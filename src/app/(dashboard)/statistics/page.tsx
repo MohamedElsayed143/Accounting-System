@@ -10,7 +10,7 @@ import {
   ShoppingBag,
   ShoppingCart,
   AlertTriangle,
-  BarChart3,
+  BarChart3,  
   PieChart,
   ArrowUpRight,
   ArrowDownLeft,
@@ -466,6 +466,8 @@ export default function StatisticsPage() {
           </div>
         )}
 
+      
+
         {/* ── Charts Row ── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Monthly Trend */}
@@ -674,7 +676,6 @@ export default function StatisticsPage() {
                       }`}>
                         {p.currentStock} {p.unit ?? ""}
                       </span>
-                      <p className="text-xs text-slate-400 mt-0.5">حد أدنى: {p.minStock}</p>
                     </div>
                   </div>
                 ))

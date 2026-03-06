@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
+import { getSystemSettings } from "@/app/(dashboard)/settings/actions";
 
 export interface StockRow {
   productId: number;
@@ -16,7 +17,7 @@ export interface StockRow {
   isLow: boolean;
 }
 
-export async function getStockLevels(): Promise<StockRow[]> {
+export async function getStockLevels(): Promise<{ rows: StockRow[]; alertsEnabled: boolean }> {
   // جلب جميع المنتجات النشطة
   const products = await prisma.product.findMany({
     where: { isActive: true },
@@ -26,7 +27,7 @@ export async function getStockLevels(): Promise<StockRow[]> {
     orderBy: { name: "asc" },
   });
 
-  if (products.length === 0) return [];
+  if (products.length === 0) return { rows: [], alertsEnabled: true };
 
   // تجميع حركات المخزون لكل منتج
   const stockGroups = await prisma.stockMovement.groupBy({
@@ -37,15 +38,20 @@ export async function getStockLevels(): Promise<StockRow[]> {
     },
   });
 
-  // إنشاء خريطة productId → الكمية
+  // خريطة productId → الكمية
+  const settings = await getSystemSettings();
+  const defaultThreshold = settings?.inventory?.lowStockThreshold ?? 5;
+  const alertsEnabled = settings?.inventory?.lowStockAlertEnabled ?? true;
+
   const qtyMap = new Map<number, number>();
   for (const g of stockGroups) {
     qtyMap.set(g.productId, g._sum.quantity ?? 0);
   }
 
   // حساب القيمة الإجمالية للمخزون
-  return products.map((p) => {
-    const qty = qtyMap.get(p.id) ?? 0;
+  const rows = products.map((p) => {
+    const rawQty = qtyMap.get(p.id) ?? 0;
+    const qty = Math.max(0, rawQty); // عدم السماح بظهور رصيد أقل من صفر
     return {
       productId: p.id,
       code: p.code,
@@ -57,18 +63,21 @@ export async function getStockLevels(): Promise<StockRow[]> {
       sellPrice: p.sellPrice,
       minStock: p.minStock,
       totalValue: qty > 0 ? qty * p.buyPrice : 0,
-      isLow: qty <= p.minStock,
+      isLow: qty <= Math.max(p.minStock, defaultThreshold),
     };
   });
+
+  return { rows, alertsEnabled };
 }
 
 export async function getStockOverview() {
-  const [products, movementsCount] = await Promise.all([
+  const [products, movementsCount, settings] = await Promise.all([
     prisma.product.findMany({
       where: { isActive: true },
       select: { id: true, buyPrice: true, minStock: true },
     }),
     prisma.stockMovement.count(),
+    getSystemSettings(),
   ]);
 
   if (products.length === 0) {
@@ -86,11 +95,21 @@ export async function getStockOverview() {
     qtyMap.set(g.productId, g._sum.quantity ?? 0);
   }
 
+  const alertsEnabled = settings?.inventory?.lowStockAlertEnabled ?? true;
+  const defaultThreshold = settings?.inventory?.lowStockThreshold ?? 5;
+
   let lowStockCount = 0;
   let totalValue = 0;
   for (const p of products) {
-    const qty = qtyMap.get(p.id) ?? 0;
-    if (qty <= p.minStock) lowStockCount++;
+    const rawQty = qtyMap.get(p.id) ?? 0;
+    const qty = Math.max(0, rawQty); // عدم السماح بظهور رصيد أقل من صفر
+    
+    if (alertsEnabled) {
+      if (qty <= Math.max(p.minStock, defaultThreshold)) {
+        lowStockCount++;
+      }
+    }
+
     if (qty > 0) totalValue += qty * p.buyPrice;
   }
 

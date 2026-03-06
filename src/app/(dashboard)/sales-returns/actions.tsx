@@ -216,7 +216,7 @@ export async function createSalesReturn(data: SalesReturnInput) {
         include: { items: true },
       });
 
-      // ✅ إنشاء حركات مخزون وتحديث الرصيد الحالي (مرتجع بيع = دخول +) - يعمل لجميع طرق الرد
+      // ✅ إنشاء حركات مخزون وتحديث الرصيد الحالي (مرتجع بيع = دخول +)
       for (const returnItem of data.items) {
         if (!returnItem.invoiceItemId) continue;
         const invoiceItem = invoice.items.find(i => i.id === returnItem.invoiceItemId);
@@ -224,22 +224,56 @@ export async function createSalesReturn(data: SalesReturnInput) {
 
         const productId = (invoiceItem as any).productId;
 
+        // 1. حساب كمية "البيع بدون رصيد" المتبقية لهذه الفاتورة وهذا المنتج
+        const relatedMovements = await tx.stockMovement.findMany({
+          where: {
+            productId,
+            salesInvoiceId: data.invoiceId,
+            movementType: "ADJUSTMENT"
+          }
+        });
+        
+        // إجمالي التسويات الموجبة (النقص الأصلي) + إجمالي التسويات السالبة (المرتجعات الافتراضية السابقة)
+        const remainingVirtual = relatedMovements.reduce((sum, m) => sum + m.quantity, 0);
+        
+        const virtualPart = Math.max(0, Math.min(returnItem.quantity, remainingVirtual));
+        const realPart = returnItem.quantity - virtualPart;
+
+        // الحركة الأساسية للمرتجع (للتوثيق والتقارير المالية)
         await tx.stockMovement.create({
           data: {
             productId,
             movementType: "SALE_RETURN",
-            quantity: returnItem.quantity, // + دخول (إرجاع للمخزون)
+            quantity: returnItem.quantity, // + دخول
             unitPrice: returnItem.unitPrice,
             reference: `مرتجع بيع #${returnNumber}`,
             salesReturnId: salesReturn.id,
           },
         });
 
-        // تحديث الرصيد في بطاقة الصنف (إضافة)
-        await tx.product.update({
-          where: { id: productId },
-          data: { currentStock: { increment: returnItem.quantity } }
-        });
+        // إذا كان هناك جزء "افتراضي"، نقوم بعمل تسوية عكسية له لكي لا يزيد الرصيد الفعلي
+        if (virtualPart > 0) {
+          await tx.stockMovement.create({
+            data: {
+              productId,
+              movementType: "ADJUSTMENT",
+              quantity: -virtualPart,
+              unitPrice: 0,
+              reference: `تعديل تلقائي مرتجع بدون رصيد #${returnNumber}`,
+              notes: "هذا الجزء تم بيعه أصلاً بدون رصيد لذا لا يضاف للمخزون عند إرجاعه",
+              salesReturnId: salesReturn.id,
+              salesInvoiceId: data.invoiceId, // نربطه بالفاتورة أيضاً لتسهيل الحساب مستقبلاً
+            },
+          });
+        }
+
+        // تحديث الرصيد الفعلي (الزيادة بالباقي فقط)
+        if (realPart > 0) {
+          await tx.product.update({
+            where: { id: productId },
+            data: { currentStock: { increment: realPart } }
+          });
+        }
       }
 
       // تحديث رصيد الخزنة/البنك مباشرة (بدون إنشاء سند صرف لأن سندات الصرف مرتبطة بالموردين وليس العملاء)
@@ -298,19 +332,33 @@ export async function deleteSalesReturn(id: number) {
       });
       if (!salesReturn) throw new Error("المرتجع غير موجود");
 
-      // 2. عكس حركات المخزون (كان + دخول، سيصبح - خروج) وتحديث الرصيد - لجميع طرق الرد
-      for (const returnItem of salesReturn.items) {
-        if (!returnItem.invoiceItemId) continue;
-        const invoiceItem = salesReturn.invoice.items.find(i => i.id === returnItem.invoiceItemId);
-        if (!(invoiceItem as any)?.productId) continue;
+      // 2. عكس أثر المخزون بالاعتماد على كامل الحركات المرتبطة بالمرتجع (مع مراعاة الأجزاء الافتراضية)
+      const returnMovements = await tx.stockMovement.findMany({
+        where: { salesReturnId: id },
+        select: { productId: true, quantity: true }
+      });
 
-        const productId = (invoiceItem as any).productId;
+      const impacts: Record<number, number> = {};
+      for (const mv of returnMovements) {
+        impacts[mv.productId] = (impacts[mv.productId] || 0) + mv.quantity;
+      }
 
-        // خصم من الرصيد (لأننا نحذف المرتجع الذي أضاف كمية للمخزون)
-        await tx.product.update({
-          where: { id: productId },
-          data: { currentStock: { decrement: returnItem.quantity } }
-        });
+      for (const [pId, qty] of Object.entries(impacts)) {
+        if (qty > 0) { // الكمية الصافية التي أضيفت فعلياً للمخزون
+          const product = await tx.product.findUnique({
+            where: { id: Number(pId) },
+            select: { currentStock: true }
+          });
+          const currentVal = product?.currentStock ?? 0;
+          const actualDeduct = Math.min(currentVal, qty);
+
+          if (actualDeduct > 0) {
+            await tx.product.update({
+              where: { id: Number(pId) },
+              data: { currentStock: { decrement: actualDeduct } }
+            });
+          }
+        }
       }
 
       // 3. عكس حركة الخزنة/البنك (كان - صرف، سيصبح + قبض)

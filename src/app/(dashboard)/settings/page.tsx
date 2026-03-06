@@ -85,7 +85,7 @@ const DEFAULT: Settings = {
   },
   inventory: {
     allowNegativeStock: false,
-    autoAdjustInventory: false,
+    lowStockAlertEnabled: true,
     currency: "ج.م",
     decimalPrecision: 2,
     lowStockThreshold: 5,
@@ -180,10 +180,10 @@ type Settings = {
     type: "INCLUSIVE" | "EXCLUSIVE";
   };
   inventory: {
-    allowNegativeStock: boolean; 
-    autoAdjustInventory: boolean;
+    allowNegativeStock: boolean;
+    lowStockAlertEnabled: boolean;
     currency: string;
-    decimalPrecision: number; 
+    decimalPrecision: number;
     lowStockThreshold: number;
   };
   rbac: {
@@ -954,35 +954,39 @@ export default function SystemSettingsPage() {
                   <Toggle
                     checked={s.inventory.allowNegativeStock}
                     onChange={(v) => update("inventory", "allowNegativeStock", v)}
-                    label="السماح بالمخزون السالب"
-                    description="يُتيح البيع حتى لو كان الرصيد صفراً أو سالباً — لا يُنصح في أغلب الحالات"
-                  />
-                  <Toggle
-                    checked={s.inventory.autoAdjustInventory}
-                    onChange={(v) => update("inventory", "autoAdjustInventory", v)}
-                    label="التسوية التلقائية للمخزون"
-                    description="يضبط النظام رصيد المخزون تلقائياً عند إنشاء أو حذف الفواتير"
+                    label="السماح بالبيع بدون رصيد"
+                    description="يُتيح إتمام الفاتورة حتى إذا كان رصيد الصنف صفراً — مع ظهور تنبيه للمستخدم بعدم توفر المخزون"
                   />
                 </div>
-                <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
-                  <Field label="حد التنبيه الافتراضي للمخزون المنخفض" hint="تنبيه عند الوصول لهذه الكمية أو أقل">
-                    <div className="flex items-center gap-3">
-                      <Input
-                        value={s.inventory.lowStockThreshold}
-                        onChange={(v) => update("inventory", "lowStockThreshold", Number(v))}
-                        type="number"
-                        placeholder="5"
-                      />
-                      <span className="text-sm text-slate-500 shrink-0">وحدة</span>
-                    </div>
-                  </Field>
+
+                <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-4">
+                  <Toggle
+                    checked={s.inventory.lowStockAlertEnabled ?? true}
+                    onChange={(v) => update("inventory", "lowStockAlertEnabled", v)}
+                    label="تفعيل تنبيهات المخزون المنخفض"
+                    description="عند تفعيله، يظهر تنبيه للأصناف التي وصلت للحد الأدنى في قسم الإحصائيات وقسم المخزون الحالي"
+                  />
+
+                  {(s.inventory.lowStockAlertEnabled ?? true) && (
+                    <Field label="الحد الأدنى الافتراضي للمخزون المنخفض" hint="يُطبَّق على الأصناف التي لم يُحدَّد لها حد أدنى خاص">
+                      <div className="flex items-center gap-3">
+                        <Input
+                          value={s.inventory.lowStockThreshold}
+                          onChange={(v) => update("inventory", "lowStockThreshold", Number(v))}
+                          type="number"
+                          placeholder="5"
+                        />
+                        <span className="text-sm text-slate-500 shrink-0">وحدة</span>
+                      </div>
+                    </Field>
+                  )}
                 </div>
 
                 {s.inventory.allowNegativeStock && (
-                  <div className="flex items-start gap-3 p-4 bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-xl">
-                    <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
-                    <p className="text-sm text-amber-700 dark:text-amber-400">
-                      تحذير: السماح بالمخزون السالب قد يؤدي إلى تضارب في بيانات المخزون. تأكد أن لديك آلية للمطابقة الدورية.
+                  <div className="flex items-start gap-3 p-4 bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 rounded-xl">
+                    <AlertTriangle className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
+                    <p className="text-sm text-blue-700 dark:text-blue-400">
+                      ملاحظة: عند البيع بدون رصيد، سيتم إتمام الفاتورة وسيظهر للمستخدم تنبيه بأن الصنف لا يوجد له مخزون كافٍ.
                     </p>
                   </div>
                 )}

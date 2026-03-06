@@ -306,7 +306,7 @@ export async function updatePurchaseInvoice(
       }
     }
 
-    // 1. استرجاع الكميات القديمة لتعديل الرصيد
+    // 1. استرجاع الكميات القديمة لتعديل الرصيد (مع منع الرصيد السالب)
     const oldItems = await tx.purchaseInvoiceItem.findMany({
       where: { invoiceId: id },
       select: { productId: true, quantity: true }
@@ -314,10 +314,35 @@ export async function updatePurchaseInvoice(
 
     for (const oldItem of oldItems) {
       if (oldItem.productId) {
-        await tx.product.update({
+        const product = await tx.product.findUnique({
           where: { id: oldItem.productId },
-          data: { currentStock: { decrement: oldItem.quantity } }
+          select: { currentStock: true }
         });
+        const currentVal = product?.currentStock ?? 0;
+        const actualDeduct = Math.min(currentVal, oldItem.quantity);
+        const shortage = oldItem.quantity - actualDeduct;
+
+        if (shortage > 0) {
+          // تسجيل تسوية تعويضية لأننا سحبنا رصيداً غير موجود (مثلاً تم بيعه)
+          await tx.stockMovement.create({
+            data: {
+              productId: oldItem.productId,
+              movementType: "ADJUSTMENT",
+              quantity: shortage,
+              unitPrice: 0,
+              reference: `تعديل تلقائي (تحديث فاتورة مشتريات #${existingInvoice.invoiceNumber})`,
+              notes: "تمت التسوية آلياً لمنع الرصيد السالب عند تعديل الفاتورة",
+              purchaseInvoiceId: id,
+            },
+          });
+        }
+
+        if (actualDeduct > 0) {
+          await tx.product.update({
+            where: { id: oldItem.productId },
+            data: { currentStock: { decrement: actualDeduct } }
+          });
+        }
       }
     }
 
@@ -443,7 +468,7 @@ export async function deletePurchaseInvoice(id: number) {
       }
     }
 
-    // تعديل الرصيد قبل الحذف
+    // تعديل الرصيد قبل الحذف (مع منع الرصيد السالب)
     const items = await tx.purchaseInvoiceItem.findMany({
       where: { invoiceId: id },
       select: { productId: true, quantity: true }
@@ -451,10 +476,19 @@ export async function deletePurchaseInvoice(id: number) {
 
     for (const item of items) {
       if (item.productId) {
-        await tx.product.update({
+        const product = await tx.product.findUnique({
           where: { id: item.productId },
-          data: { currentStock: { decrement: item.quantity } }
+          select: { currentStock: true }
         });
+        const currentVal = product?.currentStock ?? 0;
+        const actualDeduct = Math.min(currentVal, item.quantity);
+        
+        if (actualDeduct > 0) {
+          await tx.product.update({
+            where: { id: item.productId },
+            data: { currentStock: { decrement: actualDeduct } }
+          });
+        }
       }
     }
 

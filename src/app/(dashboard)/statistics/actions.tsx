@@ -1,5 +1,6 @@
 "use server";
 import { prisma } from "@/lib/prisma";
+import { getSystemSettings } from "../settings/actions";
 
 // ========== KPI Summary ==========
 export async function getStatisticsSummary(fromDate?: Date, toDate?: Date) {
@@ -264,24 +265,59 @@ export async function getSalesByPaymentMethod(
 // ========== Inventory Alerts (below minimum stock OR zero stock) ==========
 export async function getInventoryAlerts() {
   try {
+    const settings = await getSystemSettings();
+    
+    // الدفاع ضد القيم الفارغة أو غير المعرفة
+    const alertsEnabled = settings?.inventory?.lowStockAlertEnabled ?? true;
+    const defaultThreshold = settings?.inventory?.lowStockThreshold ?? 5;
+
+    if (!alertsEnabled) return [];
+
+    // جلب المنتجات النشطة
     const products = await prisma.product.findMany({
       where: { isActive: true },
       select: {
         id: true,
         code: true,
         name: true,
-        currentStock: true,
         minStock: true,
         unit: true,
         category: { select: { name: true } },
       },
-      orderBy: { currentStock: "asc" },
+      orderBy: { name: "asc" },
     });
 
-    // Alert if stock is zero/negative (always) OR if stock is below the defined minimum
-    return products.filter(
-      (p) => p.currentStock <= 0 || p.currentStock < p.minStock
-    );
+    if (products.length === 0) return [];
+
+    // حساب الرصيد الفعلي من الحركات للتأكد من الدقة
+    const stockGroups = await prisma.stockMovement.groupBy({
+      by: ["productId"],
+      _sum: { quantity: true },
+      where: {
+        productId: { in: products.map((p) => p.id) },
+      },
+    });
+
+    const qtyMap = new Map<number, number>();
+    for (const g of stockGroups) {
+      qtyMap.set(g.productId, g._sum.quantity ?? 0);
+    }
+
+    const alerts = products
+      .map((p) => {
+        const rawQty = qtyMap.get(p.id) ?? 0;
+        const qty = Math.max(0, rawQty);
+        return {
+          ...p,
+          currentStock: qty,
+        };
+      })
+      .filter((p) => {
+        const threshold = Math.max(p.minStock, defaultThreshold);
+        return p.currentStock <= threshold;
+      });
+
+    return alerts.sort((a, b) => a.currentStock - b.currentStock);
   } catch (error) {
     console.error("getInventoryAlerts error:", error);
     return [];
