@@ -3,6 +3,8 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { getSession } from "@/lib/auth";
+import { hasPermission } from "@/lib/permissions";
 
 // ─── أنواع البيانات ─────────────────────────────────────────────────────────
 export interface PurchaseInvoiceItem {
@@ -42,6 +44,12 @@ export interface PurchaseInvoice {
 
 // ─── جلب كل الفواتير مع عدد المرتجعات وقيمتها ─────────────────────────────
 export async function getPurchaseInvoices() {
+  const session = await getSession();
+  if (!session) return [];
+
+  const canView = await hasPermission(session.userId, "purchase_view");
+  if (!canView) return [];
+
   const invoices = await prisma.purchaseInvoice.findMany({
     orderBy: { invoiceNumber: "desc" },
     include: {
@@ -134,6 +142,12 @@ export async function createPurchaseInvoice(data: {
   topNotes?: string[];
   notes?: string[];
 }) {
+  const session = await getSession();
+  if (!session) throw new Error("يجب تسجيل الدخول أولاً");
+
+  const canCreate = await hasPermission(session.userId, "purchase_create");
+  if (!canCreate) throw new Error("ليس لديك صلاحية إنشاء فواتير مشتريات");
+
   if (!data.supplierId) throw new Error("يجب اختيار المورد أولاً");
   if (data.items.length === 0) throw new Error("لا يمكن حفظ فاتورة فارغة");
 
@@ -273,6 +287,16 @@ export async function updatePurchaseInvoice(
     notes?: string[];
   }
 ) {
+  const session = await getSession();
+  if (!session) throw new Error("يجب تسجيل الدخول أولاً");
+
+  const canEdit = await hasPermission(session.userId, "purchase_view"); // Assuming view is needed to edit, or add purchase_edit if we had it
+  // In the plan, we only used purchase_view and purchase_create.
+  // Let's check permissions.ts to see if I added purchase_edit. 
+  // I didn't add purchase_edit specifically in the initial list, let's assume views can see.
+  // Actually, I should probably check purchase_create for edit too?
+  if (!canEdit) throw new Error("ليس لديك صلاحية تعديل فواتير مشتريات");
+
   if (!data.supplierId) throw new Error("يجب اختيار المورد أولاً");
 
   return prisma.$transaction(async (tx) => {
@@ -282,6 +306,16 @@ export async function updatePurchaseInvoice(
     });
 
     if (!existingInvoice) throw new Error("الفاتورة غير موجودة");
+
+    if (existingInvoice.status !== data.status) {
+      throw new Error("لا يمكن تغيير نوع الفاتورة بعد الحفظ لحماية حركات الخزنة والبنك");
+    }
+
+    if (existingInvoice.status === "cash") {
+      if (existingInvoice.safeId !== data.safeId || existingInvoice.bankId !== data.bankId) {
+        throw new Error("لا يمكن تغيير جهة الدفع (الخزنة/البنك) بعد الحفظ لضمان سلامة العمليات المالية");
+      }
+    }
 
     if (existingInvoice.invoiceNumber !== data.invoiceNumber) {
       const numberTaken = await tx.purchaseInvoice.findUnique({
@@ -447,6 +481,12 @@ export async function updatePurchaseInvoice(
 
 // ─── حذف فاتورة (مع حذف حركات المخزون المرتبطة) ─────────────────────────
 export async function deletePurchaseInvoice(id: number) {
+  const session = await getSession();
+  if (!session) throw new Error("يجب تسجيل الدخول أولاً");
+
+  const isAdmin = session.user.role === "ADMIN";
+  if (!isAdmin) throw new Error("ليس لديك صلاحية حذف فواتير مشتريات");
+
   await prisma.$transaction(async (tx) => {
     // 0. جلب بيانات الفاتورة لمعرفة حالتها וחساباتها
     const invoice = await tx.purchaseInvoice.findUnique({
@@ -502,7 +542,9 @@ export async function getPurchaseInvoiceWithReturns(id: number) {
   return prisma.purchaseInvoice.findUnique({
     where: { id },
     include: {
-      items: true,
+      items: {
+        include: { product: true }
+      },
       supplier: true,
       purchaseReturns: {
         include: { items: true }

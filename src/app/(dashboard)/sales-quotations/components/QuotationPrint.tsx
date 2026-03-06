@@ -22,19 +22,39 @@ interface QuotationPrintProps {
   discount: number;
   total: number;
   notes?: string[];
+  // Company Settings
+  companyName?: string;
+  companyNameEn?: string;
+  companyLogo?: string | null;
+  companyStamp?: string | null;
+  showLogo?: boolean;
+  showStamp?: boolean;
 }
 
 export const QuotationPrint = React.forwardRef<HTMLDivElement, QuotationPrintProps>(
-  ({ code, date, customerName, customerCode, customerPhone, customerAddress, items, subtotal, discount, total, notes }, ref) => {
+  ({ 
+    code, date, customerName, customerCode, customerPhone, customerAddress, items, subtotal, discount, total, notes,
+    companyName = "شركة المحاسبة الحديثة",
+    companyNameEn = "Modern Accounting Co.",
+    companyLogo,
+    companyStamp,
+    showLogo = true,
+    showStamp = true,
+  }, ref) => {
     return (
       <div ref={ref} className="hidden print:block print:p-10 bg-white text-black min-h-screen" dir="rtl">
         {/* Header Section */}
         <div className="flex justify-between items-start border-b-4 border-primary pb-6 mb-8">
-          <div className="space-y-1">
-            <h1 className="text-4xl font-black text-primary mb-2 tracking-tight">عرض سعر</h1>
-            <div className="flex flex-col">
-              <span className="text-xl font-bold text-slate-800">مصنع الطوب الحديث</span>
-              <span className="text-sm text-slate-500">لجميع أنواع طوب البناء والتشييد</span>
+          <div className="flex items-start gap-4">
+            {showLogo && companyLogo && (
+              <img src={companyLogo} alt="Logo" className="w-20 h-20 object-contain rounded-lg" />
+            )}
+            <div className="space-y-1">
+              <h1 className="text-4xl font-black text-primary mb-2 tracking-tight">عرض سعر</h1>
+              <div className="flex flex-col">
+                <span className="text-xl font-bold text-slate-800">{companyName}</span>
+                <span className="text-xs text-slate-500 font-medium tracking-wide uppercase">{companyNameEn}</span>
+              </div>
             </div>
           </div>
           <div className="text-left bg-slate-50 p-4 rounded-xl border border-slate-100">
@@ -156,6 +176,17 @@ export const QuotationPrint = React.forwardRef<HTMLDivElement, QuotationPrintPro
               <span className="text-2xl font-black text-green-400">{total.toLocaleString("ar-EG")} ج.م</span>
             </div>
           </div>
+
+          {/* Company Stamp */}
+          {showStamp && companyStamp && (
+            <div className="w-80 flex flex-col items-center justify-center">
+              <div className="relative group">
+                <img src={companyStamp} alt="Stamp" className="w-32 h-32 object-contain opacity-80" />
+                <div className="absolute inset-0 border-4 border-slate-200/20 rounded-full scale-110 pointer-events-none" />
+              </div>
+              <p className="text-[10px] font-bold text-slate-400 mt-2">ختم وتوقيع المعتمد</p>
+            </div>
+          )}
         </div>
 
         {/* Signature Area */}
@@ -172,7 +203,7 @@ export const QuotationPrint = React.forwardRef<HTMLDivElement, QuotationPrintPro
 
         {/* Footer */}
         <div className="mt-12 flex flex-col items-center justify-center border-t border-slate-100 pt-10">
-          <p className="text-sm font-bold text-slate-400 tracking-widest uppercase">شكراً لتعاملكم مع مصنع الطوب الحديث</p>
+          <p className="text-sm font-bold text-slate-400 tracking-widest uppercase">شكراً لتعاملكم مع {companyName}</p>
         </div>
       </div>
     );

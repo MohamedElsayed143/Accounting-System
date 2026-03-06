@@ -39,7 +39,7 @@ export function Navbar({ title }: NavbarProps) {
   };
 
   return (
-    <header className="sticky top-0 z-40 flex h-16 items-center gap-4 border-b border-border/40 bg-background/95 px-6 backdrop-blur supports-[backdrop-filter]:bg-background/60 shadow-sm">
+    <header className="sticky top-0 z-40 flex h-16 items-center gap-4 border-b border-border/40 bg-background/95 px-6 backdrop-blur supports-[backdrop-filter]:bg-background/60 shadow-sm print:hidden">
       <SidebarTrigger className="md:hidden hover:bg-primary/10 transition-all" />
 
       <div className="flex flex-1 items-center gap-4">

@@ -39,6 +39,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import TransferDialog from "./components/TransferDialog";
+import { usePermissions } from "@/hooks/use-permissions";
 
 // تعريف نوع المعاملات
 interface Transaction {
@@ -81,6 +82,7 @@ export default function TreasuryPage() {
   } | null>(null);
   const [isArchiving, setIsArchiving] = useState(false);
   const [showTransfer, setShowTransfer] = useState(false);
+  const { hasPermission, isAdmin } = usePermissions();
 
   const loadData = () => {
     getTreasuryData().then(setData);
@@ -205,48 +207,58 @@ export default function TreasuryPage() {
 
         {/* أزرار العمليات */}
         <div className="flex flex-wrap gap-3 justify-end">
-          <Button
-            variant="outline"
-            className="gap-2"
-            onClick={() => setShowAddBank(true)}
-          >
-            <Plus className="h-4 w-4" /> إضافة بنك جديد
-          </Button>
+          {hasPermission("treasury_manage") && (
+            <>
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={() => setShowAddBank(true)}
+              >
+                <Plus className="h-4 w-4" /> إضافة بنك جديد
+              </Button>
 
-          <Button
-            variant="outline"
-            className="gap-2"
-            onClick={() => setShowAddSafe(true)}
-          >
-            <Plus className="h-4 w-4" /> إضافة خزنة جديدة
-          </Button>
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={() => setShowAddSafe(true)}
+              >
+                <Plus className="h-4 w-4" /> إضافة خزنة جديدة
+              </Button>
+            </>
+          )}
 
           {/* زر البنوك المؤرشفة */}
-          <Link href="/treasury/archived">
-            <Button
-              variant="outline"
-              className="gap-2 border-orange-500 text-orange-600 hover:bg-orange-50"
-            >
-              <Landmark className="h-4 w-4" /> البنوك المؤرشفة
-            </Button>
-          </Link>
-
-          
-            <Button 
-                onClick={() => setShowTransfer(true)}
-                className="bg-blue-600 hover:bg-blue-700"
-            >
-              <ArrowLeftRight className="ml-2 h-4 w-4" />
-              تحويل أموال
-            </Button>
-            <Link href="/treasury/receipt-voucher">
-              <Button className="bg-emerald-600 hover:bg-emerald-700">
-                + سند قبض جديد
+          {isAdmin && (
+            <Link href="/treasury/archived">
+              <Button
+                variant="outline"
+                className="gap-2 border-orange-500 text-orange-600 hover:bg-orange-50"
+              >
+                <Landmark className="h-4 w-4" /> البنوك المؤرشفة
               </Button>
             </Link>
-            <Link href="/treasury/payment-voucher">
-              <Button variant="destructive">+ سند صرف جديد</Button>
-            </Link>
+          )}
+
+          
+            {hasPermission("treasury_manage") && (
+              <>
+                <Button 
+                    onClick={() => setShowTransfer(true)}
+                    className="bg-blue-600 hover:bg-blue-700"
+                >
+                  <ArrowLeftRight className="ml-2 h-4 w-4" />
+                  تحويل أموال
+                </Button>
+                <Link href="/treasury/receipt-voucher">
+                  <Button className="bg-emerald-600 hover:bg-emerald-700">
+                    + سند قبض جديد
+                  </Button>
+                </Link>
+                <Link href="/treasury/payment-voucher">
+                  <Button variant="destructive">+ سند صرف جديد</Button>
+                </Link>
+              </>
+            )}
           </div>
 
         {/* عرض الحسابات (خزائن وبنوك) */}
@@ -306,7 +318,7 @@ export default function TreasuryPage() {
                 </Link>
 
                 {/* زر الأرشفة - يظهر ثابت للبنوك */}
-                {acc.type === "bank" && (
+                {acc.type === "bank" && isAdmin && (
                   <Button
                     variant="secondary"
                     size="icon"
@@ -322,7 +334,7 @@ export default function TreasuryPage() {
                 )}
 
                 {/* زر أرشفة الخزنة (غير الرئيسية فقط) */}
-                {acc.type === "safe" && !acc.isPrimary && (
+                {acc.type === "safe" && !acc.isPrimary && isAdmin && (
                   <Button
                     variant="secondary"
                     size="icon"

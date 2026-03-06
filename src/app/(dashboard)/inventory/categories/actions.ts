@@ -3,6 +3,8 @@
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import type { Category } from "@prisma/client";
+import { getSession } from "@/lib/auth";
+import { hasPermission } from "@/lib/permissions";
 
 export interface CategoryData extends Category {
   _count?: { products: number };
@@ -29,6 +31,10 @@ async function generateCategoryCode(tx: any): Promise<string> {
 }
 
 export async function getCategories(): Promise<CategoryData[]> {
+  const session = await getSession();
+  const canView = session ? await hasPermission(session.userId, "inventory_view") : false;
+  if (!canView) return [];
+
   return prisma.category.findMany({
     orderBy: { name: "asc" },
     include: { _count: { select: { products: true } } },
@@ -36,6 +42,10 @@ export async function getCategories(): Promise<CategoryData[]> {
 }
 
 export async function createCategory(data: { name: string }) {
+  const session = await getSession();
+  const canManage = session ? await hasPermission(session.userId, "inventory_view") : false;
+  if (!canManage) throw new Error("ليس لديك صلاحية إضافة تصنيفات");
+
   if (!data.name.trim()) throw new Error("اسم التصنيف مطلوب");
 
   return prisma.$transaction(async (tx) => {
@@ -55,6 +65,10 @@ export async function createCategory(data: { name: string }) {
 }
 
 export async function updateCategory(id: number, data: { name: string }) {
+  const session = await getSession();
+  const canManage = session ? await hasPermission(session.userId, "inventory_view") : false;
+  if (!canManage) throw new Error("ليس لديك صلاحية تعديل تصنيفات");
+
   if (!data.name.trim()) throw new Error("اسم التصنيف مطلوب");
 
   const category = await prisma.category.update({
@@ -66,6 +80,9 @@ export async function updateCategory(id: number, data: { name: string }) {
 }
 
 export async function deleteCategory(id: number) {
+  const session = await getSession();
+  if (!session || session.user.role !== "ADMIN") throw new Error("صلاحية الحذف للأدمن فقط");
+
   const hasProducts = await prisma.product.count({
     where: { categoryId: id, isActive: true },
   });

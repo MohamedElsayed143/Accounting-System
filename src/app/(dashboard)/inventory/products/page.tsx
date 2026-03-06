@@ -36,12 +36,14 @@ import {
   deleteProduct,
   type ProductData,
 } from "./actions";
+import { usePermissions } from "@/hooks/use-permissions";
 
 const ITEMS_PER_PAGE = 10;
 
 export default function ProductsPage() {
   const [products, setProducts] = useState<ProductData[]>([]);
   const [loading, setLoading] = useState(true);
+  const { hasPermission, isAdmin, loading: permsLoading } = usePermissions();
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -96,12 +98,18 @@ export default function ProductsPage() {
     setDeleteDialogOpen(true);
   };
 
-  const handleSubmit = async (data: Parameters<typeof createProduct>[0]) => {
+  const handleSubmit = async (data: any) => {
+    const submitData = {
+      ...data,
+      taxRate: data.taxRate ? Number(data.taxRate) : 0,
+      profitMargin: data.profitMargin ? Number(data.profitMargin) : 0,
+    };
+
     if (editingProduct) {
-      await updateProduct(editingProduct.id, data);
+      await updateProduct(editingProduct.id, submitData);
       toast.success("تم تحديث الصنف بنجاح");
     } else {
-      await createProduct(data);
+      await createProduct(submitData);
       toast.success("تم إضافة الصنف بنجاح");
     }
     load();
@@ -136,13 +144,15 @@ export default function ProductsPage() {
               إدارة أصناف المخزون وأسعار الشراء والبيع
             </p>
           </div>
-          <Button
-            onClick={openCreate}
-            className="gap-2 shadow-md hover:shadow-lg transition-all"
-          >
-            <Plus className="h-4 w-4" />
-            <span className="font-medium">إضافة صنف</span>
-          </Button>
+          {hasPermission("inventory_view") && (
+            <Button
+              onClick={openCreate}
+              className="gap-2 shadow-md hover:shadow-lg transition-all"
+            >
+              <Plus className="h-4 w-4" />
+              <span className="font-medium">إضافة صنف</span>
+            </Button>
+          )}
         </div>
 
         <Card className="shadow-sm">
@@ -238,24 +248,28 @@ export default function ProductsPage() {
 
                             <TableCell className="text-center">
                               <div className="flex justify-center gap-2">
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => openEdit(product)}
-                                  className="hover:bg-primary/10 transition-all"
-                                  title="تعديل"
-                                >
-                                  <Pencil className="h-4 w-4 text-primary" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => openDelete(product)}
-                                  className="hover:bg-destructive/10 transition-all"
-                                   title="إيقاف التعامل"
-                                 >
-                                   <Trash2 className="h-4 w-4 text-destructive" />
-                                 </Button>
+                                {hasPermission("inventory_view") && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => openEdit(product)}
+                                    className="hover:bg-primary/10 transition-all"
+                                    title="تعديل"
+                                  >
+                                    <Pencil className="h-4 w-4 text-primary" />
+                                  </Button>
+                                )}
+                                {isAdmin && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => openDelete(product)}
+                                    className="hover:bg-destructive/10 transition-all"
+                                     title="إيقاف التعامل"
+                                   >
+                                     <Trash2 className="h-4 w-4 text-destructive" />
+                                   </Button>
+                                )}
                               </div>
                             </TableCell>
                           </TableRow>

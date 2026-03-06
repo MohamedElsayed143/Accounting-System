@@ -19,10 +19,12 @@ import {
 import { toast } from "sonner";
 import { getProducts, type ProductData } from "../products/actions";
 import { createAdjustment, getCurrentStock } from "./actions";
+import { usePermissions } from "@/hooks/use-permissions";
 
 export default function AdjustmentsPage() {
   const [products, setProducts] = useState<ProductData[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
+  const { hasPermission } = usePermissions();
 
   const [selectedProductId, setSelectedProductId] = useState<string>("");
   const [currentStock, setCurrentStock] = useState<number | null>(null);
@@ -114,6 +116,12 @@ export default function AdjustmentsPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
+                {!hasPermission("inventory_view") ? (
+                  <div className="flex flex-col items-center justify-center py-10 text-center gap-3">
+                    <AlertTriangle className="h-10 w-10 text-amber-500" />
+                    <p className="text-muted-foreground font-medium">ليس لديك صلاحية لإجراء تسويات المخزون</p>
+                  </div>
+                ) : (
                 <form onSubmit={handleSubmit} className="space-y-5">
                   {/* Product selector */}
                   <div className="space-y-2">
@@ -248,6 +256,7 @@ export default function AdjustmentsPage() {
                     )}
                   </Button>
                 </form>
+                )}
               </CardContent>
             </Card>
           </div>

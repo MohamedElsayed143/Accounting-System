@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { Check, ChevronsUpDown, Search, User } from "lucide-react";
+import { Check, ChevronsUpDown, Search, User, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,13 +28,17 @@ interface Customer {
 interface CustomerSelectProps {
   onSelect: (customer: Customer) => void;
   selectedId?: number;
+  selectedName?: string;
+  selectedCode?: string | number;
   error?: string;
+  disabled?: boolean;
 }
 
-export function CustomerSelect({ onSelect, selectedId, error }: CustomerSelectProps) {
+export function CustomerSelect({ onSelect, selectedId, selectedName, selectedCode, error, disabled }: CustomerSelectProps) {
   const [open, setOpen] = useState(false);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchValue, setSearchValue] = useState("");
 
   useEffect(() => {
     async function fetchCustomers() {
@@ -66,23 +70,44 @@ export function CustomerSelect({ onSelect, selectedId, error }: CustomerSelectPr
               !selectedCustomer && "text-muted-foreground",
               error && "border-red-500"
             )}
-            disabled={loading}
+            disabled={loading || disabled}
           >
-            {selectedCustomer ? (
-              <div className="flex items-center gap-2">
-                <User className="h-4 w-4 text-primary" />
-                <span>{selectedCustomer.name}</span>
-                <span className="text-xs text-muted-foreground">({selectedCustomer.code})</span>
+            {selectedCustomer || selectedName ? (
+              <div className="flex items-center gap-2 overflow-hidden">
+                <User className="h-4 w-4 text-primary shrink-0" />
+                <span className="truncate">{selectedCustomer?.name || selectedName}</span>
+                {(selectedCustomer?.code || selectedCode) && (
+                  <span className="text-xs text-muted-foreground shrink-0">({selectedCustomer?.code || selectedCode})</span>
+                )}
               </div>
             ) : (
               loading ? "جاري التحميل..." : "ابحث عن عميل..."
             )}
-            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+            <div className="flex items-center gap-1">
+              {(selectedCustomer || selectedName) && !disabled && (
+                <div
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelect(null as any);
+                    setSearchValue("");
+                  }}
+                  className="p-1 hover:bg-slate-100 rounded-full transition-colors"
+                >
+                  <X className="h-3 w-3 text-muted-foreground" />
+                </div>
+              )}
+              <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
+            </div>
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-[400px] p-0" align="start">
           <Command>
-            <CommandInput placeholder="ابحث بالاسم أو الكود..." className="text-right" />
+            <CommandInput
+              placeholder="ابحث بالاسم أو الكود..."
+              className="text-right"
+              value={searchValue}
+              onValueChange={setSearchValue}
+            />
             <CommandList>
               <CommandEmpty>لم يتم العثور على نتائج.</CommandEmpty>
               <CommandGroup>
@@ -92,6 +117,7 @@ export function CustomerSelect({ onSelect, selectedId, error }: CustomerSelectPr
                     value={`${customer.name} ${customer.code}`}
                     onSelect={() => {
                       onSelect(customer);
+                      setSearchValue("");
                       setOpen(false);
                     }}
                     className="flex items-center justify-between pointer-events-auto"

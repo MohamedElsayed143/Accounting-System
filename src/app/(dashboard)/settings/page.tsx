@@ -92,8 +92,8 @@ const DEFAULT: Settings = {
   },
   rbac: {
     roles: {
-      cashier: {
-        label: "كاشير",
+      worker: {
+        label: "موظف",
         permissions: {
           sales_view: true,
           sales_create: true,
@@ -102,60 +102,22 @@ const DEFAULT: Settings = {
           purchase_view: false,
           purchase_create: false,
           customers_view: true,
+          customers_retail_only: false,
           customers_manage: false,
           suppliers_view: false,
           suppliers_manage: false,
           treasury_view: false,
           treasury_manage: false,
+          treasury_vouchers: true,
           inventory_view: true,
-          inventory_manage: false,
-          reports_view: false,
           statistics_view: false,
+          reports_customers_suppliers: false,
+          reports_treasury_banks: false,
+          returns_sales: false,
+          returns_purchase: false,
+          sales_quotations_view: true,
+          sales_pending_view: true,
           settings_access: false,
-        },
-      },
-      accountant: {
-        label: "محاسب",
-        permissions: {
-          sales_view: true,
-          sales_create: true,
-          sales_edit: true,
-          sales_delete: false,
-          purchase_view: true,
-          purchase_create: true,
-          customers_view: true,
-          customers_manage: true,
-          suppliers_view: true,
-          suppliers_manage: true,
-          treasury_view: true,
-          treasury_manage: true,
-          inventory_view: true,
-          inventory_manage: false,
-          reports_view: true,
-          statistics_view: true,
-          settings_access: false,
-        },
-      },
-      manager: {
-        label: "مدير",
-        permissions: {
-          sales_view: true,
-          sales_create: true,
-          sales_edit: true,
-          sales_delete: true,
-          purchase_view: true,
-          purchase_create: true,
-          customers_view: true,
-          customers_manage: true,
-          suppliers_view: true,
-          suppliers_manage: true,
-          treasury_view: true,
-          treasury_manage: true,
-          inventory_view: true,
-          inventory_manage: true,
-          reports_view: true,
-          statistics_view: true,
-          settings_access: true,
         },
       },
     },
@@ -200,24 +162,23 @@ const PERMISSION_GROUPS = [
     perms: [
       { key: "sales_view", label: "عرض الفواتير" },
       { key: "sales_create", label: "إنشاء فاتورة" },
-      { key: "sales_edit", label: "تعديل فاتورة" },
-      { key: "sales_delete", label: "حذف فاتورة" },
+      { key: "sales_quotations_view", label: "عروض الأسعار" },
+      { key: "sales_pending_view", label: "الفواتير المعلقة" },
     ],
   },
   {
     group: "المشتريات",
     perms: [
-      { key: "purchase_view", label: "عرض الفواتير" },
-      { key: "purchase_create", label: "إنشاء فاتورة" },
+      { key: "purchase_view", label: "عرض فواتير المشتريات" },
+      { key: "purchase_create", label: "إنشاء فاتورة مشتريات" },
     ],
   },
   {
     group: "العملاء والموردون",
     perms: [
-      { key: "customers_view", label: "عرض العملاء" },
-      { key: "customers_manage", label: "إدارة العملاء" },
-      { key: "suppliers_view", label: "عرض الموردين" },
-      { key: "suppliers_manage", label: "إدارة الموردين" },
+      { key: "customers_view", label: "العملاء" },
+      { key: "suppliers_view", label: "الموردون" },
+      // customers_retail_only, customers_manage, and suppliers_manage are hidden as requested
     ],
   },
   {
@@ -225,21 +186,28 @@ const PERMISSION_GROUPS = [
     perms: [
       { key: "treasury_view", label: "عرض الخزينة" },
       { key: "treasury_manage", label: "إدارة الخزينة" },
+      { key: "treasury_vouchers", label: "السندات" },
     ],
   },
   {
     group: "المخزون",
     perms: [
       { key: "inventory_view", label: "عرض المخزون" },
-      { key: "inventory_manage", label: "إدارة المخزون" },
     ],
   },
   {
     group: "التقارير والإحصائيات",
     perms: [
-      { key: "reports_view", label: "التقارير" },
-      { key: "statistics_view", label: "الإحصائيات" },
-      { key: "settings_access", label: "إعدادات النظام" },
+      { key: "statistics_view", label: "عرض الإحصائيات" },
+      { key: "reports_customers_suppliers", label: "تقارير العملاء والموردين" },
+      { key: "reports_treasury_banks", label: "تقارير الخزينة والبنوك" },
+    ],
+  },
+  {
+    group: "المرتجعات",
+    perms: [
+      { key: "returns_sales", label: "مرتجعات المبيعات" },
+      { key: "returns_purchase", label: "مرتجعات المشتريات" },
     ],
   },
 ];
@@ -468,7 +436,17 @@ export default function SystemSettingsPage() {
             invoice: { ...prev.invoice, ...dbSettings.invoice },
             tax: { ...prev.tax, ...dbSettings.tax },
             inventory: { ...prev.inventory, ...dbSettings.inventory },
-            rbac: dbSettings.rbac ?? prev.rbac,
+            rbac: dbSettings.rbac ? {
+              roles: {
+                worker: {
+                  label: "موظف",
+                  permissions: {
+                    ...(DEFAULT.rbac.roles.worker.permissions),
+                    ...(dbSettings.rbac.roles?.worker?.permissions || dbSettings.rbac.roles?.cashier?.permissions || {})
+                  }
+                }
+              }
+            } : prev.rbac,
           }));
         }
 
@@ -754,6 +732,17 @@ export default function SystemSettingsPage() {
             {/* ══ Tab: Company & Invoices ══ */}
             {tab === "company" && (
               <>
+                <Card title="بيانات الشركة" icon={Building2}>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <Field label="اسم الشركة (بالعربية)" hint="يظهر في التقارير والفواتير">
+                      <Input value={s.company.name} onChange={(v) => update("company", "name", v)} placeholder="أدخل اسم الشركة..." />
+                    </Field>
+                    <Field label="اسم الشركة (English)" hint="Company name in English">
+                      <Input value={s.company.nameEn} onChange={(v) => update("company", "nameEn", v)} placeholder="Enter company name..." dir="ltr" />
+                    </Field>
+                  </div>
+                </Card>
+
                 <Card title="صورة الشركة والختم" icon={ImageIcon}>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                     <ImageUploader

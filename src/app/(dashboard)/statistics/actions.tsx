@@ -1,9 +1,17 @@
 "use server";
 import { prisma } from "@/lib/prisma";
 import { getSystemSettings } from "../settings/actions";
+import { getSession } from "@/lib/auth";
+import { hasPermission } from "@/lib/permissions";
 
 // ========== KPI Summary ==========
 export async function getStatisticsSummary(fromDate?: Date, toDate?: Date) {
+  const session = await getSession();
+  if (!session) return { totalRevenue: 0, totalPurchases: 0, netProfit: 0, customerCount: 0, supplierCount: 0, treasuryBalance: 0, salesCount: 0, purchasesCount: 0, pendingTotal: 0, pendingCount: 0 };
+
+  const canView = await hasPermission(session.userId, "statistics_view");
+  if (!canView) return { totalRevenue: 0, totalPurchases: 0, netProfit: 0, customerCount: 0, supplierCount: 0, treasuryBalance: 0, salesCount: 0, purchasesCount: 0, pendingTotal: 0, pendingCount: 0 };
+
   try {
     const dateFilterInvoice =
       fromDate && toDate

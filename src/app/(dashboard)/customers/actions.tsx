@@ -2,10 +2,18 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { getSession } from "@/lib/auth";
+import { hasPermission } from "@/lib/permissions";
 
 // جلب كل العملاء مع أرصدتهم
 export async function getCustomers() {
+  const session = await getSession();
+  if (!session) return [];
+
+  const isRestricted = await hasPermission(session.userId, "customers_retail_only");
+  
   const customers = await prisma.customer.findMany({
+    where: isRestricted ? { category: "Retail" } : {},
     include: {
       invoices: { 
         where: { status: { not: "pending" } },
@@ -28,6 +36,7 @@ export async function getCustomers() {
       code: customer.code,
       phone: customer.phone,
       address: customer.address,
+      category: customer.category,
       balance: totalInvoices - totalReceipts - totalReturns,
     };
   });
@@ -40,6 +49,7 @@ export async function saveCustomer(data: {
   code: number;
   phone: string;
   address: string;
+  category?: string;
 }) {
   try {
     let existingCustomer;

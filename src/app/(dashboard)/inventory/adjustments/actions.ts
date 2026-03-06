@@ -3,6 +3,8 @@
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { MovementType } from "@prisma/client";
+import { getSession } from "@/lib/auth";
+import { hasPermission } from "@/lib/permissions";
 
 // حساب المخزون الحالي لمنتج في مستودع معين (اختياري)
 export async function getCurrentStock(productId: number, warehouseId?: number): Promise<number> {
@@ -30,6 +32,10 @@ export async function createAdjustment(data: {
   notes?: string;
   warehouseId?: number;  // المستودع (إذا كان متعدد المستودعات)
 }) {
+  const session = await getSession();
+  const canManage = session ? await hasPermission(session.userId, "inventory_view") : false;
+  if (!canManage) throw new Error("ليس لديك صلاحية إجراء تسوية للمخزون");
+
   // التحقق من وجود المنتج
   const product = await prisma.product.findUnique({
     where: { id: data.productId, isActive: true },

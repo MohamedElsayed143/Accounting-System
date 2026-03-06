@@ -27,6 +27,7 @@ import {
   updateQuotation,
   updateQuotationStatus,
 } from "../actions";
+import { getCompanySettingsAction } from "@/app/(dashboard)/settings/actions";
 
 interface Customer {
   id: number;
@@ -65,9 +66,11 @@ export function QuotationForm({ quotationId, readOnly, onBack }: QuotationFormPr
   const [globalDiscount, setGlobalDiscount] = useState<number>(0);
   const [notes, setNotes] = useState<string[]>([]);
   const [currentStatus, setCurrentStatus] = useState<string>("Draft");
+  const [companySettings, setCompanySettings] = useState<any>(null);
 
   // تحميل رقم العرض التالي (للإنشاء فقط)
   useEffect(() => {
+    getCompanySettingsAction().then(setCompanySettings);
     if (!quotationId) {
       getNextQuotationCode().then(setQuotationCode);
     }
@@ -490,6 +493,12 @@ export function QuotationForm({ quotationId, readOnly, onBack }: QuotationFormPr
         discount={globalDiscountAmount}
         total={grandTotal}
         notes={notes}
+        companyName={companySettings?.companyName}
+        companyNameEn={companySettings?.companyNameEn}
+        companyLogo={companySettings?.companyLogo}
+        companyStamp={companySettings?.companyStamp}
+        showLogo={companySettings?.showLogoOnPrint}
+        showStamp={companySettings?.showStampOnPrint}
       />
     </div>
   );

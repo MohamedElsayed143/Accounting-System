@@ -32,6 +32,7 @@ import { getSalesInvoices, deleteSalesInvoice } from "./actions";
 import { useRouter } from "next/navigation";
 import { getCompanySettingsAction } from "@/app/(dashboard)/settings/actions";
 import { ProcessInvoiceDialog } from "../pending-invoices/components/ProcessInvoiceDialog";
+import { usePermissions } from "@/hooks/use-permissions";
 
 interface InvoiceRow {
   id: number;
@@ -87,6 +88,7 @@ export default function SalesInvoicesPage() {
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
   const [prefix, setPrefix] = useState<string>("INV");
   const router = useRouter();
+  const { hasPermission, loading: permsLoading } = usePermissions();
 
   useEffect(() => {
     getSalesInvoices()
@@ -176,15 +178,17 @@ export default function SalesInvoicesPage() {
               إدارة فواتير المبيعات وتتبع المدفوعات والمرتجعات
             </p>
           </div>
-          <Button
-            asChild
-            className="gap-2 shadow-md hover:shadow-lg transition-all"
-          >
-            <Link href="/sales-invoices/create">
-              <Plus className="h-4 w-4" />
-              <span className="font-medium">إنشاء فاتورة</span>
-            </Link>
-          </Button>
+          {hasPermission("sales_create") && (
+            <Button
+              asChild
+              className="gap-2 shadow-md hover:shadow-lg transition-all"
+            >
+              <Link href="/sales-invoices/create">
+                <Plus className="h-4 w-4" />
+                <span className="font-medium">إنشاء فاتورة</span>
+              </Link>
+            </Button>
+          )}
         </div>
 
         <Card className="shadow-sm">
@@ -213,29 +217,29 @@ export default function SalesInvoicesPage() {
                 </div>
               ) : paginatedInvoices.length > 0 ? (
                 <>
-                  <div className="rounded-lg border overflow-hidden">
+                  <div className="rounded-lg border overflow-x-auto">
                     <Table>
                       <TableHeader>
                         <TableRow className="bg-muted/50 hover:bg-muted/50">
-                          <TableHead className="font-bold text-center">
+                          <TableHead className="font-bold text-center whitespace-nowrap">
                             رقم الفاتورة
                           </TableHead>
-                          <TableHead className="font-bold text-center">
+                          <TableHead className="font-bold text-center whitespace-nowrap">
                             العميل
                           </TableHead>
-                          <TableHead className="font-bold text-center">
+                          <TableHead className="font-bold text-center whitespace-nowrap">
                             التاريخ
                           </TableHead>
-                          <TableHead className="font-bold text-center">
+                          <TableHead className="font-bold text-center whitespace-nowrap">
                             المبلغ (الصافي)
                           </TableHead>
-                          <TableHead className="font-bold text-center">
+                          <TableHead className="font-bold text-center whitespace-nowrap">
                             الحالة
                           </TableHead>
-                          <TableHead className="font-bold text-center">
+                          <TableHead className="font-bold text-center whitespace-nowrap">
                             المرتجعات
                           </TableHead>
-                          <TableHead className="font-bold text-center">
+                          <TableHead className="font-bold text-center whitespace-nowrap">
                             الإجراءات
                           </TableHead>
                         </TableRow>
@@ -250,13 +254,13 @@ export default function SalesInvoicesPage() {
                                 : "hover:bg-muted/20"
                             }
                           >
-                            <TableCell className="font-bold text-primary text-center" dir="ltr">
+                            <TableCell className="font-bold text-primary text-center whitespace-nowrap" dir="ltr">
                               {prefix}-{String(invoice.invoiceNumber).padStart(4, "0")}
                             </TableCell>
-                            <TableCell className="font-medium text-center">
+                            <TableCell className="font-medium text-center whitespace-nowrap text-ellipsis overflow-hidden max-w-[200px]">
                               {invoice.customerName}
                             </TableCell>
-                            <TableCell className="text-muted-foreground font-medium text-center">
+                            <TableCell className="text-muted-foreground font-medium text-center whitespace-nowrap">
                               {new Date(invoice.invoiceDate).toLocaleDateString(
                                 "ar-EG",
                                 {
@@ -266,7 +270,7 @@ export default function SalesInvoicesPage() {
                                 },
                               )}
                             </TableCell>
-                            <TableCell className="font-bold text-lg text-center">
+                            <TableCell className="font-bold text-lg text-center whitespace-nowrap">
                               {invoice.netTotal.toLocaleString("ar-EG")} ج.م
                             </TableCell>
                             <TableCell className="text-center">
@@ -280,7 +284,7 @@ export default function SalesInvoicesPage() {
                                   <span className="font-bold text-orange-600">
                                     {invoice.returnsCount}
                                   </span>
-                                  <span className="text-xs text-muted-foreground">
+                                  <span className="text-xs text-muted-foreground whitespace-nowrap">
                                     {invoice.returnsTotal.toLocaleString()} ج.م
                                   </span>
                                 </div>
@@ -290,27 +294,31 @@ export default function SalesInvoicesPage() {
                             </TableCell>
                             <TableCell className="text-center">
                               <div className="flex justify-center gap-2">
-                                <Link
-                                  href={`/sales-invoices/create?id=${invoice.id}`}
-                                >
+                                {hasPermission("sales_edit") && (
+                                  <Link
+                                    href={`/sales-invoices/create?id=${invoice.id}`}
+                                  >
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="hover:bg-primary/10 transition-all"
+                                      title="عرض وتعديل"
+                                    >
+                                      <Eye className="h-4 w-4 text-primary" />
+                                    </Button>
+                                  </Link>
+                                )}
+                                {hasPermission("sales_delete") && (
                                   <Button
                                     variant="ghost"
                                     size="icon"
-                                    className="hover:bg-primary/10 transition-all"
-                                    title="عرض وتعديل"
+                                    onClick={() => openDeleteDialog(invoice)}
+                                    className="hover:bg-destructive/10 transition-all"
+                                    title="حذف"
                                   >
-                                    <Eye className="h-4 w-4 text-primary" />
+                                    <Trash2 className="h-4 w-4 text-destructive" />
                                   </Button>
-                                </Link>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => openDeleteDialog(invoice)}
-                                  className="hover:bg-destructive/10 transition-all"
-                                  title="حذف"
-                                >
-                                  <Trash2 className="h-4 w-4 text-destructive" />
-                                </Button>
+                                )}
                                 {invoice.status === 'pending' && (
                                   <Button
                                     variant="ghost"

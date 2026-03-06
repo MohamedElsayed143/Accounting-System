@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { Plus, Pencil, Trash2, Phone, MapPin, Hash, User, Search, UserPlus, Edit3, AlertTriangle, Wallet } from "lucide-react";
+import { Plus, Pencil, Trash2, Phone, MapPin, Hash, User, Search, UserPlus, Edit3, AlertTriangle, Wallet, Package } from "lucide-react";
 import { Navbar } from "@/components/layout/navbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -46,6 +46,7 @@ import {
   saveCustomer,
   deleteCustomerAction,
 } from "./actions";
+import { usePermissions } from "@/hooks/use-permissions";
 
 interface Customer {
   id: number;
@@ -53,6 +54,7 @@ interface Customer {
   code: number;
   phone: string | null;
   address: string | null;
+  category: string | null;
   balance: number;
 }
 
@@ -60,6 +62,7 @@ const ITEMS_PER_PAGE = 8;
 
 export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const { hasPermission, isAdmin } = usePermissions();
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -71,6 +74,7 @@ export default function CustomersPage() {
     name: "",
     phone: "",
     address: "",
+    category: "",
   });
 
   const [codeError, setCodeError] = useState<string>("");
@@ -120,6 +124,7 @@ export default function CustomersPage() {
       name: "",
       phone: "",
       address: "",
+      category: "Retail", // Default to Retail as requested
     });
     setCodeError("");
     setIsModalOpen(true);
@@ -132,6 +137,7 @@ export default function CustomersPage() {
       name: customer.name,
       phone: customer.phone || "",
       address: customer.address || "",
+      category: customer.category || "",
     });
     setCodeError("");
     setIsModalOpen(true);
@@ -168,6 +174,7 @@ export default function CustomersPage() {
         code: Number(formData.code),
         phone: formData.phone,
         address: formData.address,
+        category: formData.category,
       });
 
       await loadCustomers();
@@ -241,13 +248,15 @@ export default function CustomersPage() {
             </p>
           </div>
 
-          <Button 
-            onClick={openCreateModal} 
-            className="gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-lg hover:shadow-xl transition-all duration-200"
-          >
-            <UserPlus className="h-4 w-4" />
-            إضافة عميل جديد
-          </Button>
+          {hasPermission("customers_manage") && (
+            <Button 
+              onClick={openCreateModal} 
+              className="gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-lg hover:shadow-xl transition-all duration-200"
+            >
+              <UserPlus className="h-4 w-4" />
+              إضافة عميل جديد
+            </Button>
+          )}
         </div>
 
         <Card className="border-none shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm">
@@ -331,23 +340,27 @@ export default function CustomersPage() {
                           </TableCell>
                           <TableCell>
                             <div className="flex gap-2 justify-center">
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                onClick={() => openEditModal(c)}
-                                className="h-9 w-9 hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-950 transition-all"
-                              >
-                                <Edit3 className="h-4 w-4" />
-                              </Button>
+                              {hasPermission("customers_manage") && (
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  onClick={() => openEditModal(c)}
+                                  className="h-9 w-9 hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-950 transition-all"
+                                >
+                                  <Edit3 className="h-4 w-4" />
+                                </Button>
+                              )}
 
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                onClick={() => setDeleteCustomer(c)}
-                                className="h-9 w-9 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950 transition-all"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
+                              {isAdmin && (
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  onClick={() => setDeleteCustomer(c)}
+                                  className="h-9 w-9 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950 transition-all"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              )}
                             </div>
                           </TableCell>
                         </TableRow>
@@ -472,6 +485,25 @@ export default function CustomersPage() {
                   placeholder="أدخل العنوان"
                   className="focus:ring-2 focus:ring-orange-500"
                 />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="category" className="flex items-center gap-2 text-sm font-medium">
+                  <Package className="h-4 w-4 text-slate-600" />
+                  تصنيف العميل (مثال: Retail)
+                </Label>
+                <Input
+                  id="category"
+                  value={formData.category}
+                  onChange={(e) =>
+                    setFormData((p) => ({ ...p, category: e.target.value }))
+                  }
+                  placeholder="أدخل التصنيف (مثال: Retail)"
+                  className="focus:ring-2 focus:ring-slate-500"
+                />
+                <p className="text-[10px] text-muted-foreground font-medium pr-1">
+                  💡 استخدم "Retail" لظهور العميل للموظفين
+                </p>
               </div>
             </div>
 

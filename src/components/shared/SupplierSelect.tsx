@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { Check, ChevronsUpDown, Search, Truck } from "lucide-react";
+import { Check, ChevronsUpDown, Search, Truck, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,13 +28,17 @@ interface Supplier {
 interface SupplierSelectProps {
   onSelect: (supplier: Supplier) => void;
   selectedId?: number;
+  selectedName?: string;
+  selectedCode?: string | number;
   error?: string;
+  disabled?: boolean;
 }
 
-export function SupplierSelect({ onSelect, selectedId, error }: SupplierSelectProps) {
+export function SupplierSelect({ onSelect, selectedId, selectedName, selectedCode, error, disabled }: SupplierSelectProps) {
   const [open, setOpen] = useState(false);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchValue, setSearchValue] = useState("");
 
   useEffect(() => {
     async function fetchSuppliers() {
@@ -66,23 +70,44 @@ export function SupplierSelect({ onSelect, selectedId, error }: SupplierSelectPr
               !selectedSupplier && "text-muted-foreground",
               error && "border-red-500"
             )}
-            disabled={loading}
+            disabled={loading || disabled}
           >
-            {selectedSupplier ? (
-              <div className="flex items-center gap-2">
-                <Truck className="h-4 w-4 text-primary" />
-                <span>{selectedSupplier.name}</span>
-                <span className="text-xs text-muted-foreground">({selectedSupplier.code})</span>
+            {selectedSupplier || selectedName ? (
+              <div className="flex items-center gap-2 overflow-hidden">
+                <Truck className="h-4 w-4 text-primary shrink-0" />
+                <span className="truncate">{selectedSupplier?.name || selectedName}</span>
+                {(selectedSupplier?.code || selectedCode) && (
+                  <span className="text-xs text-muted-foreground shrink-0">({selectedSupplier?.code || selectedCode})</span>
+                )}
               </div>
             ) : (
               loading ? "جاري التحميل..." : "ابحث عن مورد..."
             )}
-            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+            <div className="flex items-center gap-1">
+              {(selectedSupplier || selectedName) && !disabled && (
+                <div
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelect(null as any);
+                    setSearchValue("");
+                  }}
+                  className="p-1 hover:bg-slate-100 rounded-full transition-colors"
+                >
+                  <X className="h-3 w-3 text-muted-foreground" />
+                </div>
+              )}
+              <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
+            </div>
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-[400px] p-0" align="start">
           <Command>
-            <CommandInput placeholder="ابحث بالاسم أو الكود..." className="text-right" />
+            <CommandInput
+              placeholder="ابحث بالاسم أو الكود..."
+              className="text-right"
+              value={searchValue}
+              onValueChange={setSearchValue}
+            />
             <CommandList>
               <CommandEmpty>لم يتم العثور على نتائج.</CommandEmpty>
               <CommandGroup>
@@ -92,6 +117,7 @@ export function SupplierSelect({ onSelect, selectedId, error }: SupplierSelectPr
                     value={`${supplier.name} ${supplier.code}`}
                     onSelect={() => {
                       onSelect(supplier);
+                      setSearchValue("");
                       setOpen(false);
                     }}
                     className="flex items-center justify-between pointer-events-auto"

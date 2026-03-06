@@ -4,6 +4,8 @@
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import type { Product } from "@prisma/client";
+import { getSession } from "@/lib/auth";
+import { hasPermission } from "@/lib/permissions";
 
 export interface ProductData extends Product {
   category: { id: number; name: string } | null;
@@ -46,6 +48,12 @@ export async function checkProductCodeExists(code: string, excludeId?: number): 
 }
 
 export async function getProducts(): Promise<ProductData[]> {
+  const session = await getSession();
+  if (!session) return [];
+
+  const canView = await hasPermission(session.userId, "inventory_view");
+  if (!canView) return [];
+
   const products = await prisma.product.findMany({
     where: { isActive: true },
     orderBy: { name: "asc" },
@@ -77,6 +85,12 @@ export async function createProduct(data: {
   taxRate: number;
   categoryId?: number;
 }) {
+  const session = await getSession();
+  if (!session) throw new Error("Unauthorized");
+
+  const canManage = await hasPermission(session.userId, "inventory_view");
+  if (!canManage) throw new Error("ليس لديك صلاحية إضافة أصناف");
+
   if (!data.code.trim()) throw new Error("كود الصنف مطلوب");
   if (!data.name.trim()) throw new Error("اسم الصنف مطلوب");
   if (!data.unit.trim()) throw new Error("وحدة القياس مطلوبة");
@@ -121,6 +135,12 @@ export async function updateProduct(
     categoryId?: number;
   }
 ) {
+  const session = await getSession();
+  if (!session) throw new Error("Unauthorized");
+
+  const canManage = await hasPermission(session.userId, "inventory_view");
+  if (!canManage) throw new Error("ليس لديك صلاحية تعديل أصناف");
+
   if (!data.name.trim()) throw new Error("اسم الصنف مطلوب");
   if (!data.unit.trim()) throw new Error("وحدة القياس مطلوبة");
   if (data.buyPrice <= 0) throw new Error("سعر الشراء يجب أن يكون أكبر من صفر");
@@ -145,6 +165,12 @@ export async function updateProduct(
 
 // إيقاف التعامل (Soft Delete)
 export async function deleteProduct(id: number) {
+  const session = await getSession();
+  if (!session) throw new Error("Unauthorized");
+
+  const isAdmin = session.user.role === "ADMIN";
+  if (!isAdmin) throw new Error("صلاحية أرشفة أو حذف الصنف هي للأدمن فقط");
+
   return prisma.$transaction(async (tx) => {
     // 1. فحص الرصيد الحالي
     const stockAgg = await tx.stockMovement.aggregate({

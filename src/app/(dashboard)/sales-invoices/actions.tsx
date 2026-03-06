@@ -4,6 +4,8 @@
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { getSystemSettings } from "@/app/(dashboard)/settings/actions";
+import { getSession } from "@/lib/auth";
+import { hasPermission } from "@/lib/permissions";
 
 // دالة مساعدة لحساب الرصيد الحالي لمنتج
 async function getCurrentStock(productId: number, tx?: any) {
@@ -16,6 +18,12 @@ async function getCurrentStock(productId: number, tx?: any) {
 }
 
 export async function getSalesInvoices() {
+  const session = await getSession();
+  if (!session) return [];
+  
+  const canView = await hasPermission(session.userId, "sales_view");
+  if (!canView) return [];
+
   try {
     const invoices = await prisma.salesInvoice.findMany({
       orderBy: { invoiceDate: 'desc' },
@@ -60,7 +68,9 @@ export async function getSalesInvoiceWithReturns(id: number) {
   const invoice = await prisma.salesInvoice.findUnique({
     where: { id },
     include: {
-      items: true,
+      items: {
+        include: { product: true }
+      },
       customer: true,
       salesReturns: {
         include: { items: true }
@@ -131,6 +141,12 @@ export async function createSalesInvoice(data: {
   topNotes?: string[];
   notes?: string[];
 }) {
+  const session = await getSession();
+  if (!session) throw new Error("يجب تسجيل الدخول أولاً");
+
+  const canCreate = await hasPermission(session.userId, "sales_create");
+  if (!canCreate) throw new Error("ليس لديك صلاحية إنشاء فواتير");
+
   if (!data.customerId) throw new Error("يجب اختيار العميل أولاً");
   if (data.items.length === 0) throw new Error("لا يمكن حفظ فاتورة فارغة");
 
@@ -301,6 +317,12 @@ export async function updateSalesInvoice(
     notes?: string[];
   }
 ) {
+  const session = await getSession();
+  if (!session) throw new Error("يجب تسجيل الدخول أولاً");
+
+  const canEdit = await hasPermission(session.userId, "sales_edit");
+  if (!canEdit) throw new Error("ليس لديك صلاحية تعديل فواتير");
+
   if (!data.customerId) throw new Error("يجب اختيار العميل أولاً");
 
   // جلب الإعدادات مرة واحدة خارج المعاملة
@@ -315,6 +337,16 @@ export async function updateSalesInvoice(
     });
 
     if (!existingInvoice) throw new Error("الفاتورة غير موجودة");
+    
+    if (existingInvoice.status !== data.status) {
+      throw new Error("لا يمكن تغيير نوع الفاتورة بعد الحفظ لحماية حركات الخزنة والبنك");
+    }
+
+    if (existingInvoice.status === "cash") {
+      if (existingInvoice.safeId !== data.safeId || existingInvoice.bankId !== data.bankId) {
+        throw new Error("لا يمكن تغيير جهة الدفع (الخزنة/البنك) بعد الحفظ لضمان سلامة العمليات المالية");
+      }
+    }
 
     if (existingInvoice.invoiceNumber !== data.invoiceNumber) {
       const numberTaken = await tx.salesInvoice.findUnique({
@@ -489,6 +521,12 @@ export async function updateSalesInvoice(
 }
 
 export async function deleteSalesInvoice(id: number) {
+  const session = await getSession();
+  if (!session) throw new Error("يجب تسجيل الدخول أولاً");
+
+  const canDelete = await hasPermission(session.userId, "sales_delete");
+  if (!canDelete) throw new Error("ليس لديك صلاحية حذف فواتير");
+
   await prisma.$transaction(async (tx) => {
     // 0. جلب بيانات الفاتورة لمعرفة حالتها וחساباتها
     const invoice = await tx.salesInvoice.findUnique({

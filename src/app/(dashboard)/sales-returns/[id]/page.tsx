@@ -43,7 +43,7 @@ export default function SalesReturnDetailsPage() {
     if (id) {
       getSalesReturnById(Number(id)).then(res => {
         if (res.success) {
-          setData(res.data);
+          setData(res.data as SalesReturn);
         } else {
           toast.error("فشل تحميل بيانات المرتجع");
         }

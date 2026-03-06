@@ -33,12 +33,14 @@ import {
   deleteCategory,
   type CategoryData,
 } from "./actions";
+import { usePermissions } from "@/hooks/use-permissions";
 
 const ITEMS_PER_PAGE = 10;
 
 export default function CategoriesPage() {
   const [categories, setCategories] = useState<CategoryData[]>([]);
   const [loading, setLoading] = useState(true);
+  const { hasPermission, isAdmin } = usePermissions();
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -143,10 +145,12 @@ export default function CategoriesPage() {
               تنظيم أصناف المخزون حسب التصنيف
             </p>
           </div>
-          <Button onClick={openCreate} className="gap-2 shadow-md hover:shadow-lg transition-all">
-            <Plus className="h-4 w-4" />
-            <span className="font-medium">إضافة تصنيف</span>
-          </Button>
+          {hasPermission("inventory_view") && (
+            <Button onClick={openCreate} className="gap-2 shadow-md hover:shadow-lg transition-all">
+              <Plus className="h-4 w-4" />
+              <span className="font-medium">إضافة تصنيف</span>
+            </Button>
+          )}
         </div>
 
         <Card className="shadow-sm">
@@ -209,24 +213,28 @@ export default function CategoriesPage() {
                             </TableCell>
                             <TableCell className="text-center">
                               <div className="flex justify-center gap-2">
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => openEdit(cat)}
-                                  className="hover:bg-primary/10 transition-all"
-                                  title="تعديل"
-                                >
-                                  <Pencil className="h-4 w-4 text-primary" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => openDelete(cat)}
-                                  className="hover:bg-destructive/10 transition-all"
-                                  title="حذف"
-                                >
-                                  <Trash2 className="h-4 w-4 text-destructive" />
-                                </Button>
+                                {hasPermission("inventory_view") && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => openEdit(cat)}
+                                    className="hover:bg-primary/10 transition-all"
+                                    title="تعديل"
+                                  >
+                                    <Pencil className="h-4 w-4 text-primary" />
+                                  </Button>
+                                )}
+                                {isAdmin && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => openDelete(cat)}
+                                    className="hover:bg-destructive/10 transition-all"
+                                    title="حذف"
+                                  >
+                                    <Trash2 className="h-4 w-4 text-destructive" />
+                                  </Button>
+                                )}
                               </div>
                             </TableCell>
                           </TableRow>

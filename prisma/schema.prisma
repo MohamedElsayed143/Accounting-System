@@ -19,6 +19,7 @@ model Customer {
   code            Int              @unique // كود العميل الفريد
   phone           String?          @db.VarChar(20)
   address         String?          @db.Text
+  category        String?          @db.VarChar(100) // تصنيف العميل (مثال: Retail)
   invoices        SalesInvoice[]
   receiptVouchers ReceiptVoucher[]
   salesReturns    SalesReturn[]

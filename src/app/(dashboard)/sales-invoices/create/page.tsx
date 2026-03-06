@@ -48,6 +48,7 @@ import { getSystemSettings, getCompanySettingsAction } from "@/app/(dashboard)/s
 interface Customer {
   id: number;
   name: string;
+  code?: number;
 }
 
 interface InvoiceItem {
@@ -110,6 +111,7 @@ function InvoiceFormStep({
   const [settings, setSettings] = useState<any>(null);
   const [systemSettings, setSystemSettings] = useState<any>(null);
   const [showZeroStock, setShowZeroStock] = useState(false);
+  const [printableTitle, setPrintableTitle] = useState<string>("فاتورة مبيعات");
 
   // قائمة جميع المنتجات
   const [products, setProducts] = useState<ProductData[]>([]);
@@ -131,6 +133,7 @@ function InvoiceFormStep({
 
   const [returnsTotal, setReturnsTotal] = useState<number>(0);
   const [returnsCount, setReturnsCount] = useState<number>(0);
+  const [returns, setReturns] = useState<any[]>([]);
 
   useEffect(() => {
     if ((isEditMode || isViewMode) && invoiceId) {
@@ -153,6 +156,7 @@ function InvoiceFormStep({
             const totalReturns = invoice.salesReturns?.reduce((sum, ret) => sum + ret.total, 0) || 0;
             setReturnsTotal(totalReturns);
             setReturnsCount(invoice.salesReturns?.length || 0);
+            setReturns(invoice.salesReturns || []);
 
             if (invoice.items && invoice.items.length > 0) {
               const formattedItems = invoice.items.map((item: any, index: number) => ({
@@ -165,6 +169,7 @@ function InvoiceFormStep({
                 discount: item.discount || 0,
                 total: item.total,
                 productId: item.productId || null,
+                stockBalance: item.product?.currentStock || 0,
               }));
                 setItems(formattedItems);
               setTopNotes((invoice as any).topNotes || []);
@@ -380,7 +385,12 @@ function InvoiceFormStep({
   }
 
   const handlePrint = () => {
+    const originalTitle = document.title;
+    document.title = "fast";
     window.print();
+    setTimeout(() => {
+      document.title = originalTitle;
+    }, 100);
   };
 
   return (
@@ -406,12 +416,21 @@ function InvoiceFormStep({
         </div>
 
         {(isEditMode || isViewMode || invoiceId) && (
-          <div className="flex gap-3">
+          <div className="flex flex-col md:flex-row gap-3 items-end">
+            <div className="flex flex-col gap-1.5 min-w-[200px]">
+              <Label className="text-xs font-bold text-slate-500 mr-2">مسمى الفاتورة للطباعة</Label>
+              <Input 
+                value={printableTitle}
+                onChange={(e) => setPrintableTitle(e.target.value)}
+                placeholder="مثال: فاتورة مبيعات، عرض سعر..."
+                className="h-10 bg-white border-slate-200 shadow-sm font-bold text-primary"
+              />
+            </div>
             <Button
               variant="outline"
               size="lg"
               onClick={handlePrint}
-              className="gap-2 shadow-sm border-primary/20 hover:bg-primary/5 hover:border-primary/50 text-primary"
+              className="gap-2 shadow-sm border-primary/20 hover:bg-primary/5 hover:border-primary/50 text-primary h-[42px]"
             >
               <Printer className="h-5 w-5" />
               طباعة الفاتورة
@@ -421,7 +440,7 @@ function InvoiceFormStep({
                 variant="outline"
                 size="lg"
                 asChild
-                className="gap-2 shadow-sm border-blue-200 hover:bg-blue-50 hover:border-blue-400 text-blue-600"
+                className="gap-2 shadow-sm border-blue-200 hover:bg-blue-50 hover:border-blue-400 text-blue-600 h-[42px]"
               >
                 <Link href={`/reports?customerId=${customer.id}`}>
                   <HistoryIcon className="h-5 w-5" />
@@ -455,6 +474,9 @@ function InvoiceFormStep({
                     <CustomerSelect
                       onSelect={(c) => setCustomer(c)}
                       selectedId={customer?.id}
+                      selectedName={customer?.name}
+                      selectedCode={customer?.code}
+                      disabled={isViewMode || isEditMode}
                       error={!customer ? "يرجى اختيار العميل" : ""}
                     />
                   </div>
@@ -496,7 +518,7 @@ function InvoiceFormStep({
                       <Select
                         value={paymentType}
                         onValueChange={(v) => setPaymentType(v as "cash" | "credit" | "pending")}
-                        disabled={isViewMode}
+                        disabled={isViewMode || isEditMode}
                       >
                         <SelectTrigger className="w-36 bg-slate-50 border-slate-200">
                           <SelectValue />
@@ -532,7 +554,7 @@ function InvoiceFormStep({
                       <Select
                         value={treasuryType}
                         onValueChange={(v) => setTreasuryType(v as "safe" | "bank")}
-                        disabled={isViewMode}
+                        disabled={isViewMode || isEditMode}
                       >
                         <SelectTrigger className="w-32 bg-slate-50 border-slate-200">
                           <SelectValue />
@@ -550,7 +572,7 @@ function InvoiceFormStep({
                         <Select
                           value={selectedSafeId}
                           onValueChange={setSelectedSafeId}
-                          disabled={isViewMode || safes.length === 0}
+                          disabled={isViewMode || isEditMode || safes.length === 0}
                         >
                           <SelectTrigger className="bg-slate-50 border-slate-200">
                             <SelectValue placeholder={safes.length === 0 ? "لا يوجد خزن" : "اختر الخزنة"} />
@@ -570,7 +592,7 @@ function InvoiceFormStep({
                         <Select
                           value={selectedBankId}
                           onValueChange={setSelectedBankId}
-                          disabled={isViewMode || banks.length === 0}
+                          disabled={isViewMode || isEditMode || banks.length === 0}
                         >
                           <SelectTrigger className="bg-slate-50 border-slate-200">
                             <SelectValue placeholder={banks.length === 0 ? "لا يوجد بنوك" : "اختر البنك"} />
@@ -625,112 +647,114 @@ function InvoiceFormStep({
                 )}
               </CardHeader>
               <CardContent className="p-0 bg-white">
-                <Table>
-                  <TableHeader className="bg-slate-50">
-                    <TableRow>
-                      <TableHead className="text-right font-bold">الصنف</TableHead>
-                      <TableHead className="text-right font-bold w-24 text-blue-600 outline-none">الرصيد</TableHead>
-                      <TableHead className="text-right font-bold w-24">الكمية *</TableHead>
-                      <TableHead className="text-right font-bold w-24">السعر *</TableHead>
-                      <TableHead className="text-right font-bold w-24 text-green-600">الربح (%)</TableHead>
-                      <TableHead className="text-right font-bold w-24">الخصم (%)</TableHead>
-                      <TableHead className="text-right font-bold w-20">الضريبة %</TableHead>
-                      <TableHead className="text-right font-bold w-32">الإجمالي</TableHead>
-                      <TableHead className="w-10"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {items.map((item) => (
-                      <TableRow key={item.id}>
-                        <TableCell className="p-3">
-                          <div className="flex flex-col gap-0.5">
-                            <span className="font-bold text-slate-800">{item.description}</span>
-                            <span className="text-[10px] text-muted-foreground font-mono">
-                              PID: {item.productId}
-                            </span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <span className={cn(
-                            "font-bold px-2 py-1 rounded text-sm",
-                            (item.stockBalance || 0) <= 0 ? "bg-red-50 text-red-600" : "bg-blue-50 text-blue-600"
-                          )}>
-                            {Math.max(0, item.stockBalance || 0).toLocaleString()}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            type="number"
-                            step="any"
-                            value={item.quantity || ""}
-                            onChange={(e) => updateItem(item.id, "quantity", e.target.value)}
-                            disabled={isViewMode}
-                            className="bg-slate-50 h-9 font-bold text-center"
-                            required={!isViewMode}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            type="number"
-                            step="any"
-                            value={item.unitPrice || ""}
-                            onChange={(e) => updateItem(item.id, "unitPrice", e.target.value)}
-                            disabled={isViewMode}
-                            className="bg-slate-50 h-9 font-bold text-center"
-                            required={!isViewMode}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            type="number"
-                            step="any"
-                            value={item.profitMargin || 0}
-                            disabled
-                            className="bg-green-50/50 border-green-100 h-9 font-bold text-center text-green-700"
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            type="number"
-                            step="any"
-                            value={item.discount || ""}
-                            onChange={(e) => updateItem(item.id, "discount", e.target.value)}
-                            disabled={isViewMode}
-                            placeholder="%"
-                            className="bg-red-50 border-red-100 h-9 font-bold text-center"
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            type="number"
-                            step="any"
-                            value={item.taxRate}
-                            onChange={(e) => updateItem(item.id, "taxRate", e.target.value)}
-                            disabled={isViewMode}
-                            className="bg-orange-50 border-orange-200 h-9 font-bold text-center"
-                          />
-                        </TableCell>
-                        <TableCell className="font-bold text-primary text-sm whitespace-nowrap">
-                          {item.total.toLocaleString("ar-EG")} {settings?.currencyCode || "ج.م"}
-                        </TableCell>
-                        <TableCell>
-                          {!isViewMode && (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => removeItem(item.id)}
-                              disabled={items.length === 1}
-                              className="text-red-400 h-8 w-8"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </TableCell>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader className="bg-slate-50">
+                      <TableRow>
+                        <TableHead className="text-right font-bold">الصنف</TableHead>
+                        <TableHead className="text-right font-bold w-24 text-blue-600 outline-none">الرصيد</TableHead>
+                        <TableHead className="text-right font-bold w-24">الكمية *</TableHead>
+                        <TableHead className="text-right font-bold w-24">السعر *</TableHead>
+                        <TableHead className="text-right font-bold w-24 text-green-600">الربح (%)</TableHead>
+                        <TableHead className="text-right font-bold w-24">الخصم (%)</TableHead>
+                        <TableHead className="text-right font-bold w-20">الضريبة %</TableHead>
+                        <TableHead className="text-right font-bold w-32">الإجمالي</TableHead>
+                        <TableHead className="w-10"></TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {items.map((item) => (
+                        <TableRow key={item.id}>
+                          <TableCell className="p-3">
+                            <div className="flex flex-col gap-0.5">
+                              <span className="font-bold text-slate-800">{item.description}</span>
+                              <span className="text-[10px] text-muted-foreground font-mono">
+                                PID: {item.productId}
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <span className={cn(
+                              "font-bold px-2 py-1 rounded text-sm",
+                              (item.stockBalance || 0) <= 0 ? "bg-red-50 text-red-600" : "bg-blue-50 text-blue-600"
+                            )}>
+                              {Math.max(0, item.stockBalance || 0).toLocaleString()}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              type="number"
+                              step="any"
+                              value={item.quantity || ""}
+                              onChange={(e) => updateItem(item.id, "quantity", e.target.value)}
+                              disabled={isViewMode}
+                              className="bg-slate-50 h-9 font-bold text-center"
+                              required={!isViewMode}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              type="number"
+                              step="any"
+                              value={item.unitPrice || ""}
+                              onChange={(e) => updateItem(item.id, "unitPrice", e.target.value)}
+                              disabled={isViewMode}
+                              className="bg-slate-50 h-9 font-bold text-center"
+                              required={!isViewMode}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              type="number"
+                              step="any"
+                              value={item.profitMargin || 0}
+                              disabled
+                              className="bg-green-50/50 border-green-100 h-9 font-bold text-center text-green-700"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              type="number"
+                              step="any"
+                              value={item.discount || ""}
+                              onChange={(e) => updateItem(item.id, "discount", e.target.value)}
+                              disabled={isViewMode}
+                              placeholder="%"
+                              className="bg-red-50 border-red-100 h-9 font-bold text-center"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              type="number"
+                              step="any"
+                              value={item.taxRate}
+                              onChange={(e) => updateItem(item.id, "taxRate", e.target.value)}
+                              disabled={isViewMode}
+                              className="bg-orange-50 border-orange-200 h-9 font-bold text-center"
+                            />
+                          </TableCell>
+                          <TableCell className="font-bold text-primary text-sm whitespace-nowrap">
+                            {item.total.toLocaleString("ar-EG")} {settings?.currencyCode || "ج.م"}
+                          </TableCell>
+                          <TableCell>
+                            {!isViewMode && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => removeItem(item.id)}
+                                disabled={items.length === 1}
+                                className="text-red-400 h-8 w-8"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
               </CardContent>
             </Card>
 
@@ -835,7 +859,9 @@ function InvoiceFormStep({
         date={invoiceDate}
         partnerName={customer?.name || ""}
         partnerLabel="العميل"
-        title="فاتورة مبيعات"
+        title={printableTitle}
+        paymentStatus={paymentType}
+        returns={returns}
         items={items.map(i => ({
           description: i.description,
           quantity: i.quantity,

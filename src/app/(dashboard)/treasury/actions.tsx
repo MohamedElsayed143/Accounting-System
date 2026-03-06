@@ -2,6 +2,8 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { getSession } from "@/lib/auth";
+import { hasPermission } from "@/lib/permissions";
 
 // تعريف الأنواع
 export interface TreasuryStats {
@@ -72,6 +74,12 @@ async function ensureMainSafe() {
 
 // 1. جلب بيانات الخزنة الرئيسية (البنوك النشطة فقط)
 export async function getTreasuryData() {
+  const session = await getSession();
+  if (!session) return { accounts: [], stats: { totalAccounts: 0, totalBanksBalance: 0, totalSafeBalance: 0, grandTotal: 0 }, recentTransactions: [] };
+
+  const canView = await hasPermission(session.userId, "treasury_view");
+  if (!canView) return { accounts: [], stats: { totalAccounts: 0, totalBanksBalance: 0, totalSafeBalance: 0, grandTotal: 0 }, recentTransactions: [] };
+  
   const [safes, banks, recentReceipts, recentPayments, recentSalesInvoices, recentPurchaseInvoices, recentSalesReturns, recentPurchaseReturns, recentTransfers] = await Promise.all([
     prisma.treasurySafe.findMany({ 
       where: { isActive: true },
@@ -270,6 +278,12 @@ export async function getTreasuryData() {
 
 // 2. إنشاء بنك جديد
 export async function createBank(data: { name: string; accountNumber: string; branch: string; initialBalance: number }) {
+  const session = await getSession();
+  if (!session) throw new Error("Unauthorized");
+
+  const canManage = await hasPermission(session.userId, "treasury_manage");
+  if (!canManage) throw new Error("ليس لديك صلاحية إضافة حسابات بنكية");
+
   try {
     await prisma.treasuryBank.create({
       data: {
@@ -290,6 +304,12 @@ export async function createBank(data: { name: string; accountNumber: string; br
 
 // 3. أرشفة بنك (بدل الحذف)
 export async function archiveBank(bankId: number) {
+  const session = await getSession();
+  if (!session) throw new Error("Unauthorized");
+
+  const canManage = await hasPermission(session.userId, "treasury_manage");
+  if (!canManage) throw new Error("ليس لديك صلاحية أرشفة حسابات بنكية");
+
   try {
     console.log("Archiving bank:", bankId);
     
@@ -378,6 +398,12 @@ export async function getInitialData(): Promise<InitialData> {
 
 // 5. إنشاء سند صرف
 export async function createPaymentVoucher(data: PaymentVoucherInput) {
+  const session = await getSession();
+  if (!session) throw new Error("Unauthorized");
+
+  const canManage = await hasPermission(session.userId, "treasury_manage");
+  if (!canManage) throw new Error("ليس لديك صلاحية إنشاء سندات صرف");
+
   try {
     const {
       voucherNumber,
@@ -495,6 +521,12 @@ export async function createPaymentVoucher(data: PaymentVoucherInput) {
 
 // 6. جلب تفاصيل حساب معين
 export async function getAccountDetails(id: number, type: 'safe' | 'bank') {
+  const session = await getSession();
+  if (!session) throw new Error("Unauthorized");
+
+  const canView = await hasPermission(session.userId, "treasury_view");
+  if (!canView) throw new Error("ليس لديك صلاحية عرض تفاصيل الحساب");
+
   try {
     if (type === 'safe') {
       const safe = await prisma.treasurySafe.findUnique({
@@ -785,6 +817,12 @@ export async function createReceiptVoucher(data: {
   accountId: number;
   description?: string;
 }) {
+  const session = await getSession();
+  if (!session) throw new Error("Unauthorized");
+
+  const canManage = await hasPermission(session.userId, "treasury_manage");
+  if (!canManage) throw new Error("ليس لديك صلاحية إنشاء سندات قبض");
+
   try {
     const {
       voucherNumber,
@@ -938,6 +976,12 @@ export async function getReceiptInitialData() {
 
 // 12. إنشاء خزنة جديدة
 export async function createSafe(data: { name: string; initialBalance: number; description?: string }) {
+  const session = await getSession();
+  if (!session) throw new Error("Unauthorized");
+
+  const canManage = await hasPermission(session.userId, "treasury_manage");
+  if (!canManage) throw new Error("ليس لديك صلاحية إضافة خزائن");
+
   try {
     // التحقق من تكرار الاسم
     const existing = await prisma.treasurySafe.findFirst({
