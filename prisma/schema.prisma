@@ -414,19 +414,22 @@ enum QuotationStatus {
 }
 
 model Quotation {
-  id         Int              @id @default(autoincrement())
-  code       String           @unique @db.VarChar(20)
-  customerId Int?
-  customer   Customer?        @relation(fields: [customerId], references: [id])
-  date       DateTime
-  subtotal   Float
-  discount   Float            @default(0)
-  total      Float
-  notes      Json?
-  status     QuotationStatus  @default(Draft)
-  createdAt  DateTime         @default(now())
-  updatedAt  DateTime         @updatedAt
-  items      QuotationItem[]
+  id           Int              @id @default(autoincrement())
+  code         String           @unique @db.VarChar(20)
+  customerId   Int?
+  customerName String?          @db.VarChar(255)
+  customer     Customer?        @relation(fields: [customerId], references: [id])
+  date         DateTime
+  subtotal     Float
+  totalTax     Float            @default(0)
+  discount     Float            @default(0)
+  total        Float
+  topNotes     Json?
+  notes        Json?
+  status       QuotationStatus  @default(Draft)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  items        QuotationItem[]
 
   @@index([customerId])
   @@index([date])
@@ -440,7 +443,8 @@ model QuotationItem {
   product     Product   @relation(fields: [productId], references: [id])
   description String    @db.VarChar(255)
   quantity    Float
-  price       Float
+  unitPrice   Float
+  taxRate     Float     @default(0)
   discount    Float     @default(0)
   total       Float
 }

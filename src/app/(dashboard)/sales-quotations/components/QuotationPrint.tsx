@@ -32,7 +32,7 @@ interface QuotationPrintProps {
 }
 
 export const QuotationPrint = React.forwardRef<HTMLDivElement, QuotationPrintProps>(
-  ({ 
+  ({
     code, date, customerName, customerCode, customerPhone, customerAddress, items, subtotal, discount, total, notes,
     companyName = "شركة المحاسبة الحديثة",
     companyNameEn = "Modern Accounting Co.",
@@ -42,168 +42,173 @@ export const QuotationPrint = React.forwardRef<HTMLDivElement, QuotationPrintPro
     showStamp = true,
   }, ref) => {
     return (
-      <div ref={ref} className="hidden print:block print:p-10 bg-white text-black min-h-screen" dir="rtl">
-        {/* Header Section */}
-        <div className="flex justify-between items-start border-b-4 border-primary pb-6 mb-8">
-          <div className="flex items-start gap-4">
+      <div ref={ref} className="hidden print:block bg-white text-slate-800 p-4" dir="rtl">
+        <style dangerouslySetInnerHTML={{ __html: `
+          @page {
+            size: A4;
+            margin: 15mm;
+          }
+          @media print {
+            body { -webkit-print-color-adjust: exact; }
+            .avoid-break { break-inside: avoid; }
+          }
+          .custom-table th { background-color: #f8fafc !important; color: #475569 !important; border-bottom: 2px solid #e2e8f0; }
+          .total-card { background-color: #f1f5f9 !important; border: 2px solid #334155 !important; }
+        `}} />
+
+        {/* ─── Header ─── */}
+        <div className="flex justify-between items-center border-b-2 border-slate-100 pb-6 mb-8 avoid-break">
+          <div className="flex items-center gap-5">
             {showLogo && companyLogo && (
               <img src={companyLogo} alt="Logo" className="w-20 h-20 object-contain rounded-lg" />
             )}
-            <div className="space-y-1">
-              <h1 className="text-4xl font-black text-primary mb-2 tracking-tight">عرض سعر</h1>
-              <div className="flex flex-col">
-                <span className="text-xl font-bold text-slate-800">{companyName}</span>
-                <span className="text-xs text-slate-500 font-medium tracking-wide uppercase">{companyNameEn}</span>
-              </div>
+            <div>
+              <h1 className="text-2xl font-black text-slate-900">عرض سعر</h1>
+              <p className="text-md font-bold text-slate-600">{companyName}</p>
+              <p className="text-xs text-slate-400 font-medium uppercase tracking-wider">{companyNameEn}</p>
             </div>
           </div>
+
           <div className="text-left bg-slate-50 p-4 rounded-xl border border-slate-100">
-            <div className="flex flex-col items-end">
-              <span className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">رقم العرض</span>
-              <span className="text-2xl font-black text-primary">{code}</span>
-              <div className="mt-2 text-sm text-slate-600 font-medium">
-                التاريخ: {format(new Date(date), "yyyy/MM/dd")}
-              </div>
+            <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">رقم العرض</div>
+            <div className="text-xl font-black text-slate-900" dir="ltr">
+              #{code}
+            </div>
+            <div className="text-xs mt-2 text-slate-500 font-medium">
+              تاريخ الإصدار: {format(new Date(date), "yyyy/MM/dd")}
             </div>
           </div>
         </div>
 
-        {/* Customer Info */}
-        <div className="grid grid-cols-2 gap-8 mb-8">
-          <div className="p-5 border border-slate-200 rounded-2xl bg-white shadow-sm">
-            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 border-b border-slate-50 pb-2">
-              بيانات العميل
-            </h3>
-            <div className="space-y-2">
-              <div className="flex flex-col">
-                <span className="text-sm text-slate-500 mb-1">اسم العميل:</span>
-                <span className="text-lg font-bold text-slate-900">{customerName || "عميل عام"}</span>
-              </div>
-              {customerCode && (
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-slate-500">كود العميل:</span>
-                  <span className="text-sm font-bold text-slate-700">{customerCode}</span>
-                </div>
-              )}
-              {customerPhone && (
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-slate-500">الهاتف:</span>
-                  <span className="text-sm font-bold text-slate-700">{customerPhone}</span>
-                </div>
-              )}
-              {customerAddress && (
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-slate-500">العنوان:</span>
-                  <span className="text-sm font-bold text-slate-700">{customerAddress}</span>
-                </div>
-              )}
-            </div>
+        {/* ─── Info Grid ─── */}
+        <div className="grid grid-cols-2 gap-6 mb-8 avoid-break">
+          <div className="space-y-1">
+            <span className="text-[11px] font-bold text-slate-400 block mb-1">مُوجه إلى:</span>
+            <div className="text-lg font-bold text-slate-800">{customerName || "عميل عام"}</div>
+            <div className="text-sm text-slate-500">العميل</div>
+            {customerCode && (
+              <div className="text-xs text-slate-400">كود: {customerCode}</div>
+            )}
+            {customerPhone && (
+              <div className="text-xs text-slate-400">هاتف: {customerPhone}</div>
+            )}
+            {customerAddress && (
+              <div className="text-xs text-slate-400">العنوان: {customerAddress}</div>
+            )}
           </div>
-          <div className="p-5 border border-slate-200 rounded-2xl bg-white shadow-sm flex items-center justify-between">
-            <div className="flex flex-col">
-              <span className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">نوع المستند</span>
-              <span className="text-lg font-bold text-slate-800">عرض سعر</span>
-              <span className="text-xs text-slate-500 mt-1">هذا العرض لأغراض إعلامية فقط</span>
-            </div>
-            <div className="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center">
-              <div className="w-6 h-6 border-2 border-blue-500 rounded-full" />
-            </div>
+
+          <div className="flex flex-col items-end">
+            <span className="text-[11px] font-bold text-slate-400 block mb-1">نوع المستند:</span>
+            <span className="px-4 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-700">
+              عرض سعر
+            </span>
+            <span className="text-[10px] text-slate-400 mt-2">هذا العرض لأغراض إعلامية فقط</span>
           </div>
         </div>
 
-        {/* Items Table */}
-        <div className="mb-8 overflow-hidden border border-slate-200 rounded-2xl">
-          <table className="w-full border-collapse text-sm">
+        {/* ─── Items Table ─── */}
+        <div className="mb-8 avoid-break rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+          <table className="w-full text-sm custom-table">
             <thead>
-              <tr className="bg-slate-900 text-white">
-                <th className="py-4 px-4 text-right font-bold w-12">م</th>
-                <th className="py-4 px-4 text-right font-bold">المنتج / البيان</th>
-                <th className="py-4 px-4 text-center font-bold w-24">الكمية</th>
-                <th className="py-4 px-4 text-center font-bold w-32">السعر</th>
-                <th className="py-4 px-4 text-center font-bold w-24">الخصم %</th>
-                <th className="py-4 px-4 text-center font-bold w-32">الإجمالي</th>
+              <tr>
+                <th className="p-4 text-right w-12">#</th>
+                <th className="p-4 text-right">المنتج / البيان</th>
+                <th className="p-4 text-center w-24">الكمية</th>
+                <th className="p-4 text-center w-32">السعر</th>
+                <th className="p-4 text-center w-24">الخصم %</th>
+                <th className="p-4 text-left w-32">الإجمالي</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {items.map((item, index) => (
-                <tr key={index} className={index % 2 === 0 ? "bg-white" : "bg-slate-50/30"}>
-                  <td className="py-4 px-4 text-center text-slate-500 font-bold">{index + 1}</td>
-                  <td className="py-4 px-4 text-slate-800 font-bold">{item.description}</td>
-                  <td className="py-4 px-4 text-center text-slate-700 font-medium">{item.quantity}</td>
-                  <td className="py-4 px-4 text-center text-slate-700 font-medium">
-                    {item.price.toLocaleString("ar-EG")}
-                  </td>
-                  <td className="py-4 px-4 text-center text-slate-700 font-medium">
-                    {item.discount > 0 ? `${item.discount}%` : "-"}
-                  </td>
-                  <td className="py-4 px-4 text-center font-black text-slate-900">
-                    {item.total.toLocaleString("ar-EG")}
-                  </td>
+                <tr key={index} className="hover:bg-slate-50/50">
+                  <td className="p-4 text-slate-400 font-medium text-center">{index + 1}</td>
+                  <td className="p-4 font-semibold text-slate-700">{item.description}</td>
+                  <td className="p-4 text-center text-slate-600">{item.quantity}</td>
+                  <td className="p-4 text-center text-slate-600">{item.price.toLocaleString("ar-EG")}</td>
+                  <td className="p-4 text-center text-slate-600">{item.discount > 0 ? `${item.discount}%` : "-"}</td>
+                  <td className="p-4 text-left font-bold text-slate-900">{item.total.toLocaleString("ar-EG")}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
 
-        {/* Totals Section */}
-        <div className="flex justify-between items-start gap-8">
-          <div className="flex-1">
-            {notes && notes.length > 0 && notes.some(n => n.trim() !== "") && (
-              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl h-full">
-                <h4 className="font-bold text-sm text-slate-600 mb-2">ملاحظات:</h4>
-                <div className="space-y-1">
-                  {notes.filter(n => n.trim() !== "").map((note, i) => (
-                    <p key={i} className="text-xs text-slate-500 leading-relaxed font-medium">• {note}</p>
+        {/* ─── Bottom Section ─── */}
+        <div className="flex justify-between items-start gap-12 avoid-break">
+
+          {/* Notes */}
+          <div className="flex-1 space-y-4">
+            {notes && notes.filter(n => n.trim()).length > 0 && (
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                <h4 className="text-[11px] font-bold text-slate-400 mb-2 uppercase tracking-wide">ملاحظات:</h4>
+                <ul className="space-y-1">
+                  {notes.filter(n => n.trim()).map((note, i) => (
+                    <li key={i} className="text-xs text-slate-600 flex gap-2">
+                      <span className="text-slate-300">•</span> {note}
+                    </li>
                   ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Signature Area */}
+            <div className="grid grid-cols-2 gap-8 mt-6">
+              <div className="text-center">
+                <p className="text-xs font-bold text-slate-500 mb-10">توقيع العميل</p>
+                <div className="border-b-2 border-slate-300 mx-4" />
+              </div>
+              <div className="text-center">
+                <p className="text-xs font-bold text-slate-500 mb-10">توقيع المسؤول</p>
+                <div className="border-b-2 border-slate-300 mx-4" />
+              </div>
+            </div>
+          </div>
+
+          {/* Totals Summary */}
+          <div className="w-80 space-y-2">
+            <div className="flex justify-between px-2 text-sm text-slate-500">
+              <span>الإجمالي الفرعي</span>
+              <span className="font-semibold">{subtotal.toLocaleString("ar-EG")} ج.م</span>
+            </div>
+
+            {discount > 0 && (
+              <div className="flex justify-between px-2 text-sm text-red-500">
+                <span>الخصم</span>
+                <span className="font-semibold">-{discount.toLocaleString("ar-EG")} ج.م</span>
+              </div>
+            )}
+
+            {/* الصافي النهائي */}
+            <div className="total-card mt-4 p-5 rounded-2xl text-slate-900 shadow-sm relative overflow-hidden">
+              <div className="relative z-10">
+                <div className="text-[11px] font-black uppercase tracking-[0.2em] mb-1 opacity-70">الصافي النهائي المستحق</div>
+                <div className="flex justify-between items-baseline">
+                  <span className="text-4xl font-black tracking-tighter">
+                    {total.toLocaleString("ar-EG")}
+                  </span>
+                  <span className="text-lg font-bold mr-2">ج.م</span>
                 </div>
               </div>
-            )}
-          </div>
-          
-          <div className="w-80 bg-slate-900 text-white rounded-2xl p-6 space-y-4 shadow-xl">
-            <div className="flex justify-between text-sm text-slate-400">
-              <span>الإجمالي:</span>
-              <span className="font-bold">{subtotal.toLocaleString("ar-EG")} ج.م</span>
+              <div className="absolute -right-4 -bottom-4 text-slate-200 opacity-20 transform -rotate-12">
+                <svg width="100" height="100" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1.41 16.09V20h-2.82v-1.91c-1.54-.13-3.04-.81-4.08-1.9l1.61-1.61c.83.85 1.72 1.25 2.76 1.35.81.08 1.53-.19 1.53-.9 0-.46-.3-.79-1.29-1.22-1.39-.61-3.23-1.42-3.23-3.52 0-1.66 1.09-2.99 2.71-3.39V5h2.82v1.9c1.23.11 2.37.58 3.19 1.34l-1.6 1.59c-.48-.46-1.07-.76-1.88-.85-.56-.06-1.16.07-1.16.69 0 .5.39.75 1.55 1.25 1.73.74 2.97 1.74 2.97 3.51.01 1.83-1.26 3.14-3.08 3.47z"/></svg>
+              </div>
             </div>
-            {discount > 0 && (
-              <div className="flex justify-between text-sm text-slate-400">
-                <span>الخصم:</span>
-                <span className="font-bold text-red-400">-{discount.toLocaleString("ar-EG")} ج.م</span>
+
+            {showStamp && companyStamp && (
+              <div className="flex flex-col items-center pt-4">
+                <img src={companyStamp} alt="Stamp" className="w-24 h-24 object-contain opacity-80 mix-blend-multiply" />
+                <p className="text-[10px] font-bold text-slate-400 mt-1">ختم وتوقيع المعتمد</p>
               </div>
             )}
-            <div className="border-t border-white/10 pt-4 flex justify-between items-center bg-white/5 -mx-6 px-6 -mb-6 py-6 mt-4">
-              <span className="text-base font-bold text-white/80">الصافي</span>
-              <span className="text-2xl font-black text-green-400">{total.toLocaleString("ar-EG")} ج.م</span>
-            </div>
-          </div>
-
-          {/* Company Stamp */}
-          {showStamp && companyStamp && (
-            <div className="w-80 flex flex-col items-center justify-center">
-              <div className="relative group">
-                <img src={companyStamp} alt="Stamp" className="w-32 h-32 object-contain opacity-80" />
-                <div className="absolute inset-0 border-4 border-slate-200/20 rounded-full scale-110 pointer-events-none" />
-              </div>
-              <p className="text-[10px] font-bold text-slate-400 mt-2">ختم وتوقيع المعتمد</p>
-            </div>
-          )}
-        </div>
-
-        {/* Signature Area */}
-        <div className="mt-16 grid grid-cols-2 gap-16">
-          <div className="text-center">
-            <p className="text-sm font-bold text-slate-600 mb-16">توقيع العميل</p>
-            <div className="border-b-2 border-slate-300 mx-8" />
-          </div>
-          <div className="text-center">
-            <p className="text-sm font-bold text-slate-600 mb-16">توقيع المسؤول</p>
-            <div className="border-b-2 border-slate-300 mx-8" />
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="mt-12 flex flex-col items-center justify-center border-t border-slate-100 pt-10">
-          <p className="text-sm font-bold text-slate-400 tracking-widest uppercase">شكراً لتعاملكم مع {companyName}</p>
+        {/* ─── Footer ─── */}
+        <div className="mt-12 pt-6 border-t border-slate-100 text-center">
+          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.3em]">
+            شكراً لثقتكم بنا • {companyNameEn}
+          </p>
         </div>
       </div>
     );

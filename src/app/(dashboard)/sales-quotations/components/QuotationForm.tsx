@@ -18,7 +18,7 @@ import { Separator } from "@/components/ui/separator";
 import { CustomerSelect } from "@/components/shared/CustomerSelect";
 import { DynamicNotes } from "@/components/shared/DynamicNotes";
 import { QuotationTable, type QuotationItemRow } from "./QuotationTable";
-import { QuotationPrint } from "./QuotationPrint";
+import { PrintableInvoice } from "@/components/invoices/printable-invoice";
 import type { ProductData } from "@/app/(dashboard)/inventory/products/actions";
 import {
   getNextQuotationCode,
@@ -59,16 +59,18 @@ export function QuotationForm({ quotationId, readOnly, onBack }: QuotationFormPr
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(!!quotationId);
   const [customer, setCustomer] = useState<Customer | null>(null);
+  const [guestCustomerName, setGuestCustomerName] = useState<string>("");
   const [quotationDate, setQuotationDate] = useState<string>(
     new Date().toISOString().split("T")[0]
   );
   const [items, setItems] = useState<QuotationItemRow[]>([]);
+  const [topNotes, setTopNotes] = useState<string[]>([]);
   const [globalDiscount, setGlobalDiscount] = useState<number>(0);
   const [notes, setNotes] = useState<string[]>([]);
   const [currentStatus, setCurrentStatus] = useState<string>("Draft");
   const [companySettings, setCompanySettings] = useState<any>(null);
 
-  // تحميل رقم العرض التالي (للإنشاء فقط)
+  // تحميل رقم العرض التالي وإعدادات الشركة
   useEffect(() => {
     getCompanySettingsAction().then(setCompanySettings);
     if (!quotationId) {
@@ -87,6 +89,7 @@ export function QuotationForm({ quotationId, readOnly, onBack }: QuotationFormPr
             setQuotationDate(new Date(quotation.date).toISOString().split("T")[0]);
             setGlobalDiscount(quotation.discount || 0);
             setCurrentStatus(quotation.status);
+            setGuestCustomerName(quotation.customerName || "");
 
             if (quotation.customer) {
               setCustomer({
@@ -103,7 +106,8 @@ export function QuotationForm({ quotationId, readOnly, onBack }: QuotationFormPr
                 id: String(item.id || index + 1),
                 description: item.description,
                 quantity: item.quantity,
-                price: item.price,
+                price: item.unitPrice,
+                taxRate: item.taxRate || 0,
                 discount: item.discount || 0,
                 total: item.total,
                 productId: item.productId || null,
@@ -111,6 +115,7 @@ export function QuotationForm({ quotationId, readOnly, onBack }: QuotationFormPr
               setItems(formattedItems);
             }
 
+            setTopNotes((quotation as any).topNotes || []);
             setNotes((quotation as any).notes || []);
           }
         })
@@ -132,8 +137,9 @@ export function QuotationForm({ quotationId, readOnly, onBack }: QuotationFormPr
         description: product.name,
         quantity: 1,
         price: product.sellPrice,
+        taxRate: product.taxRate || 0,
         discount: 0,
-        total: product.sellPrice,
+        total: product.sellPrice * (1 + (product.taxRate || 0) / 100),
         productId: product.id,
       },
     ]);
@@ -154,15 +160,16 @@ export function QuotationForm({ quotationId, readOnly, onBack }: QuotationFormPr
       prev.map((item) => {
         if (item.id !== id) return item;
         let finalValue = value;
-        if (field === "quantity" || field === "price" || field === "discount") {
+        if (field === "quantity" || field === "price" || field === "discount" || field === "taxRate") {
           finalValue = Math.max(0, Number(value));
         }
         const updated = { ...item, [field]: finalValue };
 
-        // حساب الإجمالي: qty × price × (1 - discount/100)
+        // حساب الإجمالي: (qty × price × (1 - discount/100)) * (1 + tax/100)
         const basePrice = Number(updated.quantity) * Number(updated.price);
         const discountAmount = basePrice * (Number(updated.discount || 0) / 100);
-        updated.total = basePrice - discountAmount;
+        const priceAfterDiscount = basePrice - discountAmount;
+        updated.total = priceAfterDiscount + (priceAfterDiscount * (Number(updated.taxRate || 0) / 100));
         return updated;
       })
     );
@@ -184,9 +191,22 @@ export function QuotationForm({ quotationId, readOnly, onBack }: QuotationFormPr
     [items]
   );
 
+  const totalTax = useMemo(
+    () =>
+      items.reduce(
+        (sum, i) => {
+          const itemBase = Number(i.quantity) * Number(i.price);
+          const discountAmount = itemBase * (Number(i.discount || 0) / 100);
+          const itemAfterDiscount = itemBase - discountAmount;
+          return sum + itemAfterDiscount * (Number(i.taxRate || 0) / 100);
+        },
+        0
+      ),
+    [items]
+  );
+
   const subtotalAfterItemDiscounts = subtotal - itemsDiscountTotal;
-  const globalDiscountAmount = subtotalAfterItemDiscounts * (globalDiscount / 100);
-  const grandTotal = subtotalAfterItemDiscounts - globalDiscountAmount;
+  const grandTotal = subtotalAfterItemDiscounts - globalDiscount + totalTax;
 
   // ─── تغيير الحالة ───
   const handleStatusChange = async (newStatus: string) => {
@@ -216,14 +236,17 @@ export function QuotationForm({ quotationId, readOnly, onBack }: QuotationFormPr
       setSaving(true);
       const quotationData = {
         customerId: customer?.id || null,
+        customerName: guestCustomerName || null,
         date: quotationDate,
         subtotal: subtotalAfterItemDiscounts,
-        discount: globalDiscountAmount,
+        totalTax,
+        discount: globalDiscount,
         total: grandTotal,
+        topNotes,
         notes,
-        items: items.map(({ description, quantity, price, discount, total, productId }) => {
+        items: items.map(({ description, quantity, price, taxRate, discount, total, productId }) => {
           if (!productId) throw new Error("يجب اختيار منتج لكل صنف");
-          return { productId, description, quantity, price, discount, total };
+          return { productId, description, quantity, unitPrice: price, taxRate, discount, total };
         }),
       };
 
@@ -268,16 +291,16 @@ export function QuotationForm({ quotationId, readOnly, onBack }: QuotationFormPr
           </Button>
           <div>
             <h2 className="text-3xl font-black text-slate-800 tracking-tight">
-              {isViewMode ? "عرض سعر" : isEditMode ? "تعديل عرض سعر" : "إنشاء عرض سعر"}
+              {isViewMode ? "عرض سعر" : isEditMode ? "تعديل عرض سعر" : "إنشاء عرض سعر جديد"}
             </h2>
             <p className="text-muted-foreground font-medium">
-              {quotationCode && <span className="text-primary font-bold">{quotationCode}</span>}
+              نظام إدارة عروض أسعار مصنع الطوب
             </p>
           </div>
         </div>
 
         <div className="flex gap-3 flex-wrap">
-          {(isEditMode || isViewMode) && (
+          {(isEditMode || isViewMode || quotationId) && (
             <Button
               variant="outline"
               size="lg"
@@ -285,7 +308,7 @@ export function QuotationForm({ quotationId, readOnly, onBack }: QuotationFormPr
               className="gap-2 shadow-sm border-primary/20 hover:bg-primary/5 hover:border-primary/50 text-primary"
             >
               <Printer className="h-5 w-5" />
-              طباعة / تحميل PDF
+              طباعة العرض
             </Button>
           )}
         </div>
@@ -293,6 +316,13 @@ export function QuotationForm({ quotationId, readOnly, onBack }: QuotationFormPr
 
       {/* ─── النموذج ─── */}
       <div className="print:hidden">
+        <div className="mb-6">
+          <DynamicNotes
+            notes={topNotes}
+            onChange={setTopNotes}
+            disabled={isViewMode}
+          />
+        </div>
         <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-4">
           <div className="lg:col-span-3 space-y-6">
             {/* بيانات العميل */}
@@ -304,12 +334,27 @@ export function QuotationForm({ quotationId, readOnly, onBack }: QuotationFormPr
               </CardHeader>
               <CardContent className="bg-white pt-5 pb-5">
                 <div className="flex flex-col md:flex-row md:items-start gap-4 justify-between">
-                  <div className="w-full max-w-sm">
+                  <div className="w-full max-w-sm space-y-4">
                     <CustomerSelect
-                      onSelect={(c) => setCustomer(c as Customer)}
+                      onSelect={(c) => {
+                        setCustomer(c as Customer);
+                        if (c) setGuestCustomerName("");
+                      }}
                       selectedId={customer?.id}
                       error={""}
                     />
+                    {!customer && (
+                      <div className="space-y-1.5">
+                        <Label className="text-slate-600 text-sm font-bold">اسم العميل (اختياري)</Label>
+                        <Input
+                          placeholder="أدخل اسم العميل إذا لم يكن مسجلاً"
+                          value={guestCustomerName}
+                          onChange={(e) => setGuestCustomerName(e.target.value)}
+                          disabled={isViewMode}
+                          className="bg-slate-50 border-slate-200"
+                        />
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex items-end gap-4 flex-wrap">
@@ -414,37 +459,38 @@ export function QuotationForm({ quotationId, readOnly, onBack }: QuotationFormPr
                     </span>
                   </div>
                 )}
-                <div className="flex justify-between text-slate-400 text-sm">
-                  <span>الإجمالي بعد خصم الأصناف:</span>
-                  <span className="text-white font-mono">
-                    {subtotalAfterItemDiscounts.toLocaleString("ar-EG")} ج.م
-                  </span>
-                </div>
-
+                {totalTax > 0 && (
+                  <div className="flex justify-between text-slate-400 text-sm">
+                    <span>إجمالي الضرائب:</span>
+                    <span className="text-orange-400 font-mono">
+                      +{totalTax.toLocaleString("ar-EG")} ج.م
+                    </span>
+                  </div>
+                )}
+                
                 {/* Global discount */}
                 <div className="space-y-1.5 pt-2">
                   <div className="flex justify-between text-slate-400 text-sm mb-1">
-                    <span>خصم إضافي (%):</span>
+                    <span>خصم إضافي:</span>
                     <span className="text-red-400 font-mono">
-                      -{globalDiscountAmount.toLocaleString("ar-EG")} ج.م
+                      -{globalDiscount.toLocaleString("ar-EG")} ج.م
                     </span>
                   </div>
                   <Input
                     type="number"
                     min={0}
-                    max={100}
                     step="any"
                     value={globalDiscount || ""}
-                    onChange={(e) => setGlobalDiscount(Math.max(0, Math.min(100, Number(e.target.value))))}
+                    onChange={(e) => setGlobalDiscount(Math.max(0, Number(e.target.value)))}
                     disabled={isViewMode}
                     className="bg-white/5 border-white/10 h-8 text-center font-bold"
-                    placeholder="نسبة الخصم %"
+                    placeholder="قيمة الخصم..."
                   />
                 </div>
 
                 <Separator className="bg-white/10" />
                 <div className="pt-2">
-                  <p className="text-xs text-slate-400 mb-1">الصافي النهائي:</p>
+                  <p className="text-xs text-slate-400 mb-1">صافي عرض السعر:</p>
                   <p className="text-3xl font-black text-green-400">
                     {grandTotal.toLocaleString("ar-EG")} ج.م
                   </p>
@@ -474,24 +520,24 @@ export function QuotationForm({ quotationId, readOnly, onBack }: QuotationFormPr
         </form>
       </div>
 
-      {/* ─── نسخة الطباعة ─── */}
-      <QuotationPrint
-        code={quotationCode}
+      {/* ─── نسخة الطباعة (موحدة مع الفواتير) ─── */}
+      <PrintableInvoice
+        invoiceNumber={quotationCode}
         date={quotationDate}
-        customerName={customer?.name || "عميل عام"}
-        customerCode={customer?.code}
-        customerPhone={customer?.phone}
-        customerAddress={customer?.address}
+        partnerName={customer?.name || guestCustomerName || "عميل عام"}
+        partnerLabel={customer ? `كود العميل: ${customer.code || "---"}` : "عرض سعر لعميل غير مسجل"}
+        title="عرض سعر"
         items={items.map((item) => ({
           description: item.description,
           quantity: item.quantity,
-          price: item.price,
-          discount: item.discount,
+          unitPrice: item.price,
           total: item.total,
         }))}
-        subtotal={subtotalAfterItemDiscounts}
-        discount={globalDiscountAmount}
+        subtotal={subtotal}
+        discount={globalDiscount + itemsDiscountTotal}
+        tax={totalTax}
         total={grandTotal}
+        topNotes={topNotes}
         notes={notes}
         companyName={companySettings?.companyName}
         companyNameEn={companySettings?.companyNameEn}
@@ -499,6 +545,7 @@ export function QuotationForm({ quotationId, readOnly, onBack }: QuotationFormPr
         companyStamp={companySettings?.companyStamp}
         showLogo={companySettings?.showLogoOnPrint}
         showStamp={companySettings?.showStampOnPrint}
+        isQuotation={true}
       />
     </div>
   );

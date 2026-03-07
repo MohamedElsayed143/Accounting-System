@@ -410,6 +410,7 @@ export default function SystemSettingsPage() {
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [newUser, setNewUser] = useState({ username: "", password: "", role: "WORKER" });
   const [addingUser, setAddingUser] = useState(false);
+  const [showNewUserPassword, setShowNewUserPassword] = useState(false);
   const [isPending, startTransition] = React.useTransition();
   const [initialLoad, setInitialLoad] = useState(true);
   const [saved, setSaved] = useState(false);
@@ -1097,10 +1098,16 @@ export default function SystemSettingsPage() {
                         <Input 
                           value={newUser.password} 
                           onChange={(v) => setNewUser({ ...newUser, password: v })}
-                          type="password"
+                          type={showNewUserPassword ? "text" : "password"}
                           placeholder="••••••••"
                         />
-                        <Lock className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
+                        <button
+                          type="button"
+                          onClick={() => setShowNewUserPassword(!showNewUserPassword)}
+                          className="absolute left-3 top-3 text-slate-400 hover:text-slate-600 transition-colors"
+                        >
+                          {showNewUserPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
                       </div>
                     </Field>
                     <Field label="الدور (الصلاحية)">

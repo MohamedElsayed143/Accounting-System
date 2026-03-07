@@ -45,6 +45,8 @@ interface PrintableInvoiceProps {
   showLogo?: boolean;
   showStamp?: boolean;
   termsAndConditions?: string;
+  isQuotation?: boolean;
+  discount?: number;
 }
 
 export const PrintableInvoice = React.forwardRef<HTMLDivElement, PrintableInvoiceProps>(
@@ -58,7 +60,9 @@ export const PrintableInvoice = React.forwardRef<HTMLDivElement, PrintableInvoic
     companyStamp,
     showLogo = true,
     showStamp = true,
-    termsAndConditions
+    termsAndConditions,
+    isQuotation,
+    discount = 0
   }, ref) => {
     const returnsTotal = returns.reduce((sum, ret) => sum + ret.total, 0);
     const netTotal = total - returnsTotal;
@@ -101,7 +105,7 @@ export const PrintableInvoice = React.forwardRef<HTMLDivElement, PrintableInvoic
           </div>
 
           <div className="text-left bg-slate-50 p-4 rounded-xl border border-slate-100">
-            <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">رقم الفاتورة</div>
+            <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">{isQuotation ? "رقم العرض" : "رقم الفاتورة"}</div>
             <div className="text-xl font-black text-slate-900" dir="ltr">
               #{prefix ? `${prefix}-` : ""}{String(invoiceNumber).padStart(4, "0")}
             </div>
@@ -119,12 +123,14 @@ export const PrintableInvoice = React.forwardRef<HTMLDivElement, PrintableInvoic
             <div className="text-sm text-slate-500">{partnerLabel}</div>
           </div>
           
-          <div className="flex flex-col items-end">
-            <span className="text-[11px] font-bold text-slate-400 block mb-1">طريقة الدفع:</span>
-            <span className={`px-4 py-1 rounded-full text-xs font-bold ${paymentStatus === 'cash' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
-              {getPaymentLabel(paymentStatus)}
-            </span>
-          </div>
+          {!isQuotation && (
+            <div className="flex flex-col items-end">
+              <span className="text-[11px] font-bold text-slate-400 block mb-1">طريقة الدفع:</span>
+              <span className={`px-4 py-1 rounded-full text-xs font-bold ${paymentStatus === 'cash' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
+                {getPaymentLabel(paymentStatus)}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* ─── Top Notes ─── */}
@@ -241,6 +247,13 @@ export const PrintableInvoice = React.forwardRef<HTMLDivElement, PrintableInvoic
               <span>الإجمالي الفرعي</span>
               <span className="font-semibold">{subtotal.toLocaleString("ar-EG")} {currencyCode}</span>
             </div>
+            
+            {discount > 0 && (
+              <div className="flex justify-between px-2 text-sm text-red-500">
+                <span>الخصم</span>
+                <span className="font-semibold">-{discount.toLocaleString("ar-EG")} {currencyCode}</span>
+              </div>
+            )}
             
             {tax > 0 && (
               <div className="flex justify-between px-2 text-sm text-slate-500">

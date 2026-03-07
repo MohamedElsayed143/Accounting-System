@@ -70,16 +70,20 @@ export async function getQuotationById(id: number) {
 // ─── إنشاء عرض سعر جديد ───
 export async function createQuotation(data: {
   customerId?: number | null;
+  customerName?: string | null;
   date: string;
   subtotal: number;
+  totalTax: number;
   discount: number;
   total: number;
+  topNotes?: string[];
   notes?: string[];
   items: {
     productId: number;
     description: string;
     quantity: number;
-    price: number;
+    unitPrice: number;
+    taxRate: number;
     discount: number;
     total: number;
   }[];
@@ -101,17 +105,21 @@ export async function createQuotation(data: {
     data: {
       code,
       customerId: data.customerId || null,
+      customerName: data.customerName || null,
       date: new Date(data.date),
       subtotal: data.subtotal,
+      totalTax: data.totalTax,
       discount: data.discount,
       total: data.total,
+      topNotes: data.topNotes || [],
       notes: data.notes || [],
       items: {
         create: data.items.map((item) => ({
           productId: item.productId,
           description: item.description,
           quantity: item.quantity,
-          price: item.price,
+          unitPrice: item.unitPrice,
+          taxRate: item.taxRate,
           discount: item.discount,
           total: item.total,
         })),
@@ -128,16 +136,20 @@ export async function updateQuotation(
   id: number,
   data: {
     customerId?: number | null;
+    customerName?: string | null;
     date: string;
     subtotal: number;
+    totalTax: number;
     discount: number;
     total: number;
+    topNotes?: string[];
     notes?: string[];
     items: {
       productId: number;
       description: string;
       quantity: number;
-      price: number;
+      unitPrice: number;
+      taxRate: number;
       discount: number;
       total: number;
     }[];
@@ -158,10 +170,13 @@ export async function updateQuotation(
     where: { id },
     data: {
       customerId: data.customerId || null,
+      customerName: data.customerName || null,
       date: new Date(data.date),
       subtotal: data.subtotal,
+      totalTax: data.totalTax,
       discount: data.discount,
       total: data.total,
+      topNotes: data.topNotes || [],
       notes: data.notes || [],
       items: {
         deleteMany: {},
@@ -169,7 +184,8 @@ export async function updateQuotation(
           productId: item.productId,
           description: item.description,
           quantity: item.quantity,
-          price: item.price,
+          unitPrice: item.unitPrice,
+          taxRate: item.taxRate,
           discount: item.discount,
           total: item.total,
         })),

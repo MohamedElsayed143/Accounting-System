@@ -12,7 +12,6 @@ interface PrintableStatementProps {
   toDate?: Date;
   transactions: TransactionType[];
   openingBalance: number;
-  // Company Settings
   companyName?: string;
   companyNameEn?: string;
   companyLogo?: string | null;
@@ -41,157 +40,199 @@ export function PrintableStatement({
   const finalBalance = openingBalance + totalDebit - totalCredit;
 
   return (
-    <div className="hidden print:block print:bg-white print:text-black p-0 m-0 w-full rtl">
-      {/* Header Section */}
-      <div className="flex justify-between items-start border-b-4 border-slate-900 pb-6 mb-8">
-        <div className="flex items-start gap-4">
+    <div className="hidden print:block bg-white text-slate-800 p-4" dir="rtl">
+      <style dangerouslySetInnerHTML={{ __html: `
+        @page {
+          size: A4;
+          margin: 12mm 15mm;
+        }
+        @media print {
+          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .avoid-break { break-inside: avoid; }
+        }
+        .stmt-table th {
+          background-color: #1e293b !important;
+          color: #fff !important;
+          font-size: 10px;
+          padding: 9px 10px;
+          text-align: right;
+          font-weight: 700;
+          white-space: nowrap;
+        }
+        .stmt-table td {
+          font-size: 10px;
+          padding: 8px 10px;
+          border-bottom: 1px solid #f1f5f9;
+          vertical-align: middle;
+        }
+        .stmt-table tbody tr:nth-child(even) { background: #f8fafc !important; }
+        .stmt-table tbody tr:nth-child(odd)  { background: #ffffff !important; }
+        .total-card { background-color: #f1f5f9 !important; border: 2px solid #334155 !important; }
+      `}} />
+
+      {/* ─── Header ─── */}
+      <div className="flex justify-between items-center border-b-2 border-slate-100 pb-5 mb-6 avoid-break">
+        <div className="flex items-center gap-5">
           {showLogo && companyLogo && (
-            <img src={companyLogo} alt="Logo" className="w-20 h-20 object-contain rounded-lg" />
+            <img src={companyLogo} alt="Logo" className="w-16 h-16 object-contain rounded-lg" />
           )}
-          <div className="space-y-1">
-            <h1 className="text-3xl font-black tracking-tight text-slate-900">{title}</h1>
-            <div className="flex flex-col">
-              <span className="text-xl font-bold text-slate-800">{companyName}</span>
-              <span className="text-xs text-slate-500 font-medium tracking-wide uppercase">{companyNameEn}</span>
-            </div>
+          <div>
+            <h1 className="text-2xl font-black text-slate-900">{title}</h1>
+            <p className="text-sm font-bold text-slate-600">{companyName}</p>
+            <p className="text-xs text-slate-400 font-medium uppercase tracking-wider">{companyNameEn}</p>
           </div>
         </div>
-        <div className="text-left space-y-1">
-          <div className="text-xs text-slate-400 font-bold uppercase tracking-wider">تاريخ الطباعة</div>
-          <div className="text-sm font-bold text-slate-900">{new Date().toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
-        </div>
-      </div>
-
-      {/* Account Details & Period */}
-      <div className="grid grid-cols-2 gap-8 mb-8">
-        <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-1.5 h-full bg-slate-900" />
-          <div className="text-xs text-slate-400 font-black mb-2 uppercase tracking-widest">بيانات الحساب</div>
-          <div className="text-2xl font-black text-slate-900 mb-1">{accountName}</div>
-          {accountInfo && <div className="text-sm text-slate-600 font-bold">{accountInfo}</div>}
-        </div>
-        <div className="bg-blue-50/50 p-6 rounded-2xl border border-blue-100 flex flex-col justify-center relative overflow-hidden shadow-sm">
-          <div className="absolute top-0 right-0 w-1.5 h-full bg-blue-500" />
-          <div className="text-xs text-blue-400 font-black mb-2 uppercase tracking-widest">الفترة الزمنية للتقرير</div>
-          <div className="flex items-center gap-4 text-slate-900">
-            <div className="flex flex-col">
-              <span className="text-[10px] text-slate-400 font-black uppercase">من تاريخ</span>
-              <span className="font-black text-lg">{fromDate ? fromDate.toLocaleDateString('ar-EG') : 'بداية النشاط'}</span>
-            </div>
-            <div className="w-10 h-[2px] bg-blue-200"></div>
-            <div className="flex flex-col">
-              <span className="text-[10px] text-slate-400 font-black uppercase">إلى تاريخ</span>
-              <span className="font-black text-lg">{toDate ? toDate.toLocaleDateString('ar-EG') : 'اليوم'}</span>
-            </div>
+        <div className="text-left bg-slate-50 p-4 rounded-xl border border-slate-100">
+          <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">تاريخ الطباعة</div>
+          <div className="text-sm font-black text-slate-900">
+            {new Date().toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })}
           </div>
         </div>
       </div>
 
-      {/* Main Table */}
-      <div className="mb-8 overflow-hidden border border-slate-200 rounded-3xl shadow-sm">
-        <table className="w-full border-collapse">
+      {/* ─── Info Grid ─── */}
+      <div className="grid grid-cols-2 gap-5 mb-6 avoid-break">
+        {/* Account */}
+        <div className="p-4 rounded-xl border border-slate-200 bg-slate-50 relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-1 h-full bg-slate-800 rounded-r-xl" />
+          <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 pr-3">بيانات الحساب</div>
+          <div className="text-lg font-black text-slate-900 pr-3">{accountName}</div>
+          {accountInfo && <div className="text-xs text-slate-500 font-medium pr-3 mt-0.5">{accountInfo}</div>}
+        </div>
+
+        {/* Period */}
+        <div className="p-4 rounded-xl border border-slate-200 bg-slate-50 relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-1 h-full bg-slate-400 rounded-r-xl" />
+          <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 pr-3">الفترة الزمنية</div>
+          <div className="flex items-center gap-3 pr-3">
+            <div>
+              <div className="text-[9px] text-slate-400 font-bold uppercase">من</div>
+              <div className="text-sm font-black text-slate-800">
+                {fromDate ? fromDate.toLocaleDateString('ar-EG') : 'بداية النشاط'}
+              </div>
+            </div>
+            <div className="w-6 h-px bg-slate-300" />
+            <div>
+              <div className="text-[9px] text-slate-400 font-bold uppercase">إلى</div>
+              <div className="text-sm font-black text-slate-800">
+                {toDate ? toDate.toLocaleDateString('ar-EG') : 'اليوم'}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ─── Main Table ─── */}
+      <div className="mb-6 rounded-xl border border-slate-200 overflow-hidden avoid-break">
+        <table className="w-full border-collapse stmt-table">
           <thead>
-            <tr className="bg-slate-900 text-white">
-              <th className="p-4 text-right text-xs font-black uppercase tracking-widest border border-slate-900">التاريخ</th>
-              <th className="p-4 text-right text-xs font-black uppercase tracking-widest border border-slate-900">النوع</th>
-              <th className="p-4 text-right text-xs font-black uppercase tracking-widest border border-slate-900">رقم المرجع</th>
-              <th className="p-4 text-right text-xs font-black uppercase tracking-widest border border-slate-900">البيان</th>
-              <th className="p-4 text-left text-xs font-black uppercase tracking-widest border border-slate-900">مدين (+)</th>
-              <th className="p-4 text-left text-xs font-black uppercase tracking-widest border border-slate-900">دائن (-)</th>
-              <th className="p-4 text-left text-xs font-black uppercase tracking-widest border border-slate-900">الرصيد</th>
+            <tr>
+              <th style={{ width: "10%" }}>التاريخ</th>
+              <th style={{ width: "10%" }}>النوع</th>
+              <th style={{ width: "10%" }}>المرجع</th>
+              <th style={{ width: "34%" }}>البيان</th>
+              <th style={{ width: "12%", textAlign: "left" }}>مدين (+)</th>
+              <th style={{ width: "12%", textAlign: "left" }}>دائن (-)</th>
+              <th style={{ width: "12%", textAlign: "left" }}>الرصيد</th>
             </tr>
           </thead>
           <tbody>
-            <tr className="bg-slate-50 italic">
-              <td colSpan={6} className="p-4 text-xs font-black border border-slate-200 text-slate-500">رصيد افتتاحي سابق للفترة المحددة</td>
-              <td className="p-4 text-xs font-black border border-slate-200 text-left bg-slate-100/50 text-slate-900">
+            {/* Opening Balance Row */}
+            <tr style={{ background: "#f8fafc" }}>
+              <td colSpan={6} style={{ color: "#64748b", fontStyle: "italic", fontWeight: "700", fontSize: "10px" }}>
+                رصيد افتتاحي سابق للفترة
+              </td>
+              <td style={{ textAlign: "left", fontWeight: "900", color: "#0f172a", background: "#f1f5f9" }}>
                 {openingBalance.toLocaleString('ar-EG')}
               </td>
             </tr>
+
             {transactions.map((t, idx) => (
               <tr key={t.id} className={cn(idx % 2 === 0 ? "bg-white" : "bg-slate-50/30")}>
-                <td className="p-4 text-xs border border-slate-200 font-bold text-slate-600">
+                <td style={{ color: "#475569", fontWeight: "600" }}>
                   {new Date(t.date).toLocaleDateString('ar-EG')}
                 </td>
-                <td className="p-4 text-xs border border-slate-200">
-                  <span className="font-black text-slate-900">{t.type}</span>
+                <td>
+                  <span style={{ fontWeight: "800", color: "#1e293b" }}>{t.type}</span>
                 </td>
-                <td className="p-4 text-xs border border-slate-200 font-black text-blue-600" dir="ltr">{t.documentId}</td>
-                <td className="p-4 text-xs border border-slate-200 text-slate-700 min-w-[200px] font-medium">{t.description}</td>
-                <td className="p-4 text-xs border border-slate-200 font-black text-emerald-700 text-left">
+                <td style={{ color: "#2563eb", fontWeight: "700" }} dir="ltr">{t.documentId}</td>
+                <td style={{ color: "#475569" }}>{t.description}</td>
+                <td style={{ textAlign: "left", fontWeight: "700", color: t.debit > 0 ? "#047857" : "#94a3b8" }}>
                   {t.debit > 0 ? t.debit.toLocaleString('ar-EG') : '—'}
                 </td>
-                <td className="p-4 text-xs border border-slate-200 font-black text-rose-700 text-left">
+                <td style={{ textAlign: "left", fontWeight: "700", color: t.credit > 0 ? "#b91c1c" : "#94a3b8" }}>
                   {t.credit > 0 ? t.credit.toLocaleString('ar-EG') : '—'}
                 </td>
-                <td className="p-4 text-xs border border-slate-200 font-black text-slate-900 text-left bg-slate-50/50">
+                <td style={{ textAlign: "left", fontWeight: "900", color: "#0f172a", background: "#f8fafc" }}>
                   {t.runningBalance?.toLocaleString('ar-EG')}
                 </td>
               </tr>
             ))}
           </tbody>
           <tfoot>
-            <tr className="bg-slate-900 text-white font-black">
-              <td colSpan={4} className="p-5 text-sm font-black text-right tracking-widest uppercase">إجماليات الحركة للفترة</td>
-              <td className="p-5 text-sm text-left border-l border-white/10">{totalDebit.toLocaleString('ar-EG')}</td>
-              <td className="p-5 text-sm text-left border-l border-white/10">{totalCredit.toLocaleString('ar-EG')}</td>
-              <td className="p-5 text-lg text-left bg-blue-600 text-white">{finalBalance.toLocaleString('ar-EG')}</td>
+            <tr style={{ background: "#1e293b", color: "#fff" }}>
+              <td colSpan={4} style={{ padding: "12px 10px", fontSize: "11px", fontWeight: "800", color: "#fff", textAlign: "right" }}>
+                إجماليات الحركة للفترة
+              </td>
+              <td style={{ padding: "12px 10px", textAlign: "left", fontSize: "12px", fontWeight: "900", color: "#6ee7b7" }}>
+                {totalDebit.toLocaleString('ar-EG')}
+              </td>
+              <td style={{ padding: "12px 10px", textAlign: "left", fontSize: "12px", fontWeight: "900", color: "#fca5a5" }}>
+                {totalCredit.toLocaleString('ar-EG')}
+              </td>
+              <td style={{ padding: "12px 10px", textAlign: "left", fontSize: "14px", fontWeight: "900", color: "#fff", background: "#334155" }}>
+                {finalBalance.toLocaleString('ar-EG')}
+              </td>
             </tr>
           </tfoot>
         </table>
       </div>
 
-      {/* Summary Legend */}
-      <div className="grid grid-cols-4 gap-6 mb-12">
-        <div className="bg-white border-2 border-slate-100 p-5 rounded-3xl shadow-sm">
-          <div className="text-[10px] font-black text-slate-400 mb-2 uppercase tracking-widest">الرصيد السابق</div>
-          <div className="text-xl font-black text-slate-700">{openingBalance.toLocaleString('ar-EG')}</div>
+      {/* ─── Summary Cards ─── */}
+      <div className="grid grid-cols-4 gap-4 mb-8 avoid-break">
+        <div style={{ border: "1px solid #e2e8f0", borderRadius: "10px", padding: "14px" }}>
+          <div style={{ fontSize: "9px", fontWeight: "800", color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "6px" }}>الرصيد السابق</div>
+          <div style={{ fontSize: "18px", fontWeight: "900", color: "#334155" }}>{openingBalance.toLocaleString('ar-EG')}</div>
         </div>
-        <div className="bg-emerald-50/30 border-2 border-emerald-100 p-5 rounded-3xl shadow-sm">
-          <div className="text-[10px] font-black text-emerald-500 mb-2 uppercase tracking-widest">إجمالي مدين (+)</div>
-          <div className="text-xl font-black text-emerald-700">{totalDebit.toLocaleString('ar-EG')}</div>
+        <div style={{ border: "1px solid #d1fae5", borderRadius: "10px", padding: "14px", background: "#f0fdf4" }}>
+          <div style={{ fontSize: "9px", fontWeight: "800", color: "#059669", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "6px" }}>إجمالي مدين (+)</div>
+          <div style={{ fontSize: "18px", fontWeight: "900", color: "#047857" }}>{totalDebit.toLocaleString('ar-EG')}</div>
         </div>
-        <div className="bg-rose-50/30 border-2 border-rose-100 p-5 rounded-3xl shadow-sm">
-          <div className="text-[10px] font-black text-rose-500 mb-2 uppercase tracking-widest">إجمالي دائن (-)</div>
-          <div className="text-xl font-black text-rose-700">{totalCredit.toLocaleString('ar-EG')}</div>
+        <div style={{ border: "1px solid #fee2e2", borderRadius: "10px", padding: "14px", background: "#fff5f5" }}>
+          <div style={{ fontSize: "9px", fontWeight: "800", color: "#dc2626", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "6px" }}>إجمالي دائن (-)</div>
+          <div style={{ fontSize: "18px", fontWeight: "900", color: "#b91c1c" }}>{totalCredit.toLocaleString('ar-EG')}</div>
         </div>
-        <div className="bg-slate-900 p-5 rounded-3xl shadow-xl">
-          <div className="text-[10px] font-black text-blue-400 mb-2 uppercase tracking-widest">الصافي الختامي</div>
-          <div className="text-xl font-black text-white">{finalBalance.toLocaleString('ar-EG')}</div>
+        {/* Final Balance — same total-card style as invoices */}
+        <div className="total-card" style={{ borderRadius: "10px", padding: "14px", position: "relative", overflow: "hidden" }}>
+          <div style={{ fontSize: "9px", fontWeight: "800", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "4px" }}>الصافي الختامي</div>
+          <div style={{ fontSize: "22px", fontWeight: "900", color: "#0f172a" }}>{finalBalance.toLocaleString('ar-EG')}</div>
         </div>
       </div>
 
-      {/* Signature Section */}
-      <div className="grid grid-cols-3 gap-12 mt-20 px-8 relative">
-        <div className="text-center space-y-12">
-          <div className="font-black text-xs text-slate-400 border-b-2 border-dashed border-slate-200 pb-3 uppercase tracking-widest">ختم إدارة الحسابات</div>
-          <div className="h-24"></div>
+      {/* ─── Signatures + Stamp ─── */}
+      <div className="grid grid-cols-3 gap-10 avoid-break">
+        <div className="text-center">
+          <p style={{ fontSize: "11px", fontWeight: "700", color: "#64748b", marginBottom: "40px" }}>ختم إدارة الحسابات</p>
+          <div style={{ borderBottom: "2px dashed #cbd5e1" }} />
         </div>
-        <div className="text-center space-y-12">
-          <div className="font-black text-xs text-slate-400 border-b-2 border-dashed border-slate-200 pb-3 uppercase tracking-widest">توقيع المراجع المالي</div>
-          <div className="h-24"></div>
+        <div className="text-center">
+          <p style={{ fontSize: "11px", fontWeight: "700", color: "#64748b", marginBottom: "40px" }}>توقيع المراجع المالي</p>
+          <div style={{ borderBottom: "2px dashed #cbd5e1" }} />
         </div>
-        <div className="flex flex-col items-center justify-center gap-4">
+        <div className="flex flex-col items-center gap-2">
           {showStamp && companyStamp && (
-            <img src={companyStamp} alt="Stamp" className="w-32 h-32 object-contain opacity-80" />
+            <img src={companyStamp} alt="Stamp" className="w-24 h-24 object-contain opacity-80 mix-blend-multiply" />
           )}
-          <span className="font-black text-sm text-slate-900 italic tracking-tighter">
-            تَمَّ الإِصْدَارُ عَبْرَ {companyName}
-          </span>
+          <p style={{ fontSize: "10px", fontWeight: "700", color: "#94a3b8" }}>ختم وتوقيع المعتمد</p>
         </div>
       </div>
 
-      <style jsx>{`
-        @media print {
-          @page {
-            size: A4;
-            margin: 15mm;
-          }
-          body {
-            -webkit-print-color-adjust: exact;
-          }
-        }
-      `}</style>
+      {/* ─── Footer ─── */}
+      <div className="mt-8 pt-5 border-t border-slate-100 text-center">
+        <p style={{ fontSize: "10px", fontWeight: "700", color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.25em" }}>
+          تَمَّ الإِصْدَارُ عَبْرَ {companyName} • {companyNameEn}
+        </p>
+      </div>
     </div>
   );
 }
