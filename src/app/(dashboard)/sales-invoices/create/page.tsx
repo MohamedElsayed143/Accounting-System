@@ -119,7 +119,12 @@ function InvoiceFormStep({
   // تحميل المنتجات والخزائن والإعدادات
   useEffect(() => {
     getProducts().then(setProducts);
-    getCompanySettingsAction().then(setSettings);
+    getCompanySettingsAction().then((s) => {
+      setSettings(s);
+      if (s?.invoiceName) {
+        setPrintableTitle(s.invoiceName);
+      }
+    });
     getSystemSettings().then(setSystemSettings);
     getTreasuryData().then((data) => {
       const allSafes = data.accounts.filter(acc => acc.type === "safe") as any[];
@@ -417,15 +422,6 @@ function InvoiceFormStep({
 
         {(isEditMode || isViewMode || invoiceId) && (
           <div className="flex flex-col md:flex-row gap-3 items-end">
-            <div className="flex flex-col gap-1.5 min-w-[200px]">
-              <Label className="text-xs font-bold text-slate-500 mr-2">مسمى الفاتورة للطباعة</Label>
-              <Input 
-                value={printableTitle}
-                onChange={(e) => setPrintableTitle(e.target.value)}
-                placeholder="مثال: فاتورة مبيعات، عرض سعر..."
-                className="h-10 bg-white border-slate-200 shadow-sm font-bold text-primary"
-              />
-            </div>
             <Button
               variant="outline"
               size="lg"

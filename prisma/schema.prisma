@@ -519,6 +519,7 @@ model CompanySettings {
   salesPrefix        String   @default("INV")
   purchasePrefix     String   @default("PUR")
   quotationPrefix    String   @default("QUO")
+  invoiceName        String   @default("فاتورة ضريبية")
   startNumber        Int      @default(1)
   termsAndConditions String?  @db.Text
 

@@ -72,6 +72,7 @@ const DEFAULT: Settings = {
     startingNumber: 1,
     purchasePrefix: "PUR",
     quotationPrefix: "QUO",
+    invoiceName: "فاتورة ضريبية",
     termsAndConditions:
       "جميع الأسعار شاملة الضريبة المضافة.\nيُرجى السداد خلال 30 يوماً من تاريخ الفاتورة.",
     showLogoOnPrint: true,
@@ -133,6 +134,7 @@ type Settings = {
   invoice: {
     salesPrefix: string; startingNumber: number;
     purchasePrefix: string; quotationPrefix: string;
+    invoiceName: string;
     termsAndConditions: string; showLogoOnPrint: boolean; showStampOnPrint: boolean;
   };
   tax: {
@@ -465,6 +467,7 @@ export default function SystemSettingsPage() {
               salesPrefix: companySettings.salesPrefix,
               purchasePrefix: companySettings.purchasePrefix,
               quotationPrefix: companySettings.quotationPrefix,
+              invoiceName: companySettings.invoiceName || prev.invoice.invoiceName,
               startingNumber: companySettings.startNumber,
               showLogoOnPrint: companySettings.showLogoOnPrint,
               showStampOnPrint: companySettings.showStampOnPrint,
@@ -635,6 +638,7 @@ export default function SystemSettingsPage() {
           salesPrefix: s.invoice.salesPrefix,
           purchasePrefix: s.invoice.purchasePrefix,
           quotationPrefix: s.invoice.quotationPrefix,
+          invoiceName: s.invoice.invoiceName,
           startNumber: s.invoice.startingNumber,
           termsAndConditions: s.invoice.termsAndConditions,
         });
@@ -784,6 +788,9 @@ export default function SystemSettingsPage() {
                     </Field>
                     <Field label="بادئة عروض الأسعار">
                       <Input value={s.invoice.quotationPrefix} onChange={(v) => update("invoice", "quotationPrefix", v)} placeholder="QUO" dir="ltr" />
+                    </Field>
+                    <Field label="مسمى الفاتورة (للطباعة)" hint="يظهر كعنوان للفاتورة">
+                      <Input value={s.invoice.invoiceName} onChange={(v) => update("invoice", "invoiceName", v)} placeholder="فاتورة ضريبية" />
                     </Field>
                     <Field label="رقم البداية" hint="أول رقم تسلسلي">
                       <Input value={s.invoice.startingNumber} onChange={(v) => update("invoice", "startingNumber", Number(v))} type="number" placeholder="1" />

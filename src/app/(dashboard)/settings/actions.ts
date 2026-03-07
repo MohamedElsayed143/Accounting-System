@@ -15,6 +15,7 @@ const CompanySettingsSchema = z.object({
   salesPrefix: z.string().default("INV"),
   purchasePrefix: z.string().default("PUR"),
   quotationPrefix: z.string().default("QUO"),
+  invoiceName: z.string().default("فاتورة ضريبية"),
   startNumber: z.number().int().positive().default(1),
   termsAndConditions: z.string().optional(),
   // Financial Settings
@@ -120,6 +121,7 @@ export async function updateCompanySettingsAction(data: any) {
         salesPrefix: validatedData.salesPrefix,
         purchasePrefix: validatedData.purchasePrefix,
         quotationPrefix: validatedData.quotationPrefix,
+        invoiceName: validatedData.invoiceName,
         startNumber: validatedData.startNumber,
         termsAndConditions: validatedData.termsAndConditions,
       },
@@ -134,6 +136,7 @@ export async function updateCompanySettingsAction(data: any) {
         salesPrefix: validatedData.salesPrefix,
         purchasePrefix: validatedData.purchasePrefix,
         quotationPrefix: validatedData.quotationPrefix,
+        invoiceName: validatedData.invoiceName,
         startNumber: validatedData.startNumber,
         termsAndConditions: validatedData.termsAndConditions,
       },
