@@ -52,6 +52,10 @@ export async function getStockLevels(): Promise<{ rows: StockRow[]; alertsEnable
   const rows = products.map((p) => {
     const rawQty = qtyMap.get(p.id) ?? 0;
     const qty = Math.max(0, rawQty); // عدم السماح بظهور رصيد أقل من صفر
+    let threshold = p.minStock;
+    if (threshold === 0) {
+      threshold = defaultThreshold;
+    }
     return {
       productId: p.id,
       code: p.code,
@@ -63,7 +67,7 @@ export async function getStockLevels(): Promise<{ rows: StockRow[]; alertsEnable
       sellPrice: p.sellPrice,
       minStock: p.minStock,
       totalValue: qty > 0 ? qty * p.buyPrice : 0,
-      isLow: qty <= Math.max(p.minStock, defaultThreshold),
+      isLow: qty <= threshold,
     };
   });
 
@@ -104,8 +108,13 @@ export async function getStockOverview() {
     const rawQty = qtyMap.get(p.id) ?? 0;
     const qty = Math.max(0, rawQty); // عدم السماح بظهور رصيد أقل من صفر
     
+    let threshold = p.minStock;
+    if (threshold === 0) {
+      threshold = defaultThreshold;
+    }
+
     if (alertsEnabled) {
-      if (qty <= Math.max(p.minStock, defaultThreshold)) {
+      if (qty <= threshold) {
         lowStockCount++;
       }
     }

@@ -16,6 +16,8 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { getAuthSession, logoutAction } from "@/app/login/actions";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { getUnreadNotificationsCount } from "@/app/(dashboard)/notifications/actions";
 
 interface NavbarProps {
   title?: string;
@@ -24,14 +26,31 @@ interface NavbarProps {
 export function Navbar({ title }: NavbarProps) {
   const router = useRouter();
   const [user, setUser] = useState<{ username: string; role: string } | null>(null);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
-    getAuthSession().then((session) => {
+    const loadData = async () => {
+      const session = await getAuthSession();
       if (session?.user) {
         setUser(session.user);
+        if (session.user.role === "ADMIN") {
+          const count = await getUnreadNotificationsCount();
+          setUnreadCount(count);
+        }
       }
-    });
-  }, []);
+    };
+    loadData();
+
+    // Refresh count every 1 minute
+    const interval = setInterval(async () => {
+      if (user?.role === "ADMIN") {
+        const count = await getUnreadNotificationsCount();
+        setUnreadCount(count);
+      }
+    }, 60000);
+
+    return () => clearInterval(interval);
+  }, [user?.role]);
 
   const handleLogout = async () => {
     await logoutAction();
@@ -61,17 +80,21 @@ export function Navbar({ title }: NavbarProps) {
           />
         </div>
 
-        <Button 
-          variant="ghost" 
-          size="icon" 
-          className="relative h-9 w-9 hover:bg-primary/10 transition-all group"
-        >
-          <Bell className="h-4 w-4 group-hover:scale-110 transition-transform" />
-          <span className="absolute left-1.5 top-1.5 flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-destructive"></span>
-          </span>
-        </Button>
+        <Link href="/notifications">
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="relative h-9 w-9 hover:bg-primary/10 transition-all group"
+          >
+            <Bell className="h-4 w-4 group-hover:scale-110 transition-transform" />
+            {unreadCount > 0 && (
+              <span className="absolute left-1.5 top-1.5 flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-destructive text-[8px] flex items-center justify-center text-white"></span>
+              </span>
+            )}
+          </Button>
+        </Link>
 
         <DropdownMenu dir="rtl">
             <DropdownMenuTrigger asChild>

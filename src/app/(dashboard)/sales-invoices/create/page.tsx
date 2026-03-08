@@ -7,7 +7,7 @@ import Link from "next/link";
 import {
   ArrowRight, Plus, Trash2, Save, Calculator,
   Search, User, ChevronLeft, CreditCard, Hash, Printer,
-  History as HistoryIcon
+  History as HistoryIcon, Loader2
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -42,7 +42,7 @@ import {
   updateSalesInvoice,
 } from "../actions";
 import { getTreasuryData } from "@/app/(dashboard)/treasury/actions";
-import { getSystemSettings, getCompanySettingsAction } from "@/app/(dashboard)/settings/actions";
+import { getSystemSettings, getCompanySettingsAction, getGeneralSettingsAction } from "@/app/(dashboard)/settings/actions";
 
 // ─── الأنواع ──────────────────────────────────────────────────────────────────
 interface Customer {
@@ -99,6 +99,7 @@ function InvoiceFormStep({
   const [invoiceDate, setInvoiceDate] = useState<string>(
     new Date().toISOString().split("T")[0]
   );
+  const [dueDate, setDueDate] = useState<string>("");
   const [items, setItems] = useState<InvoiceItem[]>([]);
   const [topNotes, setTopNotes] = useState<string[]>([]);
   const [discount, setDiscount] = useState<number>(0); // Global discount
@@ -110,6 +111,7 @@ function InvoiceFormStep({
   const [treasuryType, setTreasuryType] = useState<"safe" | "bank">("safe");
   const [settings, setSettings] = useState<any>(null);
   const [systemSettings, setSystemSettings] = useState<any>(null);
+  const [notifSettings, setNotifSettings] = useState<any>(null);
   const [showZeroStock, setShowZeroStock] = useState(false);
   const [printableTitle, setPrintableTitle] = useState<string>("فاتورة مبيعات");
 
@@ -126,6 +128,7 @@ function InvoiceFormStep({
       }
     });
     getSystemSettings().then(setSystemSettings);
+    getGeneralSettingsAction().then(setNotifSettings);
     getTreasuryData().then((data) => {
       const allSafes = data.accounts.filter(acc => acc.type === "safe") as any[];
       const allBanks = data.accounts.filter(acc => acc.type === "bank") as any[];
@@ -144,11 +147,14 @@ function InvoiceFormStep({
     if ((isEditMode || isViewMode) && invoiceId) {
       setLoading(true);
       getSalesInvoiceWithReturns(Number(invoiceId))
-        .then((invoice) => {
+        .then((invoice: any) => {
           if (invoice) {
             setInvoiceNumber(invoice.invoiceNumber);
             setPaymentType(invoice.status as "cash" | "credit" | "pending");
             setInvoiceDate(new Date(invoice.invoiceDate).toISOString().split("T")[0]);
+            if (invoice.dueDate) {
+              setDueDate(new Date(invoice.dueDate).toISOString().split("T")[0]);
+            }
             setDiscount(invoice.discount || 0);
             
             if (invoice.customer) {
@@ -158,7 +164,7 @@ function InvoiceFormStep({
               });
             }
 
-            const totalReturns = invoice.salesReturns?.reduce((sum, ret) => sum + ret.total, 0) || 0;
+            const totalReturns = invoice.salesReturns?.reduce((sum: number, ret: any) => sum + ret.total, 0) || 0;
             setReturnsTotal(totalReturns);
             setReturnsCount(invoice.salesReturns?.length || 0);
             setReturns(invoice.salesReturns || []);
@@ -332,6 +338,7 @@ function InvoiceFormStep({
         discount: itemsDiscount + discount,
         total: grandTotal,
         status: paymentType,
+        dueDate: (paymentType === "credit" || notifSettings?.showDueDateOnInvoices) ? dueDate : undefined,
         safeId: paymentType === "cash" && treasuryType === "safe" ? Number(selectedSafeId) : undefined,
         bankId: paymentType === "cash" && treasuryType === "bank" ? Number(selectedBankId) : undefined,
         topNotes,
@@ -540,6 +547,21 @@ function InvoiceFormStep({
                         required={!isViewMode}
                       />
                     </div>
+
+                    {(paymentType === "credit" || notifSettings?.showDueDateOnInvoices) && (
+                      <div className="space-y-1.5">
+                        <Label className="text-slate-600 text-sm font-bold flex items-center gap-1">
+                          {paymentType === "credit" ? "تاريخ الاستحقاق" : "تاريخ التحصيل المتوقع"}
+                        </Label>
+                        <Input
+                          type="date"
+                          value={dueDate}
+                          onChange={(e) => setDueDate(e.target.value)}
+                          disabled={isViewMode}
+                          className="bg-slate-50 border-slate-200 w-44"
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -946,5 +968,3 @@ export default function CreateSalesInvoicePage() {
     </>
   );
 }
-
-import { Loader2 } from "lucide-react";

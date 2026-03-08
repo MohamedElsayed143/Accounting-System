@@ -321,7 +321,10 @@ export async function getInventoryAlerts() {
         };
       })
       .filter((p) => {
-        const threshold = Math.max(p.minStock, defaultThreshold);
+        let threshold = p.minStock;
+        if (threshold === 0) {
+          threshold = defaultThreshold;
+        }
         return p.currentStock <= threshold;
       });
 

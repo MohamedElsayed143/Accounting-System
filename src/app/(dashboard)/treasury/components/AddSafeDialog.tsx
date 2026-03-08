@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { createSafe } from "../actions";
+import { toast } from "sonner";
 
 interface AddSafeDialogProps {
   open: boolean;
@@ -36,7 +37,12 @@ export default function AddSafeDialog({ open, onOpenChange, onSuccess }: AddSafe
 
     if (result.success) {
       setFormData({ name: "", description: "", initialBalance: "" });
-      onSuccess();
+      if ((result as any).pending) {
+        toast.success(result.message || "تم إرسال الطلب للمدير للموافقة");
+      } else {
+        toast.success("تمت الإضافة بنجاح");
+        onSuccess();
+      }
       onOpenChange(false);
     } else {
       setError(result.error || "حدث خطأ أثناء الإضافة");

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { getSession } from "@/lib/auth";
 import { hasPermission } from "@/lib/permissions";
+import { triggerStaffActivityAlert, triggerTreasuryAlert } from "@/lib/notifications";
 
 // تعريف الأنواع
 export interface TreasuryStats {
@@ -277,25 +278,51 @@ export async function getTreasuryData() {
 }
 
 // 2. إنشاء بنك جديد
-export async function createBank(data: { name: string; accountNumber: string; branch: string; initialBalance: number }) {
+export async function createBank(data: { name: string; accountNumber: string; branch: string; initialBalance: number }, skipApproval: boolean = false) {
   const session = await getSession();
   if (!session) throw new Error("Unauthorized");
 
   const canManage = await hasPermission(session.userId, "treasury_manage");
   if (!canManage) throw new Error("ليس لديك صلاحية إضافة حسابات بنكية");
 
+  // Approval Interception
+  if (!skipApproval) {
+    const settings = await (prisma as any).generalSettings.findUnique({ where: { id: 1 } });
+    if (session.user.role === "WORKER" && (settings as any)?.requireApprovalForBankCreation) {
+      await (prisma as any).treasuryActionRequest.create({
+        data: {
+          type: "CREATE_BANK",
+          data: data as any,
+          requesterId: session.userId,
+          status: "PENDING",
+        },
+      });
+      return { success: true, pending: true, message: "تم إرسال طلب إضافة البنك للمدير للموافقة" };
+    }
+  }
+
   try {
-    await prisma.treasuryBank.create({
+    const bank = await prisma.treasuryBank.create({
       data: {
         name: data.name,
         accountNumber: data.accountNumber || null,
         branch: data.branch || null,
         balance: data.initialBalance || 0,
-        isActive: true, // البنك الجديد نشط افتراضياً
+        isActive: true,
       },
     });
+
+    const session = await getSession();
+    if (session) {
+      await triggerStaffActivityAlert(
+        session.user,
+        "إضافة بنك",
+        `تم إضافة بنك جديد: ${data.name} (رصيد: ${data.initialBalance})`
+      );
+    }
+
     revalidatePath("/treasury");
-    return { success: true };
+    return { success: true, data: bank };
   } catch (error) {
     console.error("Error creating bank:", error);
     return { success: false, error: "فشل في إضافة البنك" };
@@ -353,6 +380,16 @@ export async function archiveBank(bankId: number) {
       });
       
       revalidatePath("/treasury");
+      
+      const session = await getSession();
+      if (session) {
+        await triggerStaffActivityAlert(
+          session.user,
+          "أرشفة بنك",
+          `تم أرشفة البنك: ${bank.name}`
+        );
+      }
+
       return { 
         success: true, 
         message: "تم أرشفة البنك وإخفاؤه من القائمة مع الاحتفاظ بالمعاملات",
@@ -396,10 +433,28 @@ export async function getInitialData(): Promise<InitialData> {
   }
 }
 
-// 5. إنشاء سند صرف
-export async function createPaymentVoucher(data: PaymentVoucherInput) {
+// 5. إنشاء سند صرف (تم نقله إلى payment-voucher/actions.tsx)
+// تم الإبقاء على النوع فقط إذا لزم الأمر أو يفضل استيراده من هناك
+/*
+export async function createPaymentVoucher(data: PaymentVoucherInput, skipApproval: boolean = false) {
   const session = await getSession();
   if (!session) throw new Error("Unauthorized");
+
+  // Approval Interception
+  if (!skipApproval) {
+    const settings = await (prisma as any).generalSettings.findUnique({ where: { id: 1 } });
+    if (session.user.role === "WORKER" && settings?.requireApprovalForVouchers) {
+      await (prisma as any).treasuryActionRequest.create({
+        data: {
+          type: "PAYMENT_VOUCHER",
+          data: data as any,
+          requesterId: session.userId,
+          status: "PENDING",
+        },
+      });
+      return { success: true, pending: true, message: "تم إرسال طلب سند الصرف للمدير للموافقة" };
+    }
+  }
 
   const canManage = await hasPermission(session.userId, "treasury_manage");
   if (!canManage) throw new Error("ليس لديك صلاحية إنشاء سندات صرف");
@@ -449,6 +504,8 @@ export async function createPaymentVoucher(data: PaymentVoucherInput) {
       throw new Error("رقم المورد غير صحيح");
     }
 
+    const pendingAlerts: { type: 'treasury', name: string, balance: number }[] = [];
+
     const result = await prisma.$transaction(async (tx) => {
       
       if (accountType === "safe") {
@@ -464,10 +521,15 @@ export async function createPaymentVoucher(data: PaymentVoucherInput) {
           throw new Error(`رصيد الخزنة غير كافٍ (المتاح: ${safe.balance} - المطلوب: ${amountFloat})`);
         }
         
-        await tx.treasurySafe.update({
+        const updatedSafe = await tx.treasurySafe.update({
           where: { id: idInt },
           data: { balance: { decrement: amountFloat } },
+          select: { name: true, balance: true }
         });
+        
+        if (updatedSafe) {
+          pendingAlerts.push({ type: 'treasury', name: updatedSafe.name, balance: updatedSafe.balance });
+        }
       } else if (accountType === "bank") {
         const bank = await tx.treasuryBank.findUnique({ 
           where: { id: idInt } 
@@ -481,10 +543,15 @@ export async function createPaymentVoucher(data: PaymentVoucherInput) {
           throw new Error(`رصيد البنك غير كافٍ (المتاح: ${bank.balance} - المطلوب: ${amountFloat})`);
         }
 
-        await tx.treasuryBank.update({
+        const updatedBank = await tx.treasuryBank.update({
           where: { id: idInt },
           data: { balance: { decrement: amountFloat } },
+          select: { name: true, balance: true }
         });
+
+        if (updatedBank) {
+          pendingAlerts.push({ type: 'treasury', name: updatedBank.name, balance: updatedBank.balance });
+        }
       } else {
         throw new Error("نوع الحساب غير معروف");
       }
@@ -508,6 +575,19 @@ export async function createPaymentVoucher(data: PaymentVoucherInput) {
       });
     });
 
+    const session = await getSession();
+    if (session) {
+      await triggerStaffActivityAlert(
+        session.user,
+        "سند صرف",
+        `تم إنشاء سند صرف #${data.voucherNumber} بقيمة ${data.amount} من ${data.accountType === "safe" ? "خزنة" : "بنك"}`
+      );
+    }
+
+    for (const alert of pendingAlerts) {
+      await triggerTreasuryAlert(alert.name, alert.balance);
+    }
+
     revalidatePath("/treasury");
     revalidatePath(`/treasury/${idInt}?type=${accountType}`);
     
@@ -518,6 +598,7 @@ export async function createPaymentVoucher(data: PaymentVoucherInput) {
     return { success: false, error: errorMessage };
   }
 }
+*/
 
 // 6. جلب تفاصيل حساب معين
 export async function getAccountDetails(id: number, type: 'safe' | 'bank') {
@@ -816,9 +897,25 @@ export async function createReceiptVoucher(data: {
   accountType: "safe" | "bank";
   accountId: number;
   description?: string;
-}) {
+}, skipApproval: boolean = false) {
   const session = await getSession();
   if (!session) throw new Error("Unauthorized");
+
+  // Approval Interception
+  if (!skipApproval) {
+    const settings = await (prisma as any).generalSettings.findUnique({ where: { id: 1 } });
+    if (session.user.role === "WORKER" && settings?.requireApprovalForVouchers) {
+      await (prisma as any).treasuryActionRequest.create({
+        data: {
+          type: "RECEIPT_VOUCHER",
+          data: data as any,
+          requesterId: session.userId,
+          status: "PENDING",
+        },
+      });
+      return { success: true, pending: true, message: "تم إرسال طلب سند القبض للمدير للموافقة" };
+    }
+  }
 
   const canManage = await hasPermission(session.userId, "treasury_manage");
   if (!canManage) throw new Error("ليس لديك صلاحية إنشاء سندات قبض");
@@ -838,6 +935,8 @@ export async function createReceiptVoucher(data: {
     if (isNaN(accountId)) throw new Error("رقم الحساب غير صحيح");
     if (isNaN(customerId)) throw new Error("رقم العميل غير صحيح");
 
+    const pendingAlerts: { type: 'treasury', name: string, balance: number }[] = [];
+
     const result = await prisma.$transaction(async (tx) => {
       
       if (accountType === "safe") {
@@ -846,20 +945,28 @@ export async function createReceiptVoucher(data: {
         });
         if (!safe) throw new Error("الخزنة غير موجودة");
         
-        await tx.treasurySafe.update({
+        const updatedSafe = await tx.treasurySafe.update({
           where: { id: accountId },
           data: { balance: { increment: amount } },
+          select: { name: true, balance: true }
         });
+        if (updatedSafe) {
+          pendingAlerts.push({ type: 'treasury', name: updatedSafe.name, balance: updatedSafe.balance });
+        }
       } else if (accountType === "bank") {
         const bank = await tx.treasuryBank.findUnique({ 
           where: { id: accountId } 
         });
         if (!bank) throw new Error("البنك غير موجود");
 
-        await tx.treasuryBank.update({
+        const updatedBank = await tx.treasuryBank.update({
           where: { id: accountId },
           data: { balance: { increment: amount } },
+          select: { name: true, balance: true }
         });
+        if (updatedBank) {
+          pendingAlerts.push({ type: 'treasury', name: updatedBank.name, balance: updatedBank.balance });
+        }
       } else {
         throw new Error("نوع الحساب غير معروف");
       }
@@ -886,6 +993,19 @@ export async function createReceiptVoucher(data: {
     revalidatePath("/treasury");
     revalidatePath(`/treasury/${accountId}?type=${accountType}`);
     
+    const session = await getSession();
+    if (session) {
+      await triggerStaffActivityAlert(
+        session.user,
+        "سند قبض",
+        `تم إنشاء سند قبض #${data.voucherNumber} بقيمة ${data.amount} إلى ${data.accountType === "safe" ? "خزنة" : "بنك"}`
+      );
+    }
+
+    for (const alert of pendingAlerts) {
+      await triggerTreasuryAlert(alert.name, alert.balance);
+    }
+
     return { success: true, data: result };
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "وقع خطأ غير معروف";
@@ -921,17 +1041,24 @@ export async function getArchivedAccounts() {
 
 // 11. إرجاع حساب من الأرشيف
 export async function restoreAccount(id: number, type: 'safe' | 'bank') {
+  const session = await getSession();
   try {
     if (type === 'bank') {
-      await prisma.treasuryBank.update({
-        where: { id },
-        data: { isActive: true }
-      });
+        const account = await prisma.treasuryBank.update({
+          where: { id },
+          data: { isActive: true }
+        });
+        if (session) {
+          await triggerStaffActivityAlert(session.user, "استعادة حساب", `تم استعادة البنك: ${account.name}`);
+        }
     } else {
-      await prisma.treasurySafe.update({
-        where: { id },
-        data: { isActive: true }
-      });
+        const account = await prisma.treasurySafe.update({
+          where: { id },
+          data: { isActive: true }
+        });
+        if (session && account) {
+          await triggerStaffActivityAlert(session.user, "استعادة حساب", `تم استعادة الخزنة: ${account.name}`);
+        }
     }
 
     revalidatePath("/treasury");
@@ -975,12 +1102,28 @@ export async function getReceiptInitialData() {
 }
 
 // 12. إنشاء خزنة جديدة
-export async function createSafe(data: { name: string; initialBalance: number; description?: string }) {
+export async function createSafe(data: { name: string; initialBalance: number; description?: string }, skipApproval: boolean = false) {
   const session = await getSession();
   if (!session) throw new Error("Unauthorized");
 
   const canManage = await hasPermission(session.userId, "treasury_manage");
   if (!canManage) throw new Error("ليس لديك صلاحية إضافة خزائن");
+
+  // Approval Interception
+  if (!skipApproval) {
+    const settings = await (prisma as any).generalSettings.findUnique({ where: { id: 1 } });
+    if (session.user.role === "WORKER" && (settings as any)?.requireApprovalForSafeCreation) {
+      await (prisma as any).treasuryActionRequest.create({
+        data: {
+          type: "CREATE_SAFE",
+          data: data as any,
+          requesterId: session.userId,
+          status: "PENDING",
+        },
+      });
+      return { success: true, pending: true, message: "تم إرسال طلب إضافة الخزنة للمدير للموافقة" };
+    }
+  }
 
   try {
     // التحقق من تكرار الاسم
@@ -991,7 +1134,7 @@ export async function createSafe(data: { name: string; initialBalance: number; d
       return { success: false, error: "يوجد خزنة بنفس هذا الاسم بالفعل" };
     }
 
-    await prisma.treasurySafe.create({
+    const safe = await prisma.treasurySafe.create({
       data: {
         name: data.name,
         balance: data.initialBalance || 0,
@@ -1000,8 +1143,18 @@ export async function createSafe(data: { name: string; initialBalance: number; d
         isActive: true,
       },
     });
+
+    const session = await getSession();
+    if (session) {
+      await triggerStaffActivityAlert(
+        session.user,
+        "إضافة خزنة",
+        `تم إضافة خزنة جديدة: ${data.name} (رصيد: ${data.initialBalance})`
+      );
+    }
+
     revalidatePath("/treasury");
-    return { success: true };
+    return { success: true, data: safe };
   } catch (error) {
     console.error("Error creating safe:", error);
     return { success: false, error: "فشل في إضافة الخزنة" };
@@ -1029,10 +1182,14 @@ export async function archiveSafe(safeId: number) {
       revalidatePath("/treasury");
       return { success: true, message: "تم حذف الخزنة نهائياً", deleted: true };
     } else {
-      await prisma.treasurySafe.update({
+      const archivedSafe = await prisma.treasurySafe.update({
         where: { id: safeId },
         data: { isActive: false }
       });
+      const session = await getSession();
+      if (session && archivedSafe) {
+        await triggerStaffActivityAlert(session.user, "أرشفة خزنة", `تم أرشفة الخزنة: ${archivedSafe.name}`);
+      }
       revalidatePath("/treasury");
       return { success: true, message: "تم أرشفة الخزنة", archived: true };
     }

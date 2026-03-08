@@ -133,7 +133,11 @@ export default function PaymentVoucherPage() {
       });
       
       if (res.success) {
-        toast.success("✅ تم حفظ سند الصرف بنجاح");
+        if ((res as any).pending) {
+          toast.success(res.message || "✅ تم إرسال الطلب للمدير للموافقة");
+        } else {
+          toast.success("✅ تم حفظ سند الصرف بنجاح");
+        }
         setTimeout(() => {
           window.location.href = "/treasury";
         }, 1000);

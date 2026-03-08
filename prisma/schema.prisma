@@ -64,6 +64,7 @@ model SalesInvoice {
   notes         Json?
   createdAt     DateTime           @default(now())
   updatedAt     DateTime           @updatedAt
+  dueDate       DateTime?          // تاريخ الاستحقاق (تحصيل)
   items         SalesInvoiceItem[]
   salesReturns  SalesReturn[]
 }
@@ -104,6 +105,7 @@ model PurchaseInvoice {
   notes           Json?
   createdAt       DateTime              @default(now())
   updatedAt       DateTime              @updatedAt
+  dueDate         DateTime?             // تاريخ الاستحقاق (دفع)
   items           PurchaseInvoiceItem[]
   purchaseReturns PurchaseReturn[]
 }
@@ -494,6 +496,10 @@ model User {
   sessions  Session[]
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
+
+  treasuryRequests         TreasuryActionRequest[] @relation("Requester")
+  approvedTreasuryRequests TreasuryActionRequest[] @relation("Approver")
+  notifications            Notification[]
 }
 
 model Session {
@@ -537,4 +543,76 @@ model CompanySettings {
   decimalPlaces Int    @default(2)
 
   updatedAt DateTime @updatedAt
+}
+
+// ========== نظام التنبيهات ==========
+
+enum NotificationType {
+  INFO
+  WARNING
+  SUCCESS
+  ERROR
+}
+
+model Notification {
+  id        Int              @id @default(autoincrement())
+  title     String           @db.VarChar(255)
+  message   String           @db.Text
+  type      NotificationType @default(INFO)
+  isRead    Boolean          @default(false)
+  userId    Int?
+  user      User?            @relation(fields: [userId], references: [id])
+  createdAt DateTime         @default(now())
+}
+
+model GeneralSettings {
+  id                    Int      @id @default(1)
+  staffActivityAlerts   Boolean  @default(true)
+  inventoryAlerts       Boolean  @default(true)
+  vaultBankAlerts      Boolean  @default(true)
+  minVaultBalance       Float    @default(1000)
+  financialAlerts       Boolean  @default(true)
+  showDueDateOnInvoices Boolean  @default(false)
+  updatedAt             DateTime @updatedAt
+
+  // Approval Workflow Settings
+  requireApprovalForTransfers    Boolean @default(false)
+  requireApprovalForSafeCreation Boolean @default(false)
+  requireApprovalForBankCreation Boolean @default(false)
+  requireApprovalForVouchers     Boolean @default(false)
+}
+
+enum TreasuryActionType {
+  TRANSFER
+  CREATE_SAFE
+  CREATE_BANK
+  RECEIPT_VOUCHER
+  PAYMENT_VOUCHER
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model TreasuryActionRequest {
+  id          Int                @id @default(autoincrement())
+  type        TreasuryActionType
+  data        Json // Stores input data for the action
+  status      RequestStatus      @default(PENDING)
+  reason      String?            @db.Text // For rejection
+  
+  requesterId Int
+  requester   User               @relation("Requester", fields: [requesterId], references: [id])
+  
+  approverId  Int?
+  approver    User?              @relation("Approver", fields: [approverId], references: [id])
+  
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  @@index([requesterId])
+  @@index([approverId])
+  @@index([status])
 }

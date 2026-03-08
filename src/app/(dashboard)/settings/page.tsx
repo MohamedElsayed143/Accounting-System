@@ -27,6 +27,7 @@ import {
   EyeOff,
   AlertTriangle,
   Users,
+  Bell,
 } from "lucide-react";
 import { Loader2 } from "lucide-react";
 import { Navbar } from "@/components/layout/navbar";
@@ -38,7 +39,9 @@ import {
   deleteUser, 
   getCompanySettingsAction, 
   updateCompanySettingsAction,
-  updateFinancialSettingsAction
+  updateFinancialSettingsAction,
+  getGeneralSettingsAction,
+  updateGeneralSettingsAction
 } from "./actions";
 import { toast } from "sonner";
 import { getAuthSession } from "@/app/login/actions";
@@ -123,6 +126,18 @@ const DEFAULT: Settings = {
       },
     },
   },
+  notifications: {
+    staffActivityAlerts: true,
+    inventoryAlerts: true,
+    vaultBankAlerts: true,
+    minVaultBalance: 1000,
+    financialAlerts: true,
+    showDueDateOnInvoices: false,
+    requireApprovalForTransfers: false,
+    requireApprovalForSafeCreation: false,
+    requireApprovalForBankCreation: false,
+    requireApprovalForVouchers: false,
+  },
 };
 
 type Settings = {
@@ -152,6 +167,18 @@ type Settings = {
   };
   rbac: {
     roles: Record<string, { label: string; permissions: Record<string, boolean> }>;
+  };
+  notifications: {
+    staffActivityAlerts: boolean;
+    inventoryAlerts: boolean;
+    vaultBankAlerts: boolean;
+    minVaultBalance: number;
+    financialAlerts: boolean;
+    showDueDateOnInvoices: boolean;
+    requireApprovalForTransfers: boolean;
+    requireApprovalForSafeCreation: boolean;
+    requireApprovalForBankCreation: boolean;
+    requireApprovalForVouchers: boolean;
   };
 };
 
@@ -271,8 +298,13 @@ function Toggle({ checked, onChange, label, description }: {
         <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{label}</p>
         {description && <p className="text-xs text-slate-400 mt-0.5">{description}</p>}
       </div>
+      <input
+        type="checkbox"
+        className="hidden"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+      />
       <div
-        onClick={() => onChange(!checked)}
         className={`relative shrink-0 w-12 h-6 rounded-full transition-colors duration-200 ${checked ? "bg-primary" : "bg-slate-300 dark:bg-slate-600"}`}
       >
         <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-all duration-200 ${checked ? "right-1" : "left-1"}`} />
@@ -390,6 +422,7 @@ const TABS = [
   { id: "company", label: "الشركة والفواتير", icon: Building2 },
   { id: "tax", label: "الضرائب والعملة", icon: Percent },
   { id: "inventory", label: "المخزون والخزينة", icon: Package },
+  { id: "notifications", label: "التنبيهات", icon: Bell },
   { id: "rbac", label: "الصلاحيات والأمان", icon: ShieldCheck },
   { id: "users", label: "المستخدمون", icon: Users },
 ] as const;
@@ -428,9 +461,10 @@ export default function SystemSettingsPage() {
         }
         setSessionUser(session.user);
 
-        const [dbSettings, companySettings] = await Promise.all([
+        const [dbSettings, companySettings, notifSettings] = await Promise.all([
           getSystemSettings(),
-          getCompanySettingsAction()
+          getCompanySettingsAction(),
+          getGeneralSettingsAction()
         ]);
 
         if (dbSettings) {
@@ -450,6 +484,7 @@ export default function SystemSettingsPage() {
                 }
               }
             } : prev.rbac,
+            notifications: prev.notifications
           }));
         }
 
@@ -485,7 +520,19 @@ export default function SystemSettingsPage() {
               ...prev.inventory,
               currency: companySettings.currencyCode,
               decimalPrecision: companySettings.decimalPlaces,
-            }
+            },
+            notifications: notifSettings ? {
+              staffActivityAlerts: notifSettings.staffActivityAlerts,
+              inventoryAlerts: notifSettings.inventoryAlerts,
+              vaultBankAlerts: notifSettings.vaultBankAlerts,
+              minVaultBalance: notifSettings.minVaultBalance,
+              financialAlerts: notifSettings.financialAlerts,
+              showDueDateOnInvoices: notifSettings.showDueDateOnInvoices,
+              requireApprovalForTransfers: notifSettings.requireApprovalForTransfers,
+              requireApprovalForSafeCreation: notifSettings.requireApprovalForSafeCreation,
+              requireApprovalForBankCreation: notifSettings.requireApprovalForBankCreation,
+              requireApprovalForVouchers: notifSettings.requireApprovalForVouchers,
+            } : prev.notifications
           }));
         }
       } catch (err) {
@@ -654,8 +701,10 @@ export default function SystemSettingsPage() {
           decimalPlaces: s.inventory.decimalPrecision,
         });
 
-        if (res?.error || resFinancial?.error) {
-          toast.error(res?.error || resFinancial?.error);
+        const resNotif = await updateGeneralSettingsAction(s.notifications);
+
+        if (res?.error || resFinancial?.error || resNotif?.error) {
+          toast.error(res?.error || resFinancial?.error || resNotif?.error);
           return;
         }
 
@@ -990,17 +1039,106 @@ export default function SystemSettingsPage() {
               </Card>
             )}
 
+            {/* ══ Tab: Notifications ══ */}
+            {tab === "notifications" && (
+              <Card title="إعدادات التنبيهات" icon={Bell}>
+                <div className="space-y-1">
+                  <Toggle
+                    checked={s.notifications.staffActivityAlerts}
+                    onChange={(v) => update("notifications", "staffActivityAlerts", v)}
+                    label="تنبيهات نشاط الموظفين"
+                    description="تنبيه عند قيام الموظفين بعمليات الإضافة أو الحذف أو التعديل (للأدوار STAFF و WORKER فقط)"
+                  />
+                  <div className="pt-3 border-t border-slate-100 dark:border-slate-800" />
+                  <Toggle
+                    checked={s.notifications.inventoryAlerts}
+                    onChange={(v) => update("notifications", "inventoryAlerts", v)}
+                    label="تنبيهات الأصناف والمخزون"
+                    description="تنبيه عند وصول صنف للحد الأدنى للمخزون"
+                  />
+                  <div className="pt-3 border-t border-slate-100 dark:border-slate-800" />
+                  <Toggle
+                    checked={s.notifications.vaultBankAlerts}
+                    onChange={(v) => update("notifications", "vaultBankAlerts", v)}
+                    label="تنبيهات أرصدة الخزينة والبنوك"
+                    description="تنبيه عند انخفاض رصيد الخزنة أو البنك عن الحد الأدنى المحدد"
+                  />
+                  {s.notifications.vaultBankAlerts && (
+                    <div className="px-3 pb-3">
+                      <Field label="الحد الأدنى للرصيد" hint="سيتم التنبيه عند وصول الرصيد لهذا المبلغ أو أقل">
+                        <div className="flex items-center gap-3">
+                          <Input
+                            value={s.notifications.minVaultBalance}
+                            onChange={(v) => update("notifications", "minVaultBalance", Number(v))}
+                            type="number"
+                            placeholder="1000"
+                          />
+                          <span className="text-sm text-slate-500 shrink-0">{s.inventory.currency}</span>
+                        </div>
+                      </Field>
+                    </div>
+                  )}
+                  <div className="pt-3 border-t border-slate-100 dark:border-slate-800" />
+                  <Toggle
+                    checked={s.notifications.financialAlerts}
+                    onChange={(v) => update("notifications", "financialAlerts", v)}
+                    label="تنبيهات المواعيد المالية"
+                    description="إرسال تنبيه عند حلول تاريخ استحقاق سداد فاتورة آجلة أو اقترابه"
+                  />
+                  <div className="pt-3 border-t border-slate-100 dark:border-slate-800" />
+                  <Toggle
+                    checked={s.notifications.showDueDateOnInvoices}
+                    onChange={(v) => update("notifications", "showDueDateOnInvoices", v)}
+                    label="إظهار تاريخ الاستحقاق في الفواتير"
+                    description="عند تفعيله، سيظهر حقل تاريخ التحصيل/السداد في جميع الفواتير وليس فقط الآجلة"
+                  />
+                </div>
+              </Card>
+            )}
+
 
 
             {/* ══ Tab: RBAC ══ */}
             {tab === "rbac" && (
-              <Card title="التحكم بالصلاحيات (RBAC)" icon={ShieldCheck}>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
-                  حدد ما يمكن لكل دور الوصول إليه أو تنفيذه داخل النظام.
-                  <span className="text-amber-600 mr-2">⚠ هذه الإعدادات توثيقية — تطبيق الفعلي يتطلب ربطاً بنظام المصادقة.</span>
-                </p>
+              <div className="space-y-6">
+                <Card title="إعدادات الموافقة (Approval Workflows)" icon={ShieldCheck}>
+                   <div className="space-y-1">
+                    <Toggle
+                      checked={s.notifications.requireApprovalForTransfers}
+                      onChange={(v) => update("notifications", "requireApprovalForTransfers", v)}
+                      label="طلب موافقة للتحويلات المالية"
+                      description="عند تفعيله، تتطلب عمليات التحويل بين الحسابات موافقة المدير إذا قام بها موظف"
+                    />
+                    <div className="pt-3 border-t border-slate-100 dark:border-slate-800" />
+                    <Toggle
+                      checked={s.notifications.requireApprovalForSafeCreation}
+                      onChange={(v) => update("notifications", "requireApprovalForSafeCreation", v)}
+                      label="طلب موافقة لإنشاء خزنة"
+                      description="تتطلب إضافة خزنة جديدة موافقة المدير للموظفين"
+                    />
+                    <div className="pt-3 border-t border-slate-100 dark:border-slate-800" />
+                    <Toggle
+                      checked={s.notifications.requireApprovalForBankCreation}
+                      onChange={(v) => update("notifications", "requireApprovalForBankCreation", v)}
+                      label="طلب موافقة لإنشاء بنك"
+                      description="تتطلب إضافة حساب بنكي جديد موافقة المدير للموظفين"
+                    />
+                    <div className="pt-3 border-t border-slate-100 dark:border-slate-800" />
+                    <Toggle
+                      checked={s.notifications.requireApprovalForVouchers}
+                      onChange={(v) => update("notifications", "requireApprovalForVouchers", v)}
+                      label="طلب موافقة للسندات (قبض/صرف)"
+                      description="تتطلب سندات القبض والصرف موافقة المدير للموظفين"
+                    />
+                  </div>
+                </Card>
 
-                <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
+                <Card title="التحكم بالصلاحيات (RBAC)" icon={Lock}>
+                  <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
+                    حدد ما يمكن لكل دور الوصول إليه أو تنفيذه داخل النظام.
+                  </p>
+
+                  <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-700">
@@ -1079,7 +1217,8 @@ export default function SystemSettingsPage() {
                   </span>
                 </div>
               </Card>
-            )}
+            </div>
+          )}
 
             {/* ══ Tab: Users ══ */}
             {tab === "users" && (

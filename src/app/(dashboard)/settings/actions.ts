@@ -263,3 +263,55 @@ export async function deleteUser(id: number) {
     throw new Error("Failed to delete user");
   }
 }
+
+/**
+ * Fetches general notification settings.
+ */
+export async function getGeneralSettingsAction() {
+  try {
+    let settings = await (prisma as any).generalSettings.findUnique({
+      where: { id: 1 }
+    });
+
+    if (!settings) {
+      settings = await (prisma as any).generalSettings.create({
+        data: { id: 1 }
+      });
+    }
+    return settings;
+  } catch (error) {
+    console.error("getGeneralSettingsAction error:", error);
+    return null;
+  }
+}
+
+/**
+ * Updates general notification settings.
+ */
+export async function updateGeneralSettingsAction(data: {
+  staffActivityAlerts?: boolean;
+  inventoryAlerts?: boolean;
+  vaultBankAlerts?: boolean;
+  minVaultBalance?: number;
+  financialAlerts?: boolean;
+  showDueDateOnInvoices?: boolean;
+  requireApprovalForTransfers?: boolean;
+  requireApprovalForSafeCreation?: boolean;
+  requireApprovalForBankCreation?: boolean;
+  requireApprovalForVouchers?: boolean;
+}) {
+  await verifyAdmin();
+  try {
+    const res = await (prisma as any).generalSettings.upsert({
+      where: { id: 1 },
+      update: data,
+      create: { id: 1, ...data }
+    });
+    revalidatePath("/settings");
+    revalidatePath("/notifications");
+    return { success: true, data: res };
+  } catch (error) {
+    console.error("updateGeneralSettingsAction error:", error);
+    return { error: "فشل في حفظ إعدادات التنبيهات" };
+  }
+}

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { getSession } from "@/lib/auth";
 import { hasPermission } from "@/lib/permissions";
+import { triggerStaffActivityAlert } from "@/lib/notifications";
 
 // جلب كل العملاء مع أرصدتهم
 export async function getCustomers() {
@@ -79,10 +80,28 @@ export async function saveCustomer(data: {
         where: { id: data.id },
         data,
       });
+      
+      const session = await getSession();
+      if (session) {
+        await triggerStaffActivityAlert(
+          session.user,
+          "تعديل عميل",
+          `تم تعديل بيانات العميل: ${data.name} (كود: ${data.code})`
+        );
+      }
     } else {
       await prisma.customer.create({
         data,
       });
+
+      const session = await getSession();
+      if (session) {
+        await triggerStaffActivityAlert(
+          session.user,
+          "إضافة عميل",
+          `تم إضافة عميل جديد: ${data.name} (كود: ${data.code})`
+        );
+      }
     }
 
     revalidatePath("/customers");
@@ -96,9 +115,20 @@ export async function saveCustomer(data: {
 
 // حذف عميل
 export async function deleteCustomerAction(id: number) {
+  const customer = await prisma.customer.findUnique({ where: { id } });
+  
   await prisma.customer.delete({
     where: { id },
   });
+
+  const session = await getSession();
+  if (session && customer) {
+    await triggerStaffActivityAlert(
+      session.user,
+      "حذف عميل",
+      `تم حذف العميل: ${customer.name} (كود: ${customer.code})`
+    );
+  }
 
   revalidatePath("/customers");
 }

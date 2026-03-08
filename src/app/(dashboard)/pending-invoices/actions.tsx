@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { triggerTreasuryAlert, triggerStockAlert } from "@/lib/notifications";
 
 export async function getPendingInvoices() {
   const sales = await prisma.salesInvoice.findMany({
@@ -24,7 +25,7 @@ export async function finalizeSalesInvoice(id: number, paymentData: {
   safeId?: number;
   bankId?: number;
 }) {
-  return await prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const invoice = await tx.salesInvoice.findUnique({
       where: { id },
       include: { items: true },
@@ -104,14 +105,27 @@ export async function finalizeSalesInvoice(id: number, paymentData: {
       }
     }
 
-    revalidatePath("/pending-invoices");
-    revalidatePath("/customers");
-    revalidatePath("/sales-invoices");
-    revalidatePath("/inventory/stock");
-    revalidatePath("/treasury");
-
-    return { success: true };
+    return { 
+      success: true,
+      updatedAccount: (paymentData.status === "cash" ? (paymentData.safeId ? await tx.treasurySafe.findUnique({ where: { id: paymentData.safeId }, select: { name: true, balance: true } }) : (paymentData.bankId ? await tx.treasuryBank.findUnique({ where: { id: paymentData.bankId }, select: { name: true, balance: true } }) : null)) : null),
+      updatedProducts: await Promise.all(invoice.items.filter(i => i.productId).map(async i => {
+        const p = await tx.product.findUnique({ where: { id: i.productId! }, select: { name: true, currentStock: true, minStock: true } });
+        return p;
+      }))
+    };
   });
+
+  // Fire alerts outside transaction
+  if (result.updatedAccount) {
+    await triggerTreasuryAlert(result.updatedAccount.name, result.updatedAccount.balance);
+  }
+  if (result.updatedProducts) {
+    for (const p of result.updatedProducts) {
+      if (p) await triggerStockAlert(p.name, p.currentStock, p.minStock);
+    }
+  }
+
+  revalidatePath("/pending-invoices");
 }
 
 export async function finalizePurchaseInvoice(id: number, paymentData: {
@@ -119,7 +133,7 @@ export async function finalizePurchaseInvoice(id: number, paymentData: {
   safeId?: number;
   bankId?: number;
 }) {
-  return await prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const invoice = await tx.purchaseInvoice.findUnique({
       where: { id },
       include: { items: true },
@@ -185,12 +199,25 @@ export async function finalizePurchaseInvoice(id: number, paymentData: {
       });
     }
 
-    revalidatePath("/pending-invoices");
-    revalidatePath("/suppliers");
-    revalidatePath("/purchase-invoices");
-    revalidatePath("/inventory/stock");
-    revalidatePath("/treasury");
-
-    return { success: true };
+    return { 
+      success: true,
+      updatedAccount: (paymentData.status === "cash" ? (paymentData.safeId ? await tx.treasurySafe.findUnique({ where: { id: paymentData.safeId }, select: { name: true, balance: true } }) : (paymentData.bankId ? await tx.treasuryBank.findUnique({ where: { id: paymentData.bankId }, select: { name: true, balance: true } }) : null)) : null),
+      updatedProducts: await Promise.all(invoice.items.filter(i => i.productId).map(async i => {
+        const p = await tx.product.findUnique({ where: { id: i.productId! }, select: { name: true, currentStock: true, minStock: true } });
+        return p;
+      }))
+    };
   });
+
+  // Fire alerts outside transaction
+  if (result.updatedAccount) {
+    await triggerTreasuryAlert(result.updatedAccount.name, result.updatedAccount.balance);
+  }
+  if (result.updatedProducts) {
+    for (const p of result.updatedProducts) {
+      if (p) await triggerStockAlert(p.name, p.currentStock, p.minStock);
+    }
+  }
+
+  revalidatePath("/pending-invoices");
 }

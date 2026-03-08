@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createBank } from "../actions";
+import { toast } from "sonner";
 
 interface AddBankDialogProps {
   open: boolean;
@@ -37,7 +38,12 @@ export default function AddBankDialog({ open, onOpenChange, onSuccess }: AddBank
 
     if (result.success) {
       setFormData({ name: "", accountNumber: "", branch: "", initialBalance: "" });
-      onSuccess();
+      if ((result as any).pending) {
+        toast.success(result.message || "تم إرسال الطلب للمدير للموافقة");
+      } else {
+        toast.success("تمت الإضافة بنجاح");
+        onSuccess();
+      }
       onOpenChange(false);
     } else {
       setError(result.error || "حدث خطأ أثناء الإضافة");

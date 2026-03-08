@@ -1,9 +1,10 @@
 "use server";
 
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-
-const prisma = new PrismaClient();
+import { triggerTreasuryAlert } from "@/lib/notifications";
+import { getSession } from "@/lib/auth";
+import { hasPermission } from "@/lib/permissions";
 
 // تعريف الأنواع
 export interface PaymentVoucherInput {
@@ -49,7 +50,29 @@ export async function getInitialData(): Promise<InitialData> {
 }
 
 // 2. إنشاء سند صرف وتحديث رصيد الحساب المختار
-export async function createPaymentVoucher(data: PaymentVoucherInput) {
+export async function createPaymentVoucher(data: PaymentVoucherInput, skipApproval: boolean = false) {
+  const session = await getSession();
+  if (!session) throw new Error("Unauthorized");
+
+  // Approval Interception
+  if (!skipApproval) {
+    const settings = await (prisma as any).generalSettings.findUnique({ where: { id: 1 } });
+    if (session.user.role === "WORKER" && settings?.requireApprovalForVouchers) {
+      await (prisma as any).treasuryActionRequest.create({
+        data: {
+          type: "PAYMENT_VOUCHER",
+          data: data as any,
+          requesterId: session.userId,
+          status: "PENDING",
+        },
+      });
+      return { success: true, pending: true, message: "تم إرسال طلب سند الصرف للمدير للموافقة" };
+    }
+  }
+
+  const canManage = await hasPermission(session.userId, "treasury_manage");
+  if (!canManage) throw new Error("ليس لديك صلاحية إنشاء سندات صرف");
+
   try {
     const {
       voucherNumber,
@@ -143,7 +166,7 @@ export async function createPaymentVoucher(data: PaymentVoucherInput) {
       }
 
       // إنشاء سجل السند
-      return await tx.paymentVoucher.create({
+      const voucher = await tx.paymentVoucher.create({
         data: {
           voucherNumber,
           date: new Date(date),
@@ -155,7 +178,17 @@ export async function createPaymentVoucher(data: PaymentVoucherInput) {
           bankId: accountType === "bank" ? idInt : null,
         },
       });
+
+      return {
+        voucher,
+        updatedAccount: (accountType === "safe" ? await tx.treasurySafe.findUnique({ where: { id: idInt }, select: { name: true, balance: true } }) : await tx.treasuryBank.findUnique({ where: { id: idInt }, select: { name: true, balance: true } }))
+      };
     });
+
+    // Fire alerts outside transaction
+    if (result.updatedAccount) {
+      await triggerTreasuryAlert(result.updatedAccount.name, result.updatedAccount.balance);
+    }
 
     // تحديث الصفحات المرتبطة - مع التأكد من وجود idInt
     if (idInt && !isNaN(idInt)) {

@@ -2,6 +2,8 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { triggerTreasuryAlert } from "@/lib/notifications";
+import { getSession } from "@/lib/auth";
 
 export interface TransferInput {
   transferNumber: string;
@@ -14,7 +16,26 @@ export interface TransferInput {
   toId: number;
 }
 
-export async function createTransfer(data: TransferInput) {
+export async function createTransfer(data: TransferInput, skipApproval: boolean = false) {
+  const session = await getSession();
+  if (!session) throw new Error("Unauthorized");
+
+  // Approval Interception
+  if (!skipApproval) {
+    const settings = await (prisma as any).generalSettings.findUnique({ where: { id: 1 } });
+    if (session.user.role === "WORKER" && (settings as any)?.requireApprovalForTransfers) {
+      await (prisma as any).treasuryActionRequest.create({
+        data: {
+          type: "TRANSFER",
+          data: data as any,
+          requesterId: session.userId,
+          status: "PENDING",
+        },
+      });
+      return { success: true, pending: true, message: "تم إرسال طلب التحويل للمدير للموافقة" };
+    }
+  }
+
   if (data.fromType === data.toType && data.fromId === data.toId) {
     throw new Error("لا يمكن التحويل لنفس الحساب");
   }
@@ -23,7 +44,7 @@ export async function createTransfer(data: TransferInput) {
     throw new Error("يجب أن يكون المبلغ أكبر من صفر");
   }
 
-  return await prisma.$transaction(async (tx) => {
+  const res = await prisma.$transaction(async (tx) => {
     // 1. التحقق من رصيد المصدر
     if (data.fromType === "safe") {
       const safe = await tx.treasurySafe.findUnique({
@@ -67,7 +88,7 @@ export async function createTransfer(data: TransferInput) {
     }
 
     // 3. تسجيل عملية التحويل
-    const transfer = await tx.treasuryTransfer.create({
+    const result = await tx.treasuryTransfer.create({
       data: {
         transferNumber: data.transferNumber,
         date: new Date(data.date),
@@ -82,9 +103,19 @@ export async function createTransfer(data: TransferInput) {
       }
     });
 
-    revalidatePath("/treasury");
-    return transfer;
+    return {
+      transfer: result,
+      fromName: (data.fromType === "safe" ? await tx.treasurySafe.findUnique({ where: { id: data.fromId }, select: { name: true, balance: true } }) : await tx.treasuryBank.findUnique({ where: { id: data.fromId }, select: { name: true, balance: true } })),
+      toName: (data.toType === "safe" ? await tx.treasurySafe.findUnique({ where: { id: data.toId }, select: { name: true, balance: true } }) : await tx.treasuryBank.findUnique({ where: { id: data.toId }, select: { name: true, balance: true } }))
+    };
   });
+
+  // Fire alerts outside transaction
+  if (res.fromName) await triggerTreasuryAlert(res.fromName.name, res.fromName.balance);
+  if (res.toName) await triggerTreasuryAlert(res.toName.name, res.toName.balance);
+
+  revalidatePath("/treasury");
+  return res.transfer;
 }
 
 export async function getNextTransferNumber(): Promise<string> {

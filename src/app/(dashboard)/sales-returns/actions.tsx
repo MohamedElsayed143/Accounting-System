@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { prisma } from "@/lib/prisma";
+import { triggerTreasuryAlert } from "@/lib/notifications";
 
 // تعريف الأنواع المستخدمة
 export type SalesReturnItemInput = {
@@ -289,8 +290,15 @@ export async function createSalesReturn(data: SalesReturnInput) {
         });
       }
 
-      return salesReturn;
+      return {
+        salesReturn,
+        updatedAccount: (isSafeRefund && data.safeId ? await tx.treasurySafe.findUnique({ where: { id: data.safeId }, select: { name: true, balance: true } }) : (data.refundMethod === 'bank' && data.bankId ? await tx.treasuryBank.findUnique({ where: { id: data.bankId }, select: { name: true, balance: true } }) : null))
+      };
     });
+
+    if (result.updatedAccount) {
+      await triggerTreasuryAlert(result.updatedAccount.name, result.updatedAccount.balance);
+    }
 
     revalidatePath("/sales-returns");
     revalidatePath("/treasury");

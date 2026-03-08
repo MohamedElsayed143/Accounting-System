@@ -2,6 +2,8 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { getSession } from "@/lib/auth";
+import { triggerStaffActivityAlert } from "@/lib/notifications";
 
 // جلب كل الموردين مع أرصدتهم
 export async function getSuppliers() {
@@ -76,6 +78,15 @@ export async function saveSupplier(data: {
         category: data.category,
       },
     });
+
+    const session = await getSession();
+    if (session) {
+      await triggerStaffActivityAlert(
+        session.user,
+        "تعديل مورد",
+        `تم تعديل بيانات المورد: ${data.name} (كود: ${data.code})`
+      );
+    }
   } else {
     // إضافة جديد
     await prisma.supplier.create({
@@ -87,6 +98,15 @@ export async function saveSupplier(data: {
         category: data.category,
       },
     });
+
+    const session = await getSession();
+    if (session) {
+      await triggerStaffActivityAlert(
+        session.user,
+        "إضافة مورد",
+        `تم إضافة مورد جديد: ${data.name} (كود: ${data.code})`
+      );
+    }
   }
 
   revalidatePath("/suppliers");
@@ -94,8 +114,20 @@ export async function saveSupplier(data: {
 
 // حذف مورد
 export async function deleteSupplierAction(id: number) {
+  const supplier = await prisma.supplier.findUnique({ where: { id } });
+
   await prisma.supplier.delete({
     where: { id },
   });
+
+  const session = await getSession();
+  if (session && supplier) {
+    await triggerStaffActivityAlert(
+      session.user,
+      "حذف مورد",
+      `تم حذف المورد: ${supplier.name} (كود: ${supplier.code})`
+    );
+  }
+
   revalidatePath("/suppliers");
 }

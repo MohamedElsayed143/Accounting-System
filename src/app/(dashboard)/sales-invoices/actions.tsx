@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { getSystemSettings } from "@/app/(dashboard)/settings/actions";
 import { getSession } from "@/lib/auth";
 import { hasPermission } from "@/lib/permissions";
+import { triggerStaffActivityAlert, triggerStockAlert, triggerTreasuryAlert } from "@/lib/notifications";
 
 // دالة مساعدة لحساب الرصيد الحالي لمنتج
 async function getCurrentStock(productId: number, tx?: any) {
@@ -140,6 +141,7 @@ export async function createSalesInvoice(data: {
   }[];
   topNotes?: string[];
   notes?: string[];
+  dueDate?: string;
 }) {
   const session = await getSession();
   if (!session) throw new Error("يجب تسجيل الدخول أولاً");
@@ -155,6 +157,7 @@ export async function createSalesInvoice(data: {
   const allowNegativeStock = settings?.inventory?.allowNegativeStock ?? false;
 
   const stockWarnings: string[] = [];
+  const pendingAlerts: { type: 'treasury' | 'stock', name: string, value: number, limit?: number }[] = [];
 
   const result = await prisma.$transaction(async (tx) => {
     // 1. التحقق من رقم الفاتورة
@@ -190,19 +193,9 @@ export async function createSalesInvoice(data: {
     // 3. إنشاء الفاتورة
     const invoice = await tx.salesInvoice.create({
       data: {
-        invoiceNumber: data.invoiceNumber,
-        customerId: data.customerId,
-        customerName: data.customerName,
+        ...(data as any),
         invoiceDate: new Date(data.invoiceDate),
-        subtotal: data.subtotal,
-        totalTax: data.totalTax,
-        discount: data.discount,
-        total: data.total,
-        status: data.status,
-        safeId: data.status === "cash" ? data.safeId : null,
-        bankId: data.status === "cash" ? data.bankId : null,
-        topNotes: data.topNotes || [],
-        notes: data.notes || [],
+        dueDate: (data as any).dueDate ? new Date((data as any).dueDate) : null,
         items: {
           create: data.items.map((item) => ({
             description: item.description,
@@ -220,15 +213,17 @@ export async function createSalesInvoice(data: {
     // 3.5 تحديث الخزنة أو البنك إذا كانت الفاتورة كاش
     if (data.status === "cash" && (data.safeId || data.bankId)) {
       if (data.safeId) {
-        await tx.treasurySafe.update({
+        const updatedSafe = await tx.treasurySafe.update({
           where: { id: data.safeId },
           data: { balance: { increment: data.total } },
         });
+        pendingAlerts.push({ type: 'treasury', name: updatedSafe.name, value: updatedSafe.balance });
       } else if (data.bankId) {
-        await tx.treasuryBank.update({
+        const updatedBank = await tx.treasuryBank.update({
           where: { id: data.bankId },
           data: { balance: { increment: data.total } },
         });
+        pendingAlerts.push({ type: 'treasury', name: updatedBank.name, value: updatedBank.balance });
       }
     }
 
@@ -273,10 +268,15 @@ export async function createSalesInvoice(data: {
 
         // تحديث الرصيد الفعلي (لا يقل عن الصفر)
         if (actualDeduct > 0) {
-          await tx.product.update({
+          const updatedProduct = await tx.product.update({
             where: { id: item.productId },
-            data: { currentStock: { decrement: actualDeduct } }
+            data: { currentStock: { decrement: actualDeduct } },
+            select: { name: true, currentStock: true, minStock: true }
           });
+          
+          if (updatedProduct) {
+            pendingAlerts.push({ type: 'stock', name: updatedProduct.name, value: updatedProduct.currentStock, limit: updatedProduct.minStock });
+          }
         }
       }
     }
@@ -286,6 +286,23 @@ export async function createSalesInvoice(data: {
 
     return invoice;
   });
+
+  if (session) {
+    await triggerStaffActivityAlert(
+      session.user,
+      "فاتورة مبيعات جديدة",
+      `تم إنشاء فاتورة مبيعات #${result.invoiceNumber} للعميل ${result.customerName} بقيمة ${result.total}`
+    );
+  }
+
+  // Fire pending alerts outside transaction
+  for (const alert of pendingAlerts) {
+    if (alert.type === 'treasury') {
+      await triggerTreasuryAlert(alert.name, alert.value);
+    } else if (alert.type === 'stock') {
+      await triggerStockAlert(alert.name, alert.value, alert.limit || 0);
+    }
+  }
 
   return { invoice: result, stockWarnings };
 }
@@ -315,6 +332,7 @@ export async function updateSalesInvoice(
     }[];
     topNotes?: string[];
     notes?: string[];
+    dueDate?: string;
   }
 ) {
   const session = await getSession();
@@ -324,11 +342,13 @@ export async function updateSalesInvoice(
   if (!canEdit) throw new Error("ليس لديك صلاحية تعديل فواتير");
 
   if (!data.customerId) throw new Error("يجب اختيار العميل أولاً");
+  if (data.items.length === 0) throw new Error("لا يمكن حفظ فاتورة فارغة");
 
   // جلب الإعدادات مرة واحدة خارج المعاملة
   const settings = await getSystemSettings();
   const allowNegativeStock = settings?.inventory?.allowNegativeStock ?? false;
   const stockWarnings: string[] = [];
+  const pendingAlerts: { type: 'treasury' | 'stock', name: string, value: number, limit?: number }[] = [];
 
   const result = await prisma.$transaction(async (tx) => {
     const existingInvoice = await tx.salesInvoice.findUnique({
@@ -359,15 +379,17 @@ export async function updateSalesInvoice(
     // 0. عكس أثر الخزنة القديم إذا كانت كاش
     if (existingInvoice.status === "cash") {
       if (existingInvoice.safeId) {
-        await tx.treasurySafe.update({
+        const updatedSafe = await tx.treasurySafe.update({
           where: { id: existingInvoice.safeId },
           data: { balance: { decrement: existingInvoice.total } }
         });
+        pendingAlerts.push({ type: 'treasury', name: updatedSafe.name, value: updatedSafe.balance });
       } else if (existingInvoice.bankId) {
-        await tx.treasuryBank.update({
+        const updatedBank = await tx.treasuryBank.update({
           where: { id: existingInvoice.bankId },
           data: { balance: { decrement: existingInvoice.total } }
         });
+        pendingAlerts.push({ type: 'treasury', name: updatedBank.name, value: updatedBank.balance });
       }
     }
 
@@ -423,19 +445,9 @@ export async function updateSalesInvoice(
     const invoice = await tx.salesInvoice.update({
       where: { id },
       data: {
-        invoiceNumber: data.invoiceNumber,
-        customerId: data.customerId,
-        customerName: data.customerName,
+        ...(data as any),
         invoiceDate: new Date(data.invoiceDate),
-        subtotal: data.subtotal,
-        totalTax: data.totalTax,
-        discount: data.discount,
-        total: data.total,
-        status: data.status,
-        safeId: data.status === "cash" ? data.safeId : null,
-        bankId: data.status === "cash" ? data.bankId : null,
-        topNotes: data.topNotes || [],
-        notes: data.notes || [],
+        dueDate: (data as any).dueDate ? new Date((data as any).dueDate) : null,
         items: {
           deleteMany: {},
           create: data.items.map((item) => ({
@@ -454,15 +466,17 @@ export async function updateSalesInvoice(
     // 3.5 تطبيق أثر الخزنة الجديد إذا كانت كاش
     if (data.status === "cash" && (data.safeId || data.bankId)) {
       if (data.safeId) {
-        await tx.treasurySafe.update({
+        const updatedSafe = await tx.treasurySafe.update({
           where: { id: data.safeId },
           data: { balance: { increment: data.total } },
         });
+        pendingAlerts.push({ type: 'treasury', name: updatedSafe.name, value: updatedSafe.balance });
       } else if (data.bankId) {
-        await tx.treasuryBank.update({
+        const updatedBank = await tx.treasuryBank.update({
           where: { id: data.bankId },
           data: { balance: { increment: data.total } },
         });
+        pendingAlerts.push({ type: 'treasury', name: updatedBank.name, value: updatedBank.balance });
       }
     }
 
@@ -503,10 +517,15 @@ export async function updateSalesInvoice(
         }
 
         if (actualDeduct > 0) {
-          await tx.product.update({
+          const updatedProduct = await tx.product.update({
             where: { id: item.productId },
-            data: { currentStock: { decrement: actualDeduct } }
+            data: { currentStock: { decrement: actualDeduct } },
+            select: { name: true, currentStock: true, minStock: true }
           });
+          
+          if (updatedProduct) {
+            pendingAlerts.push({ type: 'stock', name: updatedProduct.name, value: updatedProduct.currentStock, limit: updatedProduct.minStock });
+          }
         }
       }
     }
@@ -516,6 +535,32 @@ export async function updateSalesInvoice(
 
     return invoice;
   });
+
+  // Fire pending alerts outside transaction
+  for (const alert of pendingAlerts) {
+    if (alert.type === 'treasury') {
+      await triggerTreasuryAlert(alert.name, alert.value);
+    } else if (alert.type === 'stock') {
+      await triggerStockAlert(alert.name, alert.value, alert.limit || 0);
+    }
+  }
+
+  if (session) {
+    await triggerStaffActivityAlert(
+      session.user,
+      "تعديل فاتورة مبيعات",
+      `تم تعديل فاتورة مبيعات #${data.invoiceNumber} للعميل ${data.customerName} بقيمة ${data.total}`
+    );
+  }
+
+  // Fire pending alerts outside transaction
+  for (const alert of pendingAlerts) {
+    if (alert.type === 'treasury') {
+      await triggerTreasuryAlert(alert.name, alert.value);
+    } else if (alert.type === 'stock') {
+      await triggerStockAlert(alert.name, alert.value, alert.limit || 0);
+    }
+  }
 
   return { invoice: result, stockWarnings };
 }
@@ -527,26 +572,30 @@ export async function deleteSalesInvoice(id: number) {
   const canDelete = await hasPermission(session.userId, "sales_delete");
   if (!canDelete) throw new Error("ليس لديك صلاحية حذف فواتير");
 
-  await prisma.$transaction(async (tx) => {
+  const pendingAlerts: { type: 'treasury' | 'stock', name: string, value: number, limit?: number }[] = [];
+
+  const result = await prisma.$transaction(async (tx) => {
     // 0. جلب بيانات الفاتورة لمعرفة حالتها וחساباتها
     const invoice = await tx.salesInvoice.findUnique({
       where: { id },
-      select: { status: true, total: true, safeId: true, bankId: true }
+      select: { invoiceNumber: true, customerName: true, status: true, total: true, safeId: true, bankId: true }
     });
 
     if (invoice) {
         // 1. عكس أثر المبالغ المالية إذا كانت الفاتورة كاش
         if (invoice.status === "cash") {
           if (invoice.safeId) {
-            await tx.treasurySafe.update({
+            const updatedSafe = await tx.treasurySafe.update({
               where: { id: invoice.safeId },
               data: { balance: { decrement: invoice.total } }
             });
+            pendingAlerts.push({ type: 'treasury', name: updatedSafe.name, value: updatedSafe.balance });
           } else if (invoice.bankId) {
-            await tx.treasuryBank.update({
+            const updatedBank = await tx.treasuryBank.update({
               where: { id: invoice.bankId },
               data: { balance: { decrement: invoice.total } }
             });
+            pendingAlerts.push({ type: 'treasury', name: updatedBank.name, value: updatedBank.balance });
           }
         }
 
@@ -572,8 +621,25 @@ export async function deleteSalesInvoice(id: number) {
     }
 
     await tx.stockMovement.deleteMany({ where: { salesInvoiceId: id } });
-    await tx.salesInvoice.delete({ where: { id } });
+    return await tx.salesInvoice.delete({ where: { id } });
   });
+
+  // Fire pending alerts outside transaction
+  for (const alert of pendingAlerts) {
+    if (alert.type === 'treasury') {
+      await triggerTreasuryAlert(alert.name, alert.value);
+    } else if (alert.limit !== undefined) {
+      await triggerStockAlert(alert.name, alert.value, alert.limit);
+    }
+  }
+
+  if (session && result) {
+    await triggerStaffActivityAlert(
+      session.user,
+      "حذف فاتورة مبيعات",
+      `تم حذف فاتورة مبيعات #${result.invoiceNumber} للعميل ${result.customerName} بقيمة ${result.total}`
+    );
+  }
 
   revalidatePath("/sales-invoices");
   revalidatePath("/inventory/stock");

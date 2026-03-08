@@ -143,7 +143,11 @@ export default function ReceiptVoucherPage() {
       });
 
       if (result.success) {
-        toast.success("✅ تم حفظ سند القبض بنجاح");
+        if ((result as any).pending) {
+          toast.success(result.message || "✅ تم إرسال الطلب للمدير للموافقة");
+        } else {
+          toast.success("✅ تم حفظ سند القبض بنجاح");
+        }
         setTimeout(() => {
           window.location.href = "/treasury";
         }, 1000);

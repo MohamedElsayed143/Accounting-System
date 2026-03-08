@@ -44,6 +44,7 @@ import { PrintableInvoice } from "@/components/invoices/printable-invoice";
 import { ProductSelect } from "@/components/shared/ProductSelect";
 import { DynamicNotes } from "@/components/shared/DynamicNotes";
 import { SupplierSelect } from "@/components/shared/SupplierSelect";
+import { getGeneralSettingsAction } from "@/app/(dashboard)/settings/actions";
 
 interface Supplier {
   id: number;
@@ -99,6 +100,7 @@ function InvoiceFormStep({
   const [invoiceDate, setInvoiceDate] = useState<string>(
     new Date().toISOString().split("T")[0]
   );
+  const [dueDate, setDueDate] = useState<string>("");
   const [items, setItems] = useState<PurchaseInvoiceItemWithProduct[]>([]);
   const [topNotes, setTopNotes] = useState<string[]>([]);
   const [discount, setDiscount] = useState<number>(0);
@@ -112,6 +114,7 @@ function InvoiceFormStep({
   // قائمة جميع المنتجات للاختيار منها
   const [products, setProducts] = useState<ProductData[]>([]);
   const [settings, setSettings] = useState<any>(null);
+  const [globalSettings, setGlobalSettings] = useState<any>(null);
   const [printableTitle, setPrintableTitle] = useState<string>("فاتورة مشتريات");
 
   // بيانات المرتجعات
@@ -128,6 +131,7 @@ function InvoiceFormStep({
         setPrintableTitle(s.invoiceName);
       }
     });
+    getGeneralSettingsAction().then(setGlobalSettings);
     getTreasuryData().then((data) => {
       const allSafes = data.accounts.filter(acc => acc.type === "safe") as any[];
       const allBanks = data.accounts.filter(acc => acc.type === "bank") as any[];
@@ -147,6 +151,9 @@ function InvoiceFormStep({
             setInvoiceNumber(invoice.invoiceNumber);
             setPaymentType(invoice.status as "cash" | "credit" | "pending");
             setInvoiceDate(new Date(invoice.invoiceDate).toISOString().split("T")[0]);
+            if ((invoice as any).dueDate) {
+              setDueDate(new Date((invoice as any).dueDate).toISOString().split("T")[0]);
+            }
             setDiscount(invoice.discount || 0);
 
             if ((invoice as any).supplier) {
@@ -156,7 +163,7 @@ function InvoiceFormStep({
               });
             }
 
-            const totalReturns = invoice.purchaseReturns?.reduce((sum, ret) => sum + ret.total, 0) || 0;
+            const totalReturns = invoice.purchaseReturns?.reduce((sum: number, ret: any) => sum + ret.total, 0) || 0;
             setReturnsTotal(totalReturns);
             setReturnsCount(invoice.purchaseReturns?.length || 0);
             setReturns(invoice.purchaseReturns || []);
@@ -334,6 +341,7 @@ function InvoiceFormStep({
         discount: itemsDiscount + discount,
         total: grandTotal,
         status: paymentType,
+        dueDate: (paymentType === "credit" || globalSettings?.showDueDateOnInvoices) ? dueDate : undefined,
         safeId: paymentType === "cash" && treasuryType === "safe" ? Number(selectedSafeId) : undefined,
         bankId: paymentType === "cash" && treasuryType === "bank" ? Number(selectedBankId) : undefined,
         topNotes,
@@ -513,6 +521,21 @@ function InvoiceFormStep({
                         required={!isViewMode}
                       />
                     </div>
+
+                    {(paymentType === "credit" || globalSettings?.showDueDateOnInvoices) && (
+                      <div className="space-y-1.5">
+                        <Label className="text-slate-600 text-sm font-bold flex items-center gap-1">
+                          {paymentType === "credit" ? "تاريخ الاستحقاق" : "تاريخ السداد المتوقع"}
+                        </Label>
+                        <Input
+                          type="date"
+                          value={dueDate}
+                          onChange={(e) => setDueDate(e.target.value)}
+                          disabled={isViewMode}
+                          className="bg-slate-50 border-slate-200 w-44"
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
 

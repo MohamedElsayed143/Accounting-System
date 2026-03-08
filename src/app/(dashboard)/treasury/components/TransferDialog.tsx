@@ -66,7 +66,7 @@ export default function TransferDialog({ open, onOpenChange, onSuccess }: Transf
       const [fromType, fromId] = fromAccount.split("-");
       const [toType, toId] = toAccount.split("-");
 
-      await createTransfer({
+      const result = await createTransfer({
         transferNumber: nextNumber,
         date,
         amount: parseFloat(amount),
@@ -77,7 +77,11 @@ export default function TransferDialog({ open, onOpenChange, onSuccess }: Transf
         toId: parseInt(toId),
       });
 
-      toast.success("تم التحويل بنجاح");
+      if ((result as any).pending) {
+        toast.success(result.message || "✅ تم إرسال طلب التحويل للمدير للموافقة");
+      } else {
+        toast.success("تم التحويل بنجاح");
+      }
       onSuccess();
       onOpenChange(false);
       // Reset
