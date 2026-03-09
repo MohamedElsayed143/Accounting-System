@@ -43,7 +43,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useCompany } from "@/hooks/use-company";
 
@@ -200,8 +200,12 @@ export function AppSidebar() {
           href={user?.role === "WORKER" ? "/sales-invoices" : "/statistics"} 
           className="flex items-center gap-3 group"
         >
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 shadow-md group-hover:shadow-lg transition-all">
-            <Zap className="h-5 w-5 text-white" />
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 shadow-md group-hover:shadow-lg transition-all overflow-hidden">
+            {company?.logo ? (
+              <img src={company.logo} alt="Logo" className="h-full w-full object-cover" />
+            ) : (
+              <Zap className="h-5 w-5 text-white" />
+            )}
           </div>
           <div className="flex flex-col">
             <span className="text-xl font-black text-blue-600 dark:text-blue-500">
@@ -243,7 +247,7 @@ export function AppSidebar() {
           </SidebarGroup>
         )}
 
-        {(hasPermission("customers_view") || hasPermission("suppliers_view") || user?.role === "ADMIN") && (
+        {((hasPermission("customers_view") || hasPermission("suppliers_view") || user?.role === "ADMIN")) && (
           <SidebarGroup className="mt-4">
             <SidebarGroupLabel className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">
               الدليل
@@ -524,92 +528,95 @@ export function AppSidebar() {
           </SidebarGroup>
         )}
 
-        <SidebarGroup className="mt-4">
-          <SidebarGroupLabel className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">
-            الإدارة
-          </SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {otherNavItems
-                .filter(item => {
-                  // Hide settings for worker
-                  if (item.href === "/settings" && user?.role !== "ADMIN") return false;
-                  
-                  // Hide reports menu entirely if worker has no report permissions
-                  if (item.href === "/reports" && user?.role === "WORKER") {
-                    const hasSomeReports = hasPermission("reports_customers_suppliers") || hasPermission("reports_treasury_banks");
-                    return hasSomeReports;
-                  }
-                  
-                  return true;
-                })
-                .map((item) => (
-                item.subItems ? (
-                  <Collapsible
-                    key={item.href}
-                    defaultOpen={isActive(item.href)}
-                    className="group/collapsible"
-                  >
-                    <SidebarMenuItem>
-                      <CollapsibleTrigger asChild>
-                        <SidebarMenuButton 
-                          isActive={isActive(item.href)}
-                          className="group hover:bg-primary/10 transition-all"
-                        >
+        {(isAdmin || (hasPermission("reports_customers_suppliers") || hasPermission("reports_treasury_banks"))) && (
+          <SidebarGroup className="mt-4">
+            <SidebarGroupLabel className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">
+              الإدارة
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {otherNavItems
+                  .filter(item => {
+                    // Hide settings for worker
+                    if (item.href === "/settings" && user?.role !== "ADMIN") return false;
+                    
+                    // Hide reports menu entirely if worker has no report permissions
+                    if (item.href === "/reports" && user?.role === "WORKER") {
+                      const hasSomeReports = hasPermission("reports_customers_suppliers") || hasPermission("reports_treasury_banks");
+                      return hasSomeReports;
+                    }
+                    
+                    return true;
+                  })
+                  .map((item) => (
+                  item.subItems ? (
+                    <Collapsible
+                      key={item.href}
+                      defaultOpen={isActive(item.href)}
+                      className="group/collapsible"
+                    >
+                      <SidebarMenuItem>
+                        <CollapsibleTrigger asChild>
+                          <SidebarMenuButton 
+                            isActive={isActive(item.href)}
+                            className="group hover:bg-primary/10 transition-all"
+                          >
+                            <item.icon className="h-4 w-4 group-hover:scale-110 transition-transform" />
+                            <span className="font-medium">{item.title}</span>
+                            <ChevronDown className="mr-auto h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-180" />
+                          </SidebarMenuButton>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <SidebarMenuSub className="mr-4 border-r-2 border-primary/20">
+                            {item.subItems
+                              .filter(sub => {
+                                if (user?.role === "ADMIN") return true;
+                                if (sub.href === "/reports") return hasPermission("reports_customers_suppliers");
+                                if (sub.href === "/reports/treasury" || sub.href === "/reports/banks") return hasPermission("reports_treasury_banks");
+                                return true;
+                              })
+                              .map((subItem) => (
+                              <SidebarMenuSubItem key={subItem.href}>
+                                <SidebarMenuSubButton
+                                  asChild
+                                  isActive={pathname === subItem.href}
+                                  className="hover:bg-primary/5 transition-all"
+                                >
+                                  <Link href={subItem.href} className="text-sm font-medium">
+                                    {subItem.title}
+                                  </Link>
+                                </SidebarMenuSubButton>
+                              </SidebarMenuSubItem>
+                            ))}
+                          </SidebarMenuSub>
+                        </CollapsibleContent>
+                      </SidebarMenuItem>
+                    </Collapsible>
+                  ) : (
+                    <SidebarMenuItem key={item.href}>
+                      <SidebarMenuButton 
+                        asChild 
+                        isActive={isActive(item.href)}
+                        className="group hover:bg-primary/10 transition-all"
+                      >
+                        <Link href={item.href} className="flex items-center gap-3">
                           <item.icon className="h-4 w-4 group-hover:scale-110 transition-transform" />
                           <span className="font-medium">{item.title}</span>
-                          <ChevronDown className="mr-auto h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-180" />
-                        </SidebarMenuButton>
-                      </CollapsibleTrigger>
-                      <CollapsibleContent>
-                        <SidebarMenuSub className="mr-4 border-r-2 border-primary/20">
-                          {item.subItems
-                            .filter(sub => {
-                              if (user?.role === "ADMIN") return true;
-                              if (sub.href === "/reports") return hasPermission("reports_customers_suppliers");
-                              if (sub.href === "/reports/treasury" || sub.href === "/reports/banks") return hasPermission("reports_treasury_banks");
-                              return true;
-                            })
-                            .map((subItem) => (
-                            <SidebarMenuSubItem key={subItem.href}>
-                              <SidebarMenuSubButton
-                                asChild
-                                isActive={pathname === subItem.href}
-                                className="hover:bg-primary/5 transition-all"
-                              >
-                                <Link href={subItem.href} className="text-sm font-medium">
-                                  {subItem.title}
-                                </Link>
-                              </SidebarMenuSubButton>
-                            </SidebarMenuSubItem>
-                          ))}
-                        </SidebarMenuSub>
-                      </CollapsibleContent>
+                        </Link>
+                      </SidebarMenuButton>
                     </SidebarMenuItem>
-                  </Collapsible>
-                ) : (
-                  <SidebarMenuItem key={item.href}>
-                    <SidebarMenuButton 
-                      asChild 
-                      isActive={isActive(item.href)}
-                      className="group hover:bg-primary/10 transition-all"
-                    >
-                      <Link href={item.href} className="flex items-center gap-3">
-                        <item.icon className="h-4 w-4 group-hover:scale-110 transition-transform" />
-                        <span className="font-medium">{item.title}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                )
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+                  )
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
 
       <SidebarFooter className="border-t border-border/40 p-4 bg-gradient-to-t from-primary/5 to-transparent flex flex-row items-center justify-between">
         <div className="flex items-center gap-3 group cursor-pointer hover:bg-primary/5 p-2 rounded-lg transition-all">
           <Avatar className="h-10 w-10 ring-2 ring-primary/20 group-hover:ring-primary/40 transition-all">
+            {company?.logo && <AvatarImage src={company.logo} alt="Company Logo" className="object-cover" />}
             <AvatarFallback className="bg-primary/10 text-primary text-sm font-bold">
               {user ? user.username.charAt(0).toUpperCase() : "U"}
             </AvatarFallback>
