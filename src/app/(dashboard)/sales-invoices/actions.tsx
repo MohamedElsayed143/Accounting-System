@@ -151,6 +151,9 @@ export async function createSalesInvoice(data: {
 
   if (!data.customerId) throw new Error("يجب اختيار العميل أولاً");
   if (data.items.length === 0) throw new Error("لا يمكن حفظ فاتورة فارغة");
+  if (data.status === "cash" && !data.safeId && !data.bankId) {
+    throw new Error("يجب تحديد جهة الدفع (الخزنة أو البنك) للفواتير النقدية");
+  }
 
   // جلب الإعدادات مرة واحدة خارج المعاملة
   const settings = await getSystemSettings();
@@ -191,9 +194,14 @@ export async function createSalesInvoice(data: {
     }
 
     // 3. إنشاء الفاتورة
+    const safeIdVal = data.status === "cash" && data.safeId ? data.safeId : null;
+    const bankIdVal = data.status === "cash" && data.bankId ? data.bankId : null;
+
     const invoice = await tx.salesInvoice.create({
       data: {
         ...(data as any),
+        safeId: safeIdVal,
+        bankId: bankIdVal,
         invoiceDate: new Date(data.invoiceDate),
         dueDate: (data as any).dueDate ? new Date((data as any).dueDate) : null,
         items: {
@@ -343,6 +351,9 @@ export async function updateSalesInvoice(
 
   if (!data.customerId) throw new Error("يجب اختيار العميل أولاً");
   if (data.items.length === 0) throw new Error("لا يمكن حفظ فاتورة فارغة");
+  if (data.status === "cash" && !data.safeId && !data.bankId) {
+    throw new Error("يجب تحديد جهة الدفع (الخزنة أو البنك) للفواتير النقدية");
+  }
 
   // جلب الإعدادات مرة واحدة خارج المعاملة
   const settings = await getSystemSettings();
@@ -442,10 +453,15 @@ export async function updateSalesInvoice(
     }
 
     // 3. تحديث الفاتورة وإنشاء الأصناف الجديدة
+    const safeIdVal = data.status === "cash" && data.safeId ? data.safeId : null;
+    const bankIdVal = data.status === "cash" && data.bankId ? data.bankId : null;
+
     const invoice = await tx.salesInvoice.update({
       where: { id },
       data: {
         ...(data as any),
+        safeId: safeIdVal,
+        bankId: bankIdVal,
         invoiceDate: new Date(data.invoiceDate),
         dueDate: (data as any).dueDate ? new Date((data as any).dueDate) : null,
         items: {

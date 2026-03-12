@@ -505,7 +505,7 @@ export default function AccountStatementPage() {
 
       if (tx.type === "فاتورة") invoicesTotal += tx.debit;
       if (tx.type === "سند قبض") receiptsTotal += tx.credit;
-      if (tx.type === "سند صرف") paymentsTotal += tx.debit;
+      if (tx.type === "سند صرف") paymentsTotal += tx.credit;
     });
 
     const currentBalance =

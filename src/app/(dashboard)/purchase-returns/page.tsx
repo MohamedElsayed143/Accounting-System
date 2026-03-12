@@ -38,7 +38,7 @@ export default function PurchaseReturnsPage() {
     const to = toDate ? new Date(toDate) : undefined;
     const result = await getPurchaseReturns(undefined, from, to, statusFilter);
     if (result.success) {
-      setReturns(result.data);
+      setReturns(result.data || []);
     } else {
       toast.error("فشل تحميل المرتجعات");
     }

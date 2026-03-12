@@ -3,7 +3,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
-import { Plus, Eye, Trash2, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Plus, Eye, Trash2, AlertTriangle, CheckCircle2, ShieldCheck, ShieldAlert } from "lucide-react";
 import { Navbar } from "@/components/layout/navbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -33,6 +33,8 @@ import { useRouter } from "next/navigation";
 import { getCompanySettingsAction } from "@/app/(dashboard)/settings/actions";
 import { ProcessInvoiceDialog } from "../pending-invoices/components/ProcessInvoiceDialog";
 import { usePermissions } from "@/hooks/use-permissions";
+import { toast } from "sonner";
+import { PasswordProtectionGate } from "@/components/shared/PasswordProtectionGate";
 
 interface InvoiceRow {
   id: number;
@@ -85,6 +87,8 @@ export default function SalesInvoicesPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [invoiceToDelete, setInvoiceToDelete] = useState<InvoiceRow | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [isManagementActive, setIsManagementActive] = useState(false);
+  const [isPassGateOpen, setIsPassGateOpen] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
   const [prefix, setPrefix] = useState<string>("INV");
   const router = useRouter();
@@ -168,7 +172,7 @@ export default function SalesInvoicesPage() {
   return (
     <>
       <Navbar title="فواتير المبيعات" />
-      <div className="flex-1 space-y-6 p-6">
+      <div className="flex-1 space-y-6 p-6" dir="rtl">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-2xl font-bold tracking-tight bg-gradient-to-l from-foreground to-foreground/70 bg-clip-text text-transparent">
@@ -178,17 +182,44 @@ export default function SalesInvoicesPage() {
               إدارة فواتير المبيعات وتتبع المدفوعات والمرتجعات
             </p>
           </div>
-          {hasPermission("sales_create") && (
+          <div className="flex gap-2 items-center">
             <Button
-              asChild
-              className="gap-2 shadow-md hover:shadow-lg transition-all"
+              variant={isManagementActive ? "destructive" : "outline"}
+              onClick={() => {
+                if (isManagementActive) {
+                  setIsManagementActive(false);
+                  toast.info("تم إغلاق وضع الإدارة");
+                } else {
+                  setIsPassGateOpen(true);
+                }
+              }}
+              className="gap-2 border-dashed border-2 transition-all"
             >
-              <Link href="/sales-invoices/create">
-                <Plus className="h-4 w-4" />
-                <span className="font-medium">إنشاء فاتورة</span>
-              </Link>
+              {isManagementActive ? (
+                <>
+                  <ShieldAlert className="h-4 w-4" />
+                  إغلاق وضع الإدارة
+                </>
+              ) : (
+                <>
+                  <ShieldCheck className="h-4 w-4" />
+                  قائمة الحذف والتعديل
+                </>
+              )}
             </Button>
-          )}
+
+            {isManagementActive && hasPermission("sales_create") && (
+              <Button
+                asChild
+                className="gap-2 shadow-md hover:shadow-lg transition-all"
+              >
+                <Link href="/sales-invoices/create">
+                  <Plus className="h-4 w-4" />
+                  <span className="font-medium">إنشاء فاتورة</span>
+                </Link>
+              </Button>
+            )}
+          </div>
         </div>
 
         <Card className="shadow-sm">
@@ -220,7 +251,7 @@ export default function SalesInvoicesPage() {
                   <div className="rounded-lg border overflow-x-auto">
                     <Table>
                       <TableHeader>
-                        <TableRow className="bg-muted/50 hover:bg-muted/50">
+                        <TableRow className="bg-muted/50 hover:bg-muted/50 transition-colors">
                           <TableHead className="font-bold text-center whitespace-nowrap">
                             رقم الفاتورة
                           </TableHead>
@@ -250,8 +281,8 @@ export default function SalesInvoicesPage() {
                             key={invoice.id}
                             className={
                               index % 2 === 0
-                                ? "bg-muted/20 hover:bg-muted/40"
-                                : "hover:bg-muted/20"
+                                ? "bg-muted/20 hover:bg-muted/40 transition-colors"
+                                : "hover:bg-muted/20 transition-colors"
                             }
                           >
                             <TableCell className="font-bold text-primary text-center whitespace-nowrap" dir="ltr">
@@ -294,41 +325,47 @@ export default function SalesInvoicesPage() {
                             </TableCell>
                             <TableCell className="text-center">
                               <div className="flex justify-center gap-2">
-                                {hasPermission("sales_edit") && (
-                                  <Link
-                                    href={`/sales-invoices/create?id=${invoice.id}`}
-                                  >
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="hover:bg-primary/10 transition-all"
-                                      title="عرض وتعديل"
-                                    >
-                                      <Eye className="h-4 w-4 text-primary" />
-                                    </Button>
-                                  </Link>
-                                )}
-                                {hasPermission("sales_delete") && (
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() => openDeleteDialog(invoice)}
-                                    className="hover:bg-destructive/10 transition-all"
-                                    title="حذف"
-                                  >
-                                    <Trash2 className="h-4 w-4 text-destructive" />
-                                  </Button>
-                                )}
-                                {invoice.status === 'pending' && (
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() => setSelectedInvoice(invoice)}
-                                    className="hover:bg-orange-100 text-orange-600 transition-all"
-                                    title="تأكيد وحفظ"
-                                  >
-                                    <CheckCircle2 className="h-4 w-4" />
-                                  </Button>
+                                {isManagementActive ? (
+                                  <>
+                                    {hasPermission("sales_edit") && (
+                                      <Link
+                                        href={`/sales-invoices/create?id=${invoice.id}`}
+                                      >
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="hover:bg-primary/10 transition-all"
+                                          title="عرض وتعديل"
+                                        >
+                                          <Eye className="h-4 w-4 text-primary" />
+                                        </Button>
+                                      </Link>
+                                    )}
+                                    {hasPermission("sales_delete") && (
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => openDeleteDialog(invoice)}
+                                        className="hover:bg-destructive/10 transition-all"
+                                        title="حذف"
+                                      >
+                                        <Trash2 className="h-4 w-4 text-destructive" />
+                                      </Button>
+                                    )}
+                                    {invoice.status === 'pending' && (
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => setSelectedInvoice(invoice)}
+                                        className="hover:bg-orange-100 text-orange-600 transition-all"
+                                        title="تأكيد وحفظ"
+                                      >
+                                        <CheckCircle2 className="h-4 w-4" />
+                                      </Button>
+                                    )}
+                                  </>
+                                ) : (
+                                  <span className="text-[10px] text-muted-foreground italic">محمي</span>
                                 )}
                               </div>
                             </TableCell>
@@ -362,7 +399,7 @@ export default function SalesInvoicesPage() {
       </div>
 
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="sm:max-w-[425px]" dir="rtl">
           <DialogHeader>
             <div className="flex items-center gap-3 mb-2">
               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10">
@@ -430,6 +467,12 @@ export default function SalesInvoicesPage() {
           }}
         />
       )}
+
+      <PasswordProtectionGate
+        isOpen={isPassGateOpen}
+        onClose={() => setIsPassGateOpen(false)}
+        onSuccess={() => setIsManagementActive(true)}
+      />
     </>
   );
 }

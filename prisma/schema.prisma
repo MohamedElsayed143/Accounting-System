@@ -441,8 +441,8 @@ model QuotationItem {
   id          Int       @id @default(autoincrement())
   quotationId Int
   quotation   Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
-  productId   Int
-  product     Product   @relation(fields: [productId], references: [id])
+  productId   Int?
+  product     Product?  @relation(fields: [productId], references: [id])
   description String    @db.VarChar(255)
   quantity    Float
   unitPrice   Float

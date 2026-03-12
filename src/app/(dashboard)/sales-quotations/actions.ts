@@ -79,7 +79,7 @@ export async function createQuotation(data: {
   topNotes?: string[];
   notes?: string[];
   items: {
-    productId: number;
+    productId?: number | null;
     description: string;
     quantity: number;
     unitPrice: number;
@@ -90,13 +90,15 @@ export async function createQuotation(data: {
 }) {
   if (data.items.length === 0) throw new Error("لا يمكن حفظ عرض سعر فارغ");
 
-  // التحقق من أن جميع المنتجات نشطة
+  // التحقق من أن جميع المنتجات نشطة (فقط إذا كان هناك productId)
   for (const item of data.items) {
-    const product = await prisma.product.findUnique({
-      where: { id: item.productId, isActive: true },
-      select: { name: true },
-    });
-    if (!product) throw new Error("أحد الأصناف المختارة غير متوفر أو تم إيقاف التعامل معه");
+    if (item.productId) {
+      const product = await prisma.product.findUnique({
+        where: { id: item.productId, isActive: true } as any,
+        select: { name: true },
+      });
+      if (!product) throw new Error("أحد الأصناف المختارة غير متوفر أو تم إيقاف التعامل معه");
+    }
   }
 
   const code = await getNextQuotationCode();
@@ -115,7 +117,7 @@ export async function createQuotation(data: {
       notes: data.notes || [],
       items: {
         create: data.items.map((item) => ({
-          productId: item.productId,
+          productId: item.productId || null,
           description: item.description,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
@@ -145,7 +147,7 @@ export async function updateQuotation(
     topNotes?: string[];
     notes?: string[];
     items: {
-      productId: number;
+      productId?: number | null;
       description: string;
       quantity: number;
       unitPrice: number;
@@ -157,13 +159,15 @@ export async function updateQuotation(
 ) {
   if (data.items.length === 0) throw new Error("لا يمكن حفظ عرض سعر فارغ");
 
-  // التحقق من أن جميع المنتجات نشطة
+  // التحقق من أن جميع المنتجات نشطة (فقط إذا كان هناك productId)
   for (const item of data.items) {
-    const product = await prisma.product.findUnique({
-      where: { id: item.productId, isActive: true },
-      select: { name: true },
-    });
-    if (!product) throw new Error("أحد الأصناف المختارة غير متوفر أو تم إيقاف التعامل معه");
+    if (item.productId) {
+      const product = await prisma.product.findUnique({
+        where: { id: item.productId, isActive: true } as any,
+        select: { name: true },
+      });
+      if (!product) throw new Error("أحد الأصناف المختارة غير متوفر أو تم إيقاف التعامل معه");
+    }
   }
 
   const quotation = await prisma.quotation.update({
@@ -181,7 +185,7 @@ export async function updateQuotation(
       items: {
         deleteMany: {},
         create: data.items.map((item) => ({
-          productId: item.productId,
+          productId: item.productId || null,
           description: item.description,
           quantity: item.quantity,
           unitPrice: item.unitPrice,

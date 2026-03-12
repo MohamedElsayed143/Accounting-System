@@ -153,6 +153,9 @@ export async function createPurchaseInvoice(data: {
 
   if (!data.supplierId) throw new Error("يجب اختيار المورد أولاً");
   if (data.items.length === 0) throw new Error("لا يمكن حفظ فاتورة فارغة");
+  if (data.status === "cash" && !data.safeId && !data.bankId) {
+    throw new Error("يجب تحديد جهة الصرف (الخزنة أو البنك) للفواتير النقدية");
+  }
 
   const pendingAlerts: { type: 'treasury' | 'stock', name: string, value: number, limit?: number }[] = [];
 
@@ -186,8 +189,8 @@ export async function createPurchaseInvoice(data: {
         discount: data.discount,
         total: data.total,
         status: data.status,
-        safeId: data.status === "cash" ? data.safeId : null,
-        bankId: data.status === "cash" ? data.bankId : null,
+        safeId: (data.status === "cash" && data.safeId) ? data.safeId : null,
+        bankId: (data.status === "cash" && data.bankId) ? data.bankId : null,
         topNotes: data.topNotes || [],
         notes: data.notes || [],
         items: {
@@ -328,6 +331,9 @@ export async function updatePurchaseInvoice(
   if (!canEdit) throw new Error("ليس لديك صلاحية تعديل فواتير مشتريات");
 
   if (!data.supplierId) throw new Error("يجب اختيار المورد أولاً");
+  if (data.status === "cash" && !data.safeId && !data.bankId) {
+    throw new Error("يجب تحديد جهة الصرف (الخزنة أو البنك) للفواتير النقدية");
+  }
 
   const result = await (prisma as any).$transaction(async (tx: any) => {
     const existingInvoice = await tx.purchaseInvoice.findUnique({
@@ -439,8 +445,8 @@ export async function updatePurchaseInvoice(
         discount: data.discount,
         total: data.total,
         status: data.status,
-        safeId: data.status === "cash" ? data.safeId : null,
-        bankId: data.status === "cash" ? data.bankId : null,
+        safeId: (data.status === "cash" && data.safeId) ? data.safeId : null,
+        bankId: (data.status === "cash" && data.bankId) ? data.bankId : null,
         topNotes: data.topNotes || [],
         notes: data.notes || [],
         items: {

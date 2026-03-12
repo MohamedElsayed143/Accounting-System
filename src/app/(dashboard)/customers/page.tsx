@@ -39,6 +39,8 @@ import {
   PaginationControls,
 } from "@/components/shared";
 import { toast } from "sonner";
+import { PasswordProtectionGate } from "@/components/shared/PasswordProtectionGate";
+import { ShieldCheck, ShieldAlert } from "lucide-react";
 
 /* ✅ استيراد الـ Server Actions */
 import {
@@ -68,6 +70,8 @@ export default function CustomersPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [deleteCustomer, setDeleteCustomer] = useState<Customer | null>(null);
+  const [isManagementActive, setIsManagementActive] = useState(false);
+  const [isPassGateOpen, setIsPassGateOpen] = useState(false);
 
   const [formData, setFormData] = useState({
     code: 0,
@@ -248,15 +252,42 @@ export default function CustomersPage() {
             </p>
           </div>
 
-          {hasPermission("customers_manage") && (
-            <Button 
-              onClick={openCreateModal} 
-              className="gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-lg hover:shadow-xl transition-all duration-200"
+          <div className="flex gap-2 items-center">
+            <Button
+              variant={isManagementActive ? "destructive" : "outline"}
+              onClick={() => {
+                if (isManagementActive) {
+                  setIsManagementActive(false);
+                  toast.info("تم إغلاق وضع الإدارة");
+                } else {
+                  setIsPassGateOpen(true);
+                }
+              }}
+              className="gap-2 border-dashed border-2 transition-all"
             >
-              <UserPlus className="h-4 w-4" />
-              إضافة عميل جديد
+              {isManagementActive ? (
+                <>
+                  <ShieldAlert className="h-4 w-4" />
+                  إغلاق وضع الإدارة
+                </>
+              ) : (
+                <>
+                  <ShieldCheck className="h-4 w-4" />
+                  قائمة الحذف والتعديل
+                </>
+              )}
             </Button>
-          )}
+
+            {isManagementActive && hasPermission("customers_manage") && (
+              <Button 
+                onClick={openCreateModal} 
+                className="gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-lg hover:shadow-xl transition-all duration-200"
+              >
+                <UserPlus className="h-4 w-4" />
+                إضافة عميل جديد
+              </Button>
+            )}
+          </div>
         </div>
 
         <Card className="border-none shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm">
@@ -270,6 +301,8 @@ export default function CustomersPage() {
                   setSearchQuery(e.target.value);
                   setCurrentPage(1);
                 }}
+                autoComplete="off"
+                name="customer-search-hidden"
                 className="pr-10 border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-blue-500 transition-all"
               />
             </div>
@@ -306,11 +339,25 @@ export default function CustomersPage() {
                         </TableHead>
                         <TableHead className="font-bold">
                           <div className="flex items-center gap-2">
-                            <Wallet className="h-4 w-4" />
-                            الرصيد الحالي
+                            <Wallet className="h-4 w-4 text-red-500" />
+                            مدين
                           </div>
                         </TableHead>
-                        <TableHead className="font-bold text-center">الإجراءات</TableHead>
+                        <TableHead className="font-bold">
+                          <div className="flex items-center gap-2">
+                            <Wallet className="h-4 w-4 text-green-500" />
+                            دائن
+                          </div>
+                        </TableHead>
+                        <TableHead className="font-bold">
+                          <div className="flex items-center gap-2">
+                            <Wallet className="h-4 w-4 text-blue-500" />
+                            الرصيد
+                          </div>
+                        </TableHead>
+                        {isManagementActive && hasPermission("customers_manage") && (
+                          <TableHead className="text-center font-bold">إجراءات</TableHead>
+                        )}
                       </TableRow>
                     </TableHeader>
 
@@ -330,39 +377,39 @@ export default function CustomersPage() {
                           <TableCell className="text-muted-foreground">
                             {c.address || "-"}
                           </TableCell>
-                          <TableCell className="font-bold">
-                            <span className={c.balance > 0 ? "text-red-600" : c.balance < 0 ? "text-green-600" : "text-slate-500"}>
-                              {Math.abs(c.balance).toLocaleString("ar-EG")} ج.م
-                              <span className="text-[10px] mr-1 font-normal opacity-70">
-                                ({c.balance > 0 ? "مدين" : c.balance < 0 ? "دائن" : "متوازن"})
-                              </span>
-                            </span>
+                          <TableCell className="font-bold text-red-600">
+                            {c.balance > 0 ? `${c.balance.toLocaleString("ar-EG")} ج.م` : "-"}
                           </TableCell>
-                          <TableCell>
-                            <div className="flex gap-2 justify-center">
-                              {hasPermission("customers_manage") && (
+                          <TableCell className="font-bold text-green-600">
+                            {c.balance < 0 ? `${Math.abs(c.balance).toLocaleString("ar-EG")} ج.م` : "-"}
+                          </TableCell>
+                          <TableCell className="font-bold text-blue-600">
+                            <span dir="ltr">{c.balance.toLocaleString("ar-EG")} ج.م</span>
+                          </TableCell>
+                          {isManagementActive && hasPermission("customers_manage") && (
+                            <TableCell className="text-center">
+                              <div className="flex justify-center gap-2">
                                 <Button
-                                  size="icon"
                                   variant="ghost"
+                                  size="icon"
                                   onClick={() => openEditModal(c)}
-                                  className="h-9 w-9 hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-950 transition-all"
+                                  className="hover:bg-blue-100 text-blue-600 transition-all"
+                                  title="تعديل"
                                 >
                                   <Edit3 className="h-4 w-4" />
                                 </Button>
-                              )}
-
-                              {isAdmin && (
                                 <Button
-                                  size="icon"
                                   variant="ghost"
+                                  size="icon"
                                   onClick={() => setDeleteCustomer(c)}
-                                  className="h-9 w-9 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950 transition-all"
+                                  className="hover:bg-red-100 text-red-600 transition-all"
+                                  title="حذف"
                                 >
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
-                              )}
-                            </div>
-                          </TableCell>
+                              </div>
+                            </TableCell>
+                          )}
                         </TableRow>
                       ))}
                     </TableBody>
@@ -564,6 +611,12 @@ export default function CustomersPage() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        <PasswordProtectionGate
+          isOpen={isPassGateOpen}
+          onClose={() => setIsPassGateOpen(false)}
+          onSuccess={() => setIsManagementActive(true)}
+        />
       </div>
     </>
   );

@@ -223,3 +223,42 @@ export async function searchProducts(query: string, onlyInStock: boolean = false
 
   return products as ProductData[];
 }
+
+/**
+ * Fetches the last selling price and profit margin for a product
+ * to be used when selling items without inventory.
+ */
+export async function getProductPricingHistory(productId: number) {
+  try {
+    const product = await prisma.product.findUnique({
+      where: { id: productId },
+      select: { sellPrice: true, profitMargin: true },
+    });
+
+    if (!product) {
+      return null;
+    }
+
+    // Attempt to find the last sales invoice item for the last selling price
+    const lastSale = await prisma.salesInvoiceItem.findFirst({
+      where: { productId },
+      orderBy: { invoice: { invoiceDate: "desc" } },
+      select: { unitPrice: true },
+    });
+
+    // Attempt to find the last purchase invoice item for the last profit margin
+    const lastPurchase = await prisma.purchaseInvoiceItem.findFirst({
+      where: { productId },
+      orderBy: { invoice: { invoiceDate: "desc" } },
+      select: { profitMargin: true },
+    });
+
+    return {
+      lastSellingPrice: lastSale ? lastSale.unitPrice : product.sellPrice,
+      lastProfitMargin: lastPurchase ? lastPurchase.profitMargin : product.profitMargin,
+    };
+  } catch (err) {
+    console.error("Error fetching product pricing history:", err);
+    return null;
+  }
+}

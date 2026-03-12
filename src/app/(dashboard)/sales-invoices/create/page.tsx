@@ -7,7 +7,7 @@ import Link from "next/link";
 import {
   ArrowRight, Plus, Trash2, Save, Calculator,
   Search, User, ChevronLeft, CreditCard, Hash, Printer,
-  History as HistoryIcon, Loader2
+  History as HistoryIcon, Loader2, AlertTriangle
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -20,6 +20,24 @@ import {
   Table, TableBody, TableCell,
   TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Select,
   SelectContent,
@@ -64,7 +82,7 @@ interface InvoiceItem {
   stockBalance?: number;
 }
 
-import { getProducts, ProductData } from "@/app/(dashboard)/inventory/products/actions";
+import { getProducts, getProductPricingHistory, ProductData } from "@/app/(dashboard)/inventory/products/actions";
 
 // ============================================================
 // Step 1 — البحث الفوري عن العميل
@@ -93,6 +111,10 @@ function InvoiceFormStep({
   const [checkingNumber, setCheckingNumber] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(isEditMode || isViewMode);
+
+  const [showNegativeWarning, setShowNegativeWarning] = useState(false);
+  const [pendingSaveData, setPendingSaveData] = useState<any>(null);
+  const [itemsExceedingStock, setItemsExceedingStock] = useState<{name: string, requested: number, available: number}[]>([]);
 
   const [customer, setCustomer] = useState<Customer | null>(initialCustomer);
   const [paymentType, setPaymentType] = useState<"cash" | "credit" | "pending">("cash");
@@ -228,22 +250,33 @@ function InvoiceFormStep({
     return () => clearTimeout(timer);
   }, [invoiceNumber, isEditMode, invoiceId, isViewMode]);
 
-  const addItem = (product: ProductData) => {
+  const addItem = async (product: ProductData) => {
     if (isViewMode) return;
+    
+    let appliedUnitPrice = product.sellPrice;
+    let appliedProfitMargin = product.profitMargin || 0;
+
     if (product.currentStock <= 0) {
-      toast.warning(`تنبيه: سيتم بيع الصنف "${product.name}" بدون رصيد كافٍ`);
+      toast.warning(`تنبيه: سيتم بيع الصنف "${product.name}" بدون رصيد كافٍ. جاري استرجاع آخر سعر بيع...`);
+      
+      const history = await getProductPricingHistory(product.id);
+      if (history) {
+        appliedUnitPrice = history.lastSellingPrice;
+        appliedProfitMargin = history.lastProfitMargin;
+      }
     }
+
     setItems((prev) => [
       ...prev,
       {
         id: String(Date.now()),
         description: product.name,
         quantity: 1,
-        unitPrice: product.sellPrice,
-        profitMargin: product.profitMargin || 0,
+        unitPrice: appliedUnitPrice,
+        profitMargin: appliedProfitMargin,
         taxRate: product.taxRate || 0,
         discount: 0,
-        total: product.sellPrice * (1 + (product.taxRate || 0) / 100),
+        total: appliedUnitPrice * (1 + (product.taxRate || 0) / 100),
         productId: product.id,
         stockBalance: product.currentStock,
       },
@@ -306,57 +339,9 @@ function InvoiceFormStep({
   const grandTotal = subtotal - itemsDiscount - discount + totalTax;
   const netTotal = grandTotal - returnsTotal;
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (isViewMode) return;
-    if (invoiceNumberError || checkingNumber) {
-      toast.error("يرجى تصحيح رقم الفاتورة أولاً");
-      return;
-    }
-    if (!customer) {
-      toast.error("يرجى اختيار العميل أولاً");
-      return;
-    }
-    if (grandTotal <= 0 && items.length > 0) {
-      toast.error("إجمالي الفاتورة يجب أن يكون أكبر من صفر");
-      return;
-    }
-    if (items.length === 0) {
-      toast.error("لا يمكن حفظ فاتورة فارغة");
-      return;
-    }
-
+  const executeSave = async (invoiceData: any) => {
     try {
       setSaving(true);
-      const invoiceData = {
-        invoiceNumber,
-        customerId: customer.id,
-        customerName: customer.name,
-        invoiceDate,
-        subtotal,
-        totalTax,
-        discount: itemsDiscount + discount,
-        total: grandTotal,
-        status: paymentType,
-        dueDate: (paymentType === "credit" || notifSettings?.showDueDateOnInvoices) ? dueDate : undefined,
-        safeId: paymentType === "cash" && treasuryType === "safe" ? Number(selectedSafeId) : undefined,
-        bankId: paymentType === "cash" && treasuryType === "bank" ? Number(selectedBankId) : undefined,
-        topNotes,
-        notes,
-        items: items.map(({ description, quantity, unitPrice, taxRate, discount, total, productId }) => {
-          if (!productId) throw new Error("يجب اختيار منتج لكل صنف");
-          return {
-            description,
-            quantity,
-            unitPrice,
-            taxRate,
-            discount,
-            total,
-            productId,
-          };
-        }),
-      };
-
       if (isEditMode && invoiceId) {
         const result = await updateSalesInvoice(Number(invoiceId), invoiceData);
         toast.success(`تم تحديث الفاتورة #${invoiceNumber} بنجاح`);
@@ -380,7 +365,75 @@ function InvoiceFormStep({
       toast.error(message);
     } finally {
       setSaving(false);
+      setShowNegativeWarning(false);
+      setPendingSaveData(null);
     }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isViewMode) return;
+    if (invoiceNumberError || checkingNumber) {
+      toast.error("يرجى تصحيح رقم الفاتورة أولاً");
+      return;
+    }
+    if (!customer) {
+      toast.error("يرجى اختيار العميل أولاً");
+      return;
+    }
+    if (grandTotal <= 0 && items.length > 0) {
+      toast.error("إجمالي الفاتورة يجب أن يكون أكبر من صفر");
+      return;
+    }
+    if (items.length === 0) {
+      toast.error("لا يمكن حفظ فاتورة فارغة");
+      return;
+    }
+
+    const invoiceData = {
+      invoiceNumber,
+      customerId: customer.id,
+      customerName: customer.name,
+      invoiceDate,
+      subtotal,
+      totalTax,
+      discount: itemsDiscount + discount,
+      total: grandTotal,
+      status: paymentType,
+      dueDate: (paymentType === "credit" || notifSettings?.showDueDateOnInvoices) ? dueDate : undefined,
+      safeId: (paymentType === "cash" && treasuryType === "safe" && selectedSafeId) ? Number(selectedSafeId) : undefined,
+      bankId: (paymentType === "cash" && treasuryType === "bank" && selectedBankId) ? Number(selectedBankId) : undefined,
+      topNotes,
+      notes,
+      items: items.map(({ description, quantity, unitPrice, taxRate, discount, total, productId }) => {
+        if (!productId) throw new Error("يجب اختيار منتج لكل صنف");
+        return {
+          description,
+          quantity,
+          unitPrice,
+          taxRate,
+          discount,
+          total,
+          productId,
+        };
+      }),
+    };
+
+    if (systemSettings?.inventory?.allowNegativeStock) {
+      const exceedingItems = items.filter(i => i.quantity > (i.stockBalance || 0));
+      if (exceedingItems.length > 0) {
+        setItemsExceedingStock(exceedingItems.map(i => ({
+          name: i.description,
+          requested: i.quantity,
+          available: i.stockBalance || 0
+        })));
+        setPendingSaveData(invoiceData);
+        setShowNegativeWarning(true);
+        return; // Pause save process
+      }
+    }
+
+    await executeSave(invoiceData);
   };
 
   const canSave = !invoiceNumberError && !checkingNumber && !saving && !loading && !isViewMode;
@@ -900,6 +953,55 @@ function InvoiceFormStep({
         showStamp={settings?.showStampOnPrint}
         termsAndConditions={settings?.termsAndConditions}
       />
+
+      <AlertDialog open={showNegativeWarning} onOpenChange={setShowNegativeWarning}>
+        <AlertDialogContent dir="rtl" className="sm:max-w-[425px]">
+          <AlertDialogHeader>
+            <div className="flex items-center gap-3 mb-2">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-orange-100">
+                <AlertTriangle className="h-6 w-6 text-orange-600" />
+              </div>
+              <AlertDialogTitle className="text-xl font-bold">
+                تأكيد البيع بدون رصيد
+              </AlertDialogTitle>
+            </div>
+            <AlertDialogDescription className="text-base leading-relaxed pt-2">
+              أنت على وشك بيع أصناف كميتها المطلوبة أكبر من الرصيد المتاح:
+              <ul className="mt-2 space-y-1 list-disc list-inside text-sm">
+                {itemsExceedingStock.map((item, index) => (
+                  <li key={index}>
+                    <span className="font-bold text-slate-800">{item.name}</span>: مطلوب <span className="text-red-500 font-bold">{item.requested}</span>، متاح <span className="text-green-600 font-bold">{item.available}</span>
+                  </li>
+                ))}
+              </ul>
+              <br/>
+              هل أنت متأكد من رغبتك في إتمام هذه الفاتورة بدون رصيد كافٍ؟
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2 sm:gap-0 mt-4">
+            <AlertDialogCancel disabled={saving} onClick={() => {
+               setShowNegativeWarning(false);
+               setPendingSaveData(null);
+            }}>
+              إلغاء التعديل
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={() => {
+                if (pendingSaveData) executeSave(pendingSaveData);
+              }} 
+              disabled={saving} 
+              className="bg-orange-600 hover:bg-orange-700 text-white"
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="h-4 w-4 ml-2 animate-spin" />
+                  جاري الحفظ...
+                </>
+              ) : "نعم، متأكد"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

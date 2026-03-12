@@ -14,8 +14,11 @@ import {
   ArrowLeftRight,
   ArrowUpCircle,
   ArrowDownCircle,
+  ShieldCheck,
+  ShieldAlert,
 } from "lucide-react";
 import { Navbar } from "@/components/layout/navbar";
+import { PasswordProtectionGate } from "@/components/shared/PasswordProtectionGate";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -82,6 +85,8 @@ export default function TreasuryPage() {
   } | null>(null);
   const [isArchiving, setIsArchiving] = useState(false);
   const [showTransfer, setShowTransfer] = useState(false);
+  const [isManagementActive, setIsManagementActive] = useState(false);
+  const [isPassGateOpen, setIsPassGateOpen] = useState(false);
   const { hasPermission, isAdmin } = usePermissions();
 
   const loadData = () => {
@@ -176,6 +181,38 @@ export default function TreasuryPage() {
     <>
       <Navbar title="إدارة النقدية" />
       <div className="p-6 space-y-8" dir="rtl">
+        <div className="flex justify-between items-center print:hidden">
+            <div>
+                <h2 className="text-2xl font-bold mb-2">النقدية والبنوك</h2>
+            </div>
+            <div className="flex gap-2 items-center">
+              <Button
+                variant={isManagementActive ? "destructive" : "outline"}
+                onClick={() => {
+                  if (isManagementActive) {
+                    setIsManagementActive(false);
+                    toast.info("تم إغلاق وضع الإدارة");
+                  } else {
+                    setIsPassGateOpen(true);
+                  }
+                }}
+                className="gap-2 border-dashed border-2 transition-all"
+              >
+                {isManagementActive ? (
+                  <>
+                    <ShieldAlert className="h-4 w-4" />
+                    إغلاق وضع الإدارة
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck className="h-4 w-4" />
+                    قائمة الحذف والتعديل
+                  </>
+                )}
+              </Button>
+            </div>
+        </div>
+
         {/* كروت الإحصائيات العلوية */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <StatCard
@@ -207,7 +244,7 @@ export default function TreasuryPage() {
 
         {/* أزرار العمليات */}
         <div className="flex flex-wrap gap-3 justify-end">
-          {hasPermission("treasury_manage") && (
+          {hasPermission("treasury_manage") && isManagementActive && (
             <>
               <Button
                 variant="outline"
@@ -228,7 +265,7 @@ export default function TreasuryPage() {
           )}
 
           {/* زر البنوك المؤرشفة */}
-          {isAdmin && (
+          {isAdmin && isManagementActive && (
             <Link href="/treasury/archived">
               <Button
                 variant="outline"
@@ -242,13 +279,15 @@ export default function TreasuryPage() {
           
             {hasPermission("treasury_manage") && (
               <>
-                <Button 
-                    onClick={() => setShowTransfer(true)}
-                    className="bg-blue-600 hover:bg-blue-700"
-                >
-                  <ArrowLeftRight className="ml-2 h-4 w-4" />
-                  تحويل أموال
-                </Button>
+                {isManagementActive && (
+                    <Button 
+                        onClick={() => setShowTransfer(true)}
+                        className="bg-blue-600 hover:bg-blue-700"
+                    >
+                      <ArrowLeftRight className="ml-2 h-4 w-4" />
+                      تحويل أموال
+                    </Button>
+                )}
                 <Link href="/treasury/receipt-voucher">
                   <Button className="bg-emerald-600 hover:bg-emerald-700">
                     + سند قبض جديد
@@ -318,7 +357,7 @@ export default function TreasuryPage() {
                 </Link>
 
                 {/* زر الأرشفة - يظهر ثابت للبنوك */}
-                {acc.type === "bank" && isAdmin && (
+                {acc.type === "bank" && isAdmin && isManagementActive && (
                   <Button
                     variant="secondary"
                     size="icon"
@@ -334,7 +373,7 @@ export default function TreasuryPage() {
                 )}
 
                 {/* زر أرشفة الخزنة (غير الرئيسية فقط) */}
-                {acc.type === "safe" && !acc.isPrimary && isAdmin && (
+                {acc.type === "safe" && !acc.isPrimary && isAdmin && isManagementActive && (
                   <Button
                     variant="secondary"
                     size="icon"
@@ -556,6 +595,15 @@ export default function TreasuryPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <PasswordProtectionGate
+        isOpen={isPassGateOpen}
+        onClose={() => setIsPassGateOpen(false)}
+        onSuccess={() => {
+            setIsManagementActive(true);
+            toast.success("تم تفعيل وضع الإدارة بنجاح");
+        }}
+      />
     </>
   );
 }

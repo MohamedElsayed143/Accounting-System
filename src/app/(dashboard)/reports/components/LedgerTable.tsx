@@ -21,9 +21,10 @@ interface LedgerTableProps {
   transactions: TransactionType[];
   openingBalance: number;
   isLoading?: boolean;
+  onViewDetails?: (transaction: TransactionType) => void;
 }
 
-export function LedgerTable({ transactions, openingBalance, isLoading }: LedgerTableProps) {
+export function LedgerTable({ transactions, openingBalance, isLoading, onViewDetails }: LedgerTableProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
 
@@ -46,8 +47,8 @@ export function LedgerTable({ transactions, openingBalance, isLoading }: LedgerT
   };
 
   const getPaymentIcon = (method: string) => {
-    if (method.includes('بنك')) return <CreditCard className="w-3.5 h-3.5" />;
-    if (method.includes('نقدي')) return <Banknote className="w-3.5 h-3.5" />;
+    if (method.includes('بنك')) return <CreditCard className="w-4 h-4 text-blue-600" />;
+    if (method.includes('نقدي')) return <Banknote className="w-4 h-4 text-emerald-600" />;
     return null;
   };
 
@@ -65,69 +66,109 @@ export function LedgerTable({ transactions, openingBalance, isLoading }: LedgerT
   return (
     <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden flex flex-col">
       {/* Table Body */}
-      <div className="overflow-x-auto">
-        <table className="w-full text-right border-collapse min-w-[900px]">
-          <thead className="bg-slate-50/50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800">
-            <tr>
-              <th className="px-6 py-4 text-sm font-semibold text-slate-900 dark:text-white">التاريخ</th>
-              <th className="px-6 py-4 text-sm font-semibold text-slate-900 dark:text-white">نوع العملية</th>
-              <th className="px-6 py-4 text-sm font-semibold text-slate-900 dark:text-white">المرجع</th>
-              <th className="px-6 py-4 text-sm font-semibold text-slate-900 dark:text-white">البيان</th>
-              <th className="px-6 py-4 text-sm font-semibold text-slate-900 dark:text-white">طريقة الدفع</th>
-              <th className="px-6 py-4 text-sm font-semibold text-emerald-600 text-left">مدين (+)</th>
-              <th className="px-6 py-4 text-sm font-semibold text-rose-600 text-left">دائن (-)</th>
-              <th className="px-6 py-4 text-sm font-semibold text-slate-900 dark:text-white text-left sticky left-0 bg-slate-50/100 dark:bg-slate-800/100">الرصيد</th>
+      <div className="overflow-x-auto print:hidden">
+        <table className="w-full text-right">
+          <thead className="sticky top-0 z-10">
+            <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800">
+              <th className="px-4 py-4 text-xs font-bold text-slate-500 uppercase whitespace-nowrap">التاريخ</th>
+              <th className="px-4 py-4 text-xs font-bold text-slate-500 uppercase whitespace-nowrap">النوع</th>
+              <th className="px-4 py-4 text-xs font-bold text-slate-500 uppercase whitespace-nowrap">المرجع</th>
+              <th className="px-4 py-4 text-xs font-bold text-slate-500 uppercase whitespace-nowrap">البيان</th>
+              <th className="px-4 py-4 text-xs font-bold text-slate-500 uppercase text-left whitespace-nowrap">طريقة الدفع</th>
+              <th className="px-4 py-4 text-xs font-bold text-slate-500 uppercase text-left whitespace-nowrap">مدين (+)</th>
+              <th className="px-4 py-4 text-xs font-bold text-slate-500 uppercase text-left whitespace-nowrap">دائن (-)</th>
+              <th className="px-4 py-4 text-xs font-bold text-slate-500 uppercase sticky left-0 bg-slate-50 dark:bg-slate-800/50">الرصيد</th>
+              <th className="px-4 py-4 text-xs font-bold text-slate-500 uppercase print:hidden">إجراءات</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
             {/* Opening Balance Row */}
-            <tr className="bg-slate-50/30 dark:bg-slate-800/20 italic">
-              <td colSpan={7} className="px-6 py-4 text-sm text-slate-500">رصيد افتتاحي (سابق)</td>
-              <td className="px-6 py-4 text-sm font-bold text-slate-900 dark:text-white text-left sticky left-0 bg-white dark:bg-slate-900">
+            <tr className="bg-slate-50/50 dark:bg-slate-800/30">
+              <td colSpan={7} className="px-4 py-4 text-sm text-slate-500 font-medium italic">رصيد افتتاحي (سابق)</td>
+              <td className="px-4 py-4 text-sm font-bold text-slate-900 dark:text-white sticky left-0 bg-slate-50/50 dark:bg-slate-800/30">
                 {openingBalance.toLocaleString('ar-EG')}
               </td>
+              <td className="print:hidden"></td>
             </tr>
 
             {displayTransactions.map((row) => (
-              <tr key={row.id} className="group hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
-                <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-400 whitespace-nowrap">
-                  {new Date(row.date).toLocaleDateString("ar-EG")}
+              <tr key={row.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors group">
+                <td className="px-4 py-4 text-sm text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                  {new Date(row.date).toLocaleDateString("ar-EG", { 
+                    weekday: 'long', 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric' 
+                  })}
                 </td>
-                <td className="px-6 py-4">
+                <td className="px-4 py-4">
                   <span className={cn(
-                    "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border",
+                    "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border whitespace-nowrap",
                     row.type.includes('تحويل') ? "bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-900/10 dark:text-orange-400 dark:border-orange-800" :
                     row.type === 'فاتورة' ? "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/10 dark:text-blue-400 dark:border-blue-800" :
                     row.type === 'سند قبض' ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/10 dark:text-emerald-400 dark:border-emerald-800" :
-                    row.type === 'سند صرف' ? "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-900/10 dark:text-rose-400 dark:border-rose-800" :
+                    row.type === 'سند صرف' ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/10 dark:text-amber-400 dark:border-amber-800" :
+                    row.type === 'فاتورة مشتريات' ? "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-900/10 dark:text-rose-400 dark:border-rose-800" :
+                    row.type === 'فاتورة مبيعات' ? "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/10 dark:text-blue-400 dark:border-blue-800" :
                     "bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700"
                   )}>
-                    {getTransactionIcon(row.type)}
                     {row.type}
                   </span>
                 </td>
-                <td className="px-6 py-4 text-sm font-mono text-slate-500 tracking-tighter whitespace-nowrap">{row.documentId}</td>
-                <td className="px-6 py-4 text-sm text-slate-700 dark:text-slate-300 max-w-[300px] truncate" title={row.description || ''}>{row.description}</td>
-                <td className="px-6 py-4">
+                <td className="px-4 py-4 text-sm font-mono text-slate-500 tracking-tighter whitespace-nowrap">{row.documentId}</td>
+                <td className="px-4 py-4 text-sm text-slate-700 dark:text-slate-300 max-w-[250px] truncate" title={row.description || ''}>{row.description}</td>
+                <td className="px-4 py-4">
                   <div className="flex items-center gap-1.5 text-sm text-slate-600 dark:text-slate-400 whitespace-nowrap">
                     {getPaymentIcon(row.paymentMethod)}
                     <span>{row.paymentMethod}</span>
                   </div>
                 </td>
-                <td className="px-6 py-4 text-sm font-bold text-emerald-600 text-left whitespace-nowrap">
+                <td className="px-4 py-4 text-sm font-bold text-emerald-600 text-left whitespace-nowrap">
                   {row.debit > 0 ? `+${row.debit.toLocaleString('ar-EG')}` : '—'}
                 </td>
-                <td className="px-6 py-4 text-sm font-bold text-rose-600 text-left whitespace-nowrap">
+                <td className="px-4 py-4 text-sm font-bold text-rose-600 text-left whitespace-nowrap">
                   {row.credit > 0 ? `-${row.credit.toLocaleString('ar-EG')}` : '—'}
                 </td>
-                <td className="px-6 py-4 sticky left-0 bg-white dark:bg-slate-900 group-hover:bg-slate-50/50 dark:group-hover:bg-slate-800/40 border-r border-slate-100 dark:border-slate-800 shadow-[2px_0_5px_rgba(0,0,0,0.02)]">
+                <td className="px-4 py-4 sticky left-0 bg-white dark:bg-slate-900 group-hover:bg-slate-50/50 dark:group-hover:bg-slate-800/40">
                   <span className="text-sm font-bold text-slate-900 dark:text-white whitespace-nowrap">
                     {row.runningBalance?.toLocaleString('ar-EG')}
                   </span>
                 </td>
+                <td className="px-4 py-4 print:hidden">
+                  {onViewDetails && (
+                    <button
+                      onClick={() => onViewDetails(row)}
+                      className="p-1.5 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors group/btn"
+                      title="عرض التفاصيل"
+                    >
+                      <Eye className="w-4 h-4 text-slate-400 group-hover/btn:text-blue-600" />
+                    </button>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>
+          <tfoot className="bg-slate-100 dark:bg-slate-800/70 border-t-2 border-slate-300 dark:border-slate-700">
+            <tr className="font-bold">
+              <td colSpan={5} className="px-4 py-4 text-sm text-slate-900 dark:text-white">الإجمالي الكلي</td>
+              <td className="px-4 py-4 text-sm text-emerald-700 text-left">
+                {transactions.reduce((sum, t) => sum + t.debit, 0).toLocaleString('ar-EG')}
+              </td>
+              <td className="px-4 py-4 text-sm text-rose-700 text-left">
+                {transactions.reduce((sum, t) => sum + t.credit, 0).toLocaleString('ar-EG')}
+              </td>
+              <td className="px-4 py-4 sticky left-0 bg-slate-100 dark:bg-slate-800/70">
+                <span className="text-sm font-bold text-slate-900 dark:text-white">
+                  {(
+                    openingBalance + 
+                    transactions.reduce((sum, t) => sum + t.debit, 0) - 
+                    transactions.reduce((sum, t) => sum + t.credit, 0)
+                  ).toLocaleString('ar-EG')}
+                </span>
+              </td>
+              <td className="print:hidden"></td>
+            </tr>
+          </tfoot>
         </table>
       </div>
 

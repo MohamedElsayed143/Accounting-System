@@ -78,7 +78,7 @@ export default function TransferDialog({ open, onOpenChange, onSuccess }: Transf
       });
 
       if ((result as any).pending) {
-        toast.success(result.message || "✅ تم إرسال طلب التحويل للمدير للموافقة");
+        toast.success((result as any).message || "✅ تم إرسال طلب التحويل للمدير للموافقة");
       } else {
         toast.success("تم التحويل بنجاح");
       }

@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
-import { Plus, Eye, Trash2, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Plus, Eye, Trash2, AlertTriangle, CheckCircle2, ShieldCheck, ShieldAlert } from "lucide-react";
 import { Navbar } from "@/components/layout/navbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -32,6 +32,8 @@ import { useRouter } from "next/navigation";
 import { getCompanySettingsAction } from "@/app/(dashboard)/settings/actions";
 import { ProcessInvoiceDialog } from "../pending-invoices/components/ProcessInvoiceDialog";
 import { usePermissions } from "@/hooks/use-permissions";
+import { toast } from "sonner";
+import { PasswordProtectionGate } from "@/components/shared/PasswordProtectionGate";
 
 const ITEMS_PER_PAGE = 8;
 
@@ -76,6 +78,8 @@ export default function PurchaseInvoicesPage() {
   );
   const [deleting, setDeleting] = useState(false);
   const [prefix, setPrefix] = useState<string>("PUR");
+  const [isManagementActive, setIsManagementActive] = useState(false);
+  const [isPassGateOpen, setIsPassGateOpen] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
   const router = useRouter();
   const { hasPermission, isAdmin, loading: permsLoading } = usePermissions();
@@ -168,17 +172,44 @@ export default function PurchaseInvoicesPage() {
               إدارة فواتير المشتريات وتتبع المدفوعات للموردين
             </p>
           </div>
-          {hasPermission("purchase_create") && (
+          <div className="flex gap-2 items-center">
             <Button
-              asChild
-              className="gap-2 shadow-md hover:shadow-lg transition-all"
+              variant={isManagementActive ? "destructive" : "outline"}
+              onClick={() => {
+                if (isManagementActive) {
+                  setIsManagementActive(false);
+                  toast.info("تم إغلاق وضع الإدارة");
+                } else {
+                  setIsPassGateOpen(true);
+                }
+              }}
+              className="gap-2 border-dashed border-2 transition-all"
             >
-              <Link href="/purchase-invoices/create">
-                <Plus className="h-4 w-4" />
-                <span className="font-medium">إنشاء فاتورة</span>
-              </Link>
+              {isManagementActive ? (
+                <>
+                  <ShieldAlert className="h-4 w-4" />
+                  إغلاق وضع الإدارة
+                </>
+              ) : (
+                <>
+                  <ShieldCheck className="h-4 w-4" />
+                  قائمة الحذف والتعديل
+                </>
+              )}
             </Button>
-          )}
+
+            {isManagementActive && hasPermission("purchase_create") && (
+              <Button
+                asChild
+                className="gap-2 shadow-md hover:shadow-lg transition-all"
+              >
+                <Link href="/purchase-invoices/create">
+                  <Plus className="h-4 w-4" />
+                  <span className="font-medium">إنشاء فاتورة</span>
+                </Link>
+              </Button>
+            )}
+          </div>
         </div>
 
         <Card className="shadow-sm">
@@ -285,41 +316,47 @@ export default function PurchaseInvoicesPage() {
                             </TableCell>
                             <TableCell className="text-center">
                               <div className="flex justify-center gap-2">
-                                {hasPermission("purchase_view") && (
-                                  <Link
-                                    href={`/purchase-invoices/create?id=${invoice.id}`}
-                                  >
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="hover:bg-primary/10 transition-all"
-                                      title="تعديل"
-                                    >
-                                      <Eye className="h-4 w-4 text-primary" />
-                                    </Button>
-                                  </Link>
-                                )}
-                                {isAdmin && (
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() => openDeleteDialog(invoice)}
-                                    className="hover:bg-destructive/10 transition-all"
-                                    title="حذف"
-                                  >
-                                    <Trash2 className="h-4 w-4 text-destructive" />
-                                  </Button>
-                                )}
-                                {invoice.status === 'pending' && (
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() => setSelectedInvoice(invoice)}
-                                    className="hover:bg-orange-100 text-orange-600 transition-all"
-                                    title="تأكيد وحفظ"
-                                  >
-                                    <CheckCircle2 className="h-4 w-4" />
-                                  </Button>
+                                {isManagementActive ? (
+                                  <>
+                                    {hasPermission("purchase_view") && (
+                                      <Link
+                                        href={`/purchase-invoices/create?id=${invoice.id}`}
+                                      >
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="hover:bg-primary/10 transition-all"
+                                          title="تعديل"
+                                        >
+                                          <Eye className="h-4 w-4 text-primary" />
+                                        </Button>
+                                      </Link>
+                                    )}
+                                    {isAdmin && (
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => openDeleteDialog(invoice)}
+                                        className="hover:bg-destructive/10 transition-all"
+                                        title="حذف"
+                                      >
+                                        <Trash2 className="h-4 w-4 text-destructive" />
+                                      </Button>
+                                    )}
+                                    {invoice.status === 'pending' && (
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => setSelectedInvoice(invoice)}
+                                        className="hover:bg-orange-100 text-orange-600 transition-all"
+                                        title="تأكيد وحفظ"
+                                      >
+                                        <CheckCircle2 className="h-4 w-4" />
+                                      </Button>
+                                    )}
+                                  </>
+                                ) : (
+                                  <span className="text-[10px] text-muted-foreground italic">محمي</span>
                                 )}
                               </div>
                             </TableCell>
@@ -421,6 +458,12 @@ export default function PurchaseInvoicesPage() {
           }}
         />
       )}
+
+      <PasswordProtectionGate
+        isOpen={isPassGateOpen}
+        onClose={() => setIsPassGateOpen(false)}
+        onSuccess={() => setIsManagementActive(true)}
+      />
     </>
   );
 }

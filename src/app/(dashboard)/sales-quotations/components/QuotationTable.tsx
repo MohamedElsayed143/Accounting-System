@@ -45,7 +45,7 @@ export function QuotationTable({
       <Table>
         <TableHeader className="bg-slate-50">
           <TableRow>
-            <TableHead className="text-right font-bold">الصنف</TableHead>
+            <TableHead className="text-right font-bold w-[40%]">البند</TableHead>
             <TableHead className="text-right font-bold w-24">الكمية *</TableHead>
             <TableHead className="text-right font-bold w-24">السعر *</TableHead>
             <TableHead className="text-right font-bold w-24">الخصم (%)</TableHead>
@@ -58,10 +58,16 @@ export function QuotationTable({
           {items.map((item) => (
             <TableRow key={item.id}>
               <TableCell className="p-3">
-                <div className="flex flex-col gap-0.5">
-                  <span className="font-bold text-slate-800">{item.description}</span>
+                <div className="flex flex-col gap-1">
+                  <Input
+                    value={item.description}
+                    onChange={(e) => onUpdateItem(item.id, "description", e.target.value)}
+                    disabled={readOnly}
+                    placeholder="اسم البند..."
+                    className="bg-transparent border-none shadow-none focus-visible:ring-1 focus-visible:ring-primary/20 h-auto p-1 font-bold text-slate-800"
+                  />
                   {item.productId && (
-                    <span className="text-[10px] text-muted-foreground font-mono">
+                    <span className="text-[10px] text-muted-foreground font-mono mr-1">
                       PID: {item.productId}
                     </span>
                   )}
@@ -132,8 +138,68 @@ export function QuotationTable({
           {!readOnly && (
             <TableRow>
               <TableCell colSpan={7} className="p-3">
-                <div className="max-w-xs transition-all duration-200 focus-within:max-w-sm">
-                  <ProductSelect onSelect={onAddItem} />
+                <div className="max-w-md flex items-center gap-2">
+                  <Input 
+                    placeholder="اكتب اسم البند الجديد واضغط إضافة..." 
+                    id="new-item-name"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        const val = e.currentTarget.value;
+                        if (val) {
+                          onAddItem({ 
+                            name: val, 
+                            sellPrice: 0, 
+                            taxRate: 0, 
+                            id: 0, 
+                            code: "MANUAL",
+                            currentStock: 0,
+                            unit: "بند",
+                            isActive: true,
+                            buyPrice: 0,
+                            profitMargin: 0,
+                            minStock: 0,
+                            createdAt: new Date(),
+                            updatedAt: new Date(),
+                            categoryId: null,
+                            category: null
+                          });
+                          e.currentTarget.value = "";
+                        }
+                      }
+                    }}
+                    className="flex-1 bg-slate-50 border-slate-200"
+                  />
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => {
+                      const input = document.getElementById('new-item-name') as HTMLInputElement;
+                      if (input.value) {
+                        onAddItem({ 
+                          name: input.value, 
+                          sellPrice: 0, 
+                          taxRate: 0, 
+                          id: 0, 
+                          code: "MANUAL",
+                          currentStock: 0,
+                          unit: "بند",
+                          isActive: true,
+                          buyPrice: 0,
+                          profitMargin: 0,
+                          minStock: 0,
+                          createdAt: new Date(),
+                          updatedAt: new Date(),
+                          categoryId: null,
+                          category: null
+                        });
+                        input.value = "";
+                      }
+                    }}
+                  >
+                    إضافة بند
+                  </Button>
                 </div>
               </TableCell>
             </TableRow>

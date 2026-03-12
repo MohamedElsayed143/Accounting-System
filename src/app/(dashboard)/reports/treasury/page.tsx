@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { 
   FileText, 
   Printer, 
@@ -11,14 +11,16 @@ import {
   ArrowUpRight,
   ArrowDownLeft,
   ChevronDown,
-  History as HistoryIcon
+  History as HistoryIcon,
+  Activity,
+  Receipt,
+  TrendingUp
 } from "lucide-react";
-import { format } from "date-fns";
-import { ar } from "date-fns/locale";
 import { AccountSearchDropdown } from "../components/AccountSearchDropdown";
 import { LedgerTable } from "../components/LedgerTable";
 import { PrintableStatement } from "../components/PrintableStatement";
-import { getAccountTransactions, getAccountById } from "../actions";
+import { TransactionModal } from "../components/TransactionModal";
+import { getAccountTransactions } from "../actions";
 import { getCompanySettingsAction } from "../../settings/actions";
 import type { TransactionType } from "../actions";
 
@@ -31,6 +33,7 @@ export default function TreasuryReportPage() {
   const [openingBalance, setOpeningBalance] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [companySettings, setCompanySettings] = useState<any>(null);
+  const [selectedTransaction, setSelectedTransaction] = useState<TransactionType | null>(null);
 
   const fetchTransactions = async () => {
     if (!selectedSafe) return;
@@ -62,9 +65,17 @@ export default function TreasuryReportPage() {
     }
   }, [selectedSafe, fromDate, toDate, transactionType]);
 
-  const totalDebit = transactions.reduce((sum, t) => sum + t.debit, 0);
-  const totalCredit = transactions.reduce((sum, t) => sum + t.credit, 0);
-  const currentBalance = openingBalance + totalDebit - totalCredit;
+  const { totalDebit, totalCredit, currentBalance, receiptsTotal, paymentsTotal, transfersTotal } = useMemo(() => {
+    let totalDebit = 0, totalCredit = 0, receiptsTotal = 0, paymentsTotal = 0, transfersTotal = 0;
+    transactions.forEach(t => {
+      totalDebit += t.debit;
+      totalCredit += t.credit;
+      if (t.type === 'سند قبض') receiptsTotal += t.debit;
+      if (t.type === 'سند صرف') paymentsTotal += t.credit;
+      if (t.type === 'تحويل وارد') transfersTotal += t.debit;
+    });
+    return { totalDebit, totalCredit, currentBalance: openingBalance + totalDebit - totalCredit, receiptsTotal, paymentsTotal, transfersTotal };
+  }, [transactions, openingBalance]);
 
   return (
     <div className="flex flex-col gap-6 p-2 md:p-6 max-w-[1600px] mx-auto min-h-screen">
@@ -155,56 +166,39 @@ export default function TreasuryReportPage() {
       </div>
 
       {/* Summary Cards */}
-      {selectedSafe && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 print:hidden">
-          <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-100 dark:border-slate-800 flex items-center gap-4 group">
-            <div className="w-12 h-12 rounded-xl bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-600 transition-all">
-              <HistoryIcon className="w-6 h-6" />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4 print:hidden">
+        {[
+          { label: 'الرصيد السابق', value: openingBalance, icon: HistoryIcon, color: 'text-slate-600', bg: 'bg-slate-100' },
+          { label: 'إجمالي المدين', value: totalDebit, icon: ArrowUpRight, color: 'text-emerald-600', bg: 'bg-emerald-100' },
+          { label: 'إجمالي الدائن', value: totalCredit, icon: ArrowDownLeft, color: 'text-rose-600', bg: 'bg-rose-100' },
+          { label: 'الرصيد الحالي', value: currentBalance, icon: Wallet, color: 'text-blue-600', bg: 'bg-blue-100' },
+          { label: 'عدد الحركات', value: transactions.length, icon: Activity, color: 'text-purple-600', bg: 'bg-purple-100', isCount: true },
+          { label: 'سندات القبض', value: receiptsTotal, icon: Receipt, color: 'text-amber-600', bg: 'bg-amber-100' },
+          { label: 'سندات الصرف', value: paymentsTotal, icon: TrendingUp, color: 'text-indigo-600', bg: 'bg-indigo-100' },
+        ].map((item, idx) => (
+          <div key={idx} className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between mb-2">
+              <div className={`p-2 rounded-lg ${item.bg} bg-opacity-50 dark:bg-opacity-10`}>
+                <item.icon className={`w-5 h-5 ${item.color}`} />
+              </div>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">موجز</span>
             </div>
-            <div>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">الرصيد الافتتاحي</p>
-              <h3 className="text-lg font-black text-slate-900 dark:text-white">{openingBalance.toLocaleString('ar-EG')}</h3>
-            </div>
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{item.label}</p>
+            <p className={`text-xl font-bold mt-1 ${item.color}`}>
+              {item.isCount ? item.value : item.value.toLocaleString('ar-EG')}
+              {!item.isCount && <span className="text-xs font-normal"> {companySettings?.currencyCode || 'ج.م'}</span>}
+            </p>
           </div>
-
-          <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-100 dark:border-slate-800 flex items-center gap-4 group">
-            <div className="w-12 h-12 rounded-xl bg-emerald-50 dark:bg-emerald-900/10 flex items-center justify-center text-emerald-600 group-hover:scale-110 transition-transform">
-              <ArrowDownLeft className="w-6 h-6" />
-            </div>
-            <div>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">إجمالي المقبوضات</p>
-              <h3 className="text-lg font-black text-emerald-600">{totalDebit.toLocaleString('ar-EG')}</h3>
-            </div>
-          </div>
-
-          <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-100 dark:border-slate-800 flex items-center gap-4 group">
-            <div className="w-12 h-12 rounded-xl bg-rose-50 dark:bg-rose-900/10 flex items-center justify-center text-rose-600 group-hover:scale-110 transition-transform">
-              <ArrowUpRight className="w-6 h-6" />
-            </div>
-            <div>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">إجمالي المدفوعات</p>
-              <h3 className="text-lg font-black text-rose-600">{totalCredit.toLocaleString('ar-EG')}</h3>
-            </div>
-          </div>
-
-          <div className="bg-slate-900 dark:bg-blue-600 p-5 rounded-2xl flex items-center gap-4 shadow-xl shadow-blue-500/10 transition-transform hover:scale-[1.02]">
-            <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center text-white">
-              <Wallet className="w-6 h-6" />
-            </div>
-            <div>
-              <p className="text-[10px] font-bold text-white/50 uppercase tracking-wider">الرصيد الحالي</p>
-              <h3 className="text-lg font-black text-white">{currentBalance.toLocaleString('ar-EG')}</h3>
-            </div>
-          </div>
-        </div>
-      )}
+        ))}
+      </div>
 
       {/* Transactions Table */}
       {selectedSafe ? (
         <LedgerTable 
           transactions={transactions} 
           openingBalance={openingBalance} 
-          isLoading={isLoading} 
+          isLoading={isLoading}
+          onViewDetails={setSelectedTransaction}
         />
       ) : (
         <div className="bg-white dark:bg-slate-900 rounded-3xl border-2 border-dashed border-slate-200 dark:border-slate-800 py-32 flex flex-col items-center justify-center gap-4 text-center print:hidden">
@@ -235,6 +229,12 @@ export default function TreasuryReportPage() {
           showStamp={companySettings?.showStampOnPrint}
         />
       )}
+
+      <TransactionModal
+        transaction={selectedTransaction}
+        companySettings={companySettings}
+        onClose={() => setSelectedTransaction(null)}
+      />
     </div>
   );
 }

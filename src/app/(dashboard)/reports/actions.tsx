@@ -307,8 +307,8 @@ export async function getSupplierTransactions(
       documentId: `${settings?.purchasePrefix || 'PUR'}-${String(inv.invoiceNumber).padStart(4, "0")}`,
       description: inv.description || (inv.status === 'pending' ? `مسودة فاتورة شراء من المورد ${inv.supplierName}` : `فاتورة شراء من المورد ${inv.supplierName}`),
       paymentMethod: inv.status === 'cash' ? 'نقدي' : inv.status === 'credit' ? 'آجل' : 'معلقة',
-      debit: 0,
-      credit: inv.status === 'pending' ? 0 : inv.total,
+      debit: inv.status === 'pending' ? 0 : inv.total,
+      credit: 0,
     }));
 
     // تحويل سندات الصرف

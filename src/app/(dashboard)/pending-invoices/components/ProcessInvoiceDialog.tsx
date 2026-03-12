@@ -87,7 +87,7 @@ export function ProcessInvoiceDialog({
         ? await finalizeSalesInvoice(invoice.id, paymentData as any)
         : await finalizePurchaseInvoice(invoice.id, paymentData as any);
 
-      if (result.success) {
+      if ((result as any).success) {
         toast.success("تم تأكيد الفاتورة بنجاح");
         onSuccess();
         onClose();

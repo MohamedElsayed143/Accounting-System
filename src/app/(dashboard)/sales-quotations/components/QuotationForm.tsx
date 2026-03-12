@@ -245,8 +245,7 @@ export function QuotationForm({ quotationId, readOnly, onBack }: QuotationFormPr
         topNotes,
         notes,
         items: items.map(({ description, quantity, price, taxRate, discount, total, productId }) => {
-          if (!productId) throw new Error("يجب اختيار منتج لكل صنف");
-          return { productId, description, quantity, unitPrice: price, taxRate, discount, total };
+          return { productId: productId || null, description, quantity, unitPrice: price, taxRate, discount, total };
         }),
       };
 
@@ -414,7 +413,7 @@ export function QuotationForm({ quotationId, readOnly, onBack }: QuotationFormPr
             <Card className="border-none shadow-sm overflow-hidden">
               <CardHeader className="bg-white border-b py-4">
                 <CardTitle className="text-base font-bold flex items-center gap-2">
-                  <div className="w-2 h-6 bg-orange-500 rounded-full" /> تفاصيل الأصناف
+                  <div className="w-2 h-6 bg-orange-500 rounded-full" /> تفاصيل البنود
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-0 bg-white">
@@ -423,7 +422,6 @@ export function QuotationForm({ quotationId, readOnly, onBack }: QuotationFormPr
                   onAddItem={addItem}
                   onRemoveItem={removeItem}
                   onUpdateItem={updateItem}
-                  disabled={false}
                   readOnly={isViewMode}
                 />
               </CardContent>
