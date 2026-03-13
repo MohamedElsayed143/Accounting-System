@@ -42,6 +42,7 @@ export interface PurchaseInvoice {
   returnsCount?: number;
   returnsTotal?: number;
   netTotal?: number;
+  printableTitle?: string;
 }
 
 // ─── جلب كل الفواتير مع عدد المرتجعات وقيمتها ─────────────────────────────
@@ -53,7 +54,7 @@ export async function getPurchaseInvoices() {
   if (!canView) return [];
 
   const invoices = await prisma.purchaseInvoice.findMany({
-    orderBy: { invoiceNumber: "desc" },
+    orderBy: { invoiceDate: "desc" },
     include: {
       items: true,
       purchaseReturns: {
@@ -144,6 +145,7 @@ export async function createPurchaseInvoice(data: {
   topNotes?: string[];
   notes?: string[];
   dueDate?: string;
+  printableTitle?: string;
 }) {
   const user_session = await getSession();
   if (!user_session) throw new Error("يجب تسجيل الدخول أولاً");
@@ -182,7 +184,7 @@ export async function createPurchaseInvoice(data: {
         invoiceNumber: data.invoiceNumber,
         supplierId: data.supplierId,
         supplierName: data.supplierName,
-        dueDate: (data as any).dueDate ? new Date((data as any).dueDate) : null,
+        dueDate: data.dueDate ? new Date(data.dueDate) : null,
         invoiceDate: new Date(data.invoiceDate),
         subtotal: data.subtotal,
         totalTax: data.totalTax,
@@ -191,6 +193,7 @@ export async function createPurchaseInvoice(data: {
         status: data.status,
         safeId: (data.status === "cash" && data.safeId) ? data.safeId : null,
         bankId: (data.status === "cash" && data.bankId) ? data.bankId : null,
+        printableTitle: data.printableTitle,
         topNotes: data.topNotes || [],
         notes: data.notes || [],
         items: {
@@ -316,6 +319,7 @@ export async function updatePurchaseInvoice(
     topNotes?: string[];
     notes?: string[];
     dueDate?: string;
+    printableTitle?: string;
   }
 ) {
   const session = await getSession();
@@ -323,11 +327,7 @@ export async function updatePurchaseInvoice(
 
   const pendingAlerts: { type: 'treasury' | 'stock', name: string, value: number, limit?: number }[] = [];
 
-  const canEdit = await hasPermission(session.userId, "purchase_view"); // Assuming view is needed to edit, or add purchase_edit if we had it
-  // In the plan, we only used purchase_view and purchase_create.
-  // Let's check permissions.ts to see if I added purchase_edit. 
-  // I didn't add purchase_edit specifically in the initial list, let's assume views can see.
-  // Actually, I should probably check purchase_create for edit too?
+  const canEdit = await hasPermission(session.userId, "purchase_create");
   if (!canEdit) throw new Error("ليس لديك صلاحية تعديل فواتير مشتريات");
 
   if (!data.supplierId) throw new Error("يجب اختيار المورد أولاً");
@@ -438,7 +438,7 @@ export async function updatePurchaseInvoice(
         invoiceNumber: data.invoiceNumber,
         supplierId: data.supplierId,
         supplierName: data.supplierName,
-        dueDate: (data as any).dueDate ? new Date((data as any).dueDate) : null,
+        dueDate: data.dueDate ? new Date(data.dueDate) : null,
         invoiceDate: new Date(data.invoiceDate),
         subtotal: data.subtotal,
         totalTax: data.totalTax,
@@ -447,6 +447,7 @@ export async function updatePurchaseInvoice(
         status: data.status,
         safeId: (data.status === "cash" && data.safeId) ? data.safeId : null,
         bankId: (data.status === "cash" && data.bankId) ? data.bankId : null,
+        printableTitle: data.printableTitle,
         topNotes: data.topNotes || [],
         notes: data.notes || [],
         items: {
@@ -596,6 +597,25 @@ export async function deletePurchaseInvoice(id: number) {
         }
       }
     }
+
+    // تحقق من وجود معاملات مرتبطة
+    const relatedVouchers = await prisma.paymentVoucher.count({
+      where: { bankId: invoice?.bankId || -1 } // Use a placeholder if bankId is null
+    });
+
+    const relatedReceipts = await prisma.receiptVoucher.count({
+      where: { bankId: invoice?.bankId || -1 }
+    });
+
+    const relatedSalesInvoices = await prisma.salesInvoice.count({
+      where: { bankId: invoice?.bankId || -1, status: 'cash' }
+    });
+
+    const relatedPurchaseInvoices = await prisma.purchaseInvoice.count({
+      where: { bankId: invoice?.bankId || -1, status: 'cash' }
+    });
+
+    const hasTransactions = relatedVouchers > 0 || relatedReceipts > 0 || relatedSalesInvoices > 0 || relatedPurchaseInvoices > 0;
 
     await tx.stockMovement.deleteMany({ where: { purchaseInvoiceId: id } });
     const deletedInvoice = await tx.purchaseInvoice.delete({ where: { id: id } });

@@ -3,7 +3,8 @@
 
 import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
-import { Plus, Eye, Trash2, AlertTriangle, CheckCircle2, ShieldCheck, ShieldAlert } from "lucide-react";
+import { Plus, Trash2, AlertTriangle, ShieldCheck, ShieldAlert } from "lucide-react";
+
 import { Navbar } from "@/components/layout/navbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -35,6 +36,8 @@ import { ProcessInvoiceDialog } from "../pending-invoices/components/ProcessInvo
 import { usePermissions } from "@/hooks/use-permissions";
 import { toast } from "sonner";
 import { PasswordProtectionGate } from "@/components/shared/PasswordProtectionGate";
+import { useManagementMode } from "@/hooks/use-management-mode";
+
 
 interface InvoiceRow {
   id: number;
@@ -87,8 +90,9 @@ export default function SalesInvoicesPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [invoiceToDelete, setInvoiceToDelete] = useState<InvoiceRow | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [isManagementActive, setIsManagementActive] = useState(false);
+  const { isManagementActive, toggleManagementMode } = useManagementMode();
   const [isPassGateOpen, setIsPassGateOpen] = useState(false);
+
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
   const [prefix, setPrefix] = useState<string>("INV");
   const router = useRouter();
@@ -187,7 +191,7 @@ export default function SalesInvoicesPage() {
               variant={isManagementActive ? "destructive" : "outline"}
               onClick={() => {
                 if (isManagementActive) {
-                  setIsManagementActive(false);
+                  toggleManagementMode(false);
                   toast.info("تم إغلاق وضع الإدارة");
                 } else {
                   setIsPassGateOpen(true);
@@ -270,10 +274,8 @@ export default function SalesInvoicesPage() {
                           <TableHead className="font-bold text-center whitespace-nowrap">
                             المرتجعات
                           </TableHead>
-                          <TableHead className="font-bold text-center whitespace-nowrap">
-                            الإجراءات
-                          </TableHead>
                         </TableRow>
+
                       </TableHeader>
                       <TableBody>
                         {paginatedInvoices.map((invoice, index) => (
@@ -323,53 +325,8 @@ export default function SalesInvoicesPage() {
                                 <span className="text-muted-foreground text-sm">لا يوجد</span>
                               )}
                             </TableCell>
-                            <TableCell className="text-center">
-                              <div className="flex justify-center gap-2">
-                                {isManagementActive ? (
-                                  <>
-                                    {hasPermission("sales_edit") && (
-                                      <Link
-                                        href={`/sales-invoices/create?id=${invoice.id}`}
-                                      >
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          className="hover:bg-primary/10 transition-all"
-                                          title="عرض وتعديل"
-                                        >
-                                          <Eye className="h-4 w-4 text-primary" />
-                                        </Button>
-                                      </Link>
-                                    )}
-                                    {hasPermission("sales_delete") && (
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        onClick={() => openDeleteDialog(invoice)}
-                                        className="hover:bg-destructive/10 transition-all"
-                                        title="حذف"
-                                      >
-                                        <Trash2 className="h-4 w-4 text-destructive" />
-                                      </Button>
-                                    )}
-                                    {invoice.status === 'pending' && (
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        onClick={() => setSelectedInvoice(invoice)}
-                                        className="hover:bg-orange-100 text-orange-600 transition-all"
-                                        title="تأكيد وحفظ"
-                                      >
-                                        <CheckCircle2 className="h-4 w-4" />
-                                      </Button>
-                                    )}
-                                  </>
-                                ) : (
-                                  <span className="text-[10px] text-muted-foreground italic">محمي</span>
-                                )}
-                              </div>
-                            </TableCell>
                           </TableRow>
+
                         ))}
                       </TableBody>
                     </Table>
@@ -471,8 +428,9 @@ export default function SalesInvoicesPage() {
       <PasswordProtectionGate
         isOpen={isPassGateOpen}
         onClose={() => setIsPassGateOpen(false)}
-        onSuccess={() => setIsManagementActive(true)}
+        onSuccess={() => toggleManagementMode(true)}
       />
+
     </>
   );
 }

@@ -2,7 +2,8 @@
 
 import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
-import { Plus, Eye, Trash2, AlertTriangle, CheckCircle2, ShieldCheck, ShieldAlert } from "lucide-react";
+import { Plus, Trash2, AlertTriangle, ShieldCheck, ShieldAlert } from "lucide-react";
+
 import { Navbar } from "@/components/layout/navbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -34,6 +35,8 @@ import { ProcessInvoiceDialog } from "../pending-invoices/components/ProcessInvo
 import { usePermissions } from "@/hooks/use-permissions";
 import { toast } from "sonner";
 import { PasswordProtectionGate } from "@/components/shared/PasswordProtectionGate";
+import { useManagementMode } from "@/hooks/use-management-mode";
+
 
 const ITEMS_PER_PAGE = 8;
 
@@ -78,8 +81,9 @@ export default function PurchaseInvoicesPage() {
   );
   const [deleting, setDeleting] = useState(false);
   const [prefix, setPrefix] = useState<string>("PUR");
-  const [isManagementActive, setIsManagementActive] = useState(false);
+  const { isManagementActive, toggleManagementMode } = useManagementMode();
   const [isPassGateOpen, setIsPassGateOpen] = useState(false);
+
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
   const router = useRouter();
   const { hasPermission, isAdmin, loading: permsLoading } = usePermissions();
@@ -162,7 +166,7 @@ export default function PurchaseInvoicesPage() {
   return (
     <>
       <Navbar title="فواتير المشتريات" />
-      <div className="flex-1 space-y-6 p-6">
+      <div className="flex-1 space-y-6 p-6" dir="rtl">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-2xl font-bold tracking-tight bg-gradient-to-l from-foreground to-foreground/70 bg-clip-text text-transparent">
@@ -177,7 +181,7 @@ export default function PurchaseInvoicesPage() {
               variant={isManagementActive ? "destructive" : "outline"}
               onClick={() => {
                 if (isManagementActive) {
-                  setIsManagementActive(false);
+                  toggleManagementMode(false);
                   toast.info("تم إغلاق وضع الإدارة");
                 } else {
                   setIsPassGateOpen(true);
@@ -261,10 +265,8 @@ export default function PurchaseInvoicesPage() {
                           <TableHead className="font-bold text-center whitespace-nowrap">
                             المرتجعات
                           </TableHead>
-                          <TableHead className="font-bold text-center whitespace-nowrap">
-                            الإجراءات
-                          </TableHead>
                         </TableRow>
+
                       </TableHeader>
                       <TableBody>
                         {paginatedInvoices.map((invoice, index) => (
@@ -314,53 +316,8 @@ export default function PurchaseInvoicesPage() {
                                 <span className="text-muted-foreground text-sm">لا يوجد</span>
                               )}
                             </TableCell>
-                            <TableCell className="text-center">
-                              <div className="flex justify-center gap-2">
-                                {isManagementActive ? (
-                                  <>
-                                    {hasPermission("purchase_view") && (
-                                      <Link
-                                        href={`/purchase-invoices/create?id=${invoice.id}`}
-                                      >
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          className="hover:bg-primary/10 transition-all"
-                                          title="تعديل"
-                                        >
-                                          <Eye className="h-4 w-4 text-primary" />
-                                        </Button>
-                                      </Link>
-                                    )}
-                                    {isAdmin && (
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        onClick={() => openDeleteDialog(invoice)}
-                                        className="hover:bg-destructive/10 transition-all"
-                                        title="حذف"
-                                      >
-                                        <Trash2 className="h-4 w-4 text-destructive" />
-                                      </Button>
-                                    )}
-                                    {invoice.status === 'pending' && (
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        onClick={() => setSelectedInvoice(invoice)}
-                                        className="hover:bg-orange-100 text-orange-600 transition-all"
-                                        title="تأكيد وحفظ"
-                                      >
-                                        <CheckCircle2 className="h-4 w-4" />
-                                      </Button>
-                                    )}
-                                  </>
-                                ) : (
-                                  <span className="text-[10px] text-muted-foreground italic">محمي</span>
-                                )}
-                              </div>
-                            </TableCell>
                           </TableRow>
+
                         ))}
                       </TableBody>
                     </Table>
@@ -462,8 +419,9 @@ export default function PurchaseInvoicesPage() {
       <PasswordProtectionGate
         isOpen={isPassGateOpen}
         onClose={() => setIsPassGateOpen(false)}
-        onSuccess={() => setIsManagementActive(true)}
+        onSuccess={() => toggleManagementMode(true)}
       />
+
     </>
   );
 }

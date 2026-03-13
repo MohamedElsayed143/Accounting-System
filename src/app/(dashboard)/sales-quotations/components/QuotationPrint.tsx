@@ -42,21 +42,26 @@ export const QuotationPrint = React.forwardRef<HTMLDivElement, QuotationPrintPro
     showStamp = true,
   }, ref) => {
     return (
-      <div ref={ref} className="hidden print:block bg-white text-slate-800 p-4" dir="rtl">
+      <div ref={ref} className="hidden print:block bg-white text-slate-800 w-full" dir="rtl">
         <style dangerouslySetInnerHTML={{ __html: `
-          @page {
-            size: A4;
-            margin: 15mm;
-          }
           @media print {
-            body { -webkit-print-color-adjust: exact; }
-            .avoid-break { break-inside: avoid; }
+            .print\\:block {
+              width: 100% !important;
+              position: absolute;
+              top: 0;
+              left: 0;
+              margin: 0;
+              padding: 0;
+            }
+            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .avoid-break { break-inside: avoid; page-break-inside: avoid; }
           }
           .custom-table th { background-color: #f8fafc !important; color: #475569 !important; border-bottom: 2px solid #e2e8f0; }
           .total-card { background-color: #f1f5f9 !important; border: 2px solid #334155 !important; }
         `}} />
 
-        {/* ─── Header ─── */}
+        <div className="p-[15mm] max-w-full mx-auto">
+          {/* ─── Header ─── */}
         <div className="flex justify-between items-center border-b-2 border-slate-100 pb-6 mb-8 avoid-break">
           <div className="flex items-center gap-5">
             {showLogo && companyLogo && (
@@ -209,6 +214,7 @@ export const QuotationPrint = React.forwardRef<HTMLDivElement, QuotationPrintPro
           <p className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.3em]">
             شكراً لثقتكم بنا • {companyNameEn}
           </p>
+        </div>
         </div>
       </div>
     );

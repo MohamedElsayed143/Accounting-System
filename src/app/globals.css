@@ -125,3 +125,35 @@
 nextjs-portal {
   display: none !important;
 }
+
+/* Global Print Layout Resets */
+@media print {
+  /* Reset body and html */
+  html, body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+    min-height: auto !important;
+    height: auto !important;
+  }
+
+  /* Reset the SidebarInset and App layout wrappers */
+  main, div[data-slot="sidebar-inset"], div[data-slot="sidebar-wrapper"] {
+    margin: 0 !important;
+    padding: 0 !important;
+    min-height: auto !important;
+    height: auto !important;
+    box-shadow: none !important;
+    background: white !important;
+    border: none !important;
+    /* Ensure no flex growing pushes content */
+    flex: none !important;
+    display: block !important;
+  }
+
+  /* Force the A4 page size at the root level */
+  @page {
+    size: A4;
+    margin: 0; /* Remove browser default headers/footers margin */
+  }
+}

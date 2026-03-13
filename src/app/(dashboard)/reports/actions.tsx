@@ -222,8 +222,8 @@ export async function getCustomerTransactions(
     // دمج جميع المعاملات
     let allTransactions = [...invoiceTransactions, ...receiptTransactions, ...returnTransactions];
 
-    // ترتيب تصاعدي حسب التاريخ
-    allTransactions.sort((a, b) => a.date.getTime() - b.date.getTime());
+    // ترتيب تنازلي حسب التاريخ (الأحدث أولاً)
+    allTransactions.sort((a, b) => b.date.getTime() - a.date.getTime());
 
     // فلترة حسب النوع إذا طلب (بدون خيار "مرتجعات" في الفلتر)
     if (type && type !== 'الكل') {
@@ -340,8 +340,8 @@ export async function getSupplierTransactions(
     // دمج جميع المعاملات
     let allTransactions = [...invoiceTransactions, ...paymentTransactions, ...returnTransactions];
 
-    // ترتيب تصاعدي حسب التاريخ
-    allTransactions.sort((a, b) => a.date.getTime() - b.date.getTime());
+    // ترتيب تنازلي حسب التاريخ (الأحدث أولاً)
+    allTransactions.sort((a, b) => b.date.getTime() - a.date.getTime());
 
     if (type && type !== 'الكل') {
       const typeMap: Record<string, string> = {
@@ -631,6 +631,9 @@ export async function getAccountTransactions(
       currentBalance += (t.debit - t.credit);
       return { ...t, runningBalance: currentBalance };
     });
+
+    // عكس القائمة لتصبح الأحدث أولاً بعد حساب الرصيد التراكمي
+    allTransactions.reverse();
 
     return { transactions: allTransactions, openingBalance };
   } catch (error) {

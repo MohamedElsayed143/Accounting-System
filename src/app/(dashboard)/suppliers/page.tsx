@@ -40,6 +40,8 @@ import {
 import { toast } from "sonner";
 import { PasswordProtectionGate } from "@/components/shared/PasswordProtectionGate";
 import { ShieldCheck, ShieldAlert } from "lucide-react";
+import { useManagementMode } from "@/hooks/use-management-mode";
+
 
 /* ✅ استيراد الـ Server Actions */
 import {
@@ -67,8 +69,9 @@ export default function SuppliersPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
   const [deleteSupplier, setDeleteSupplier] = useState<Supplier | null>(null);
-  const [isManagementActive, setIsManagementActive] = useState(false);
+  const { isManagementActive, toggleManagementMode } = useManagementMode();
   const [isPassGateOpen, setIsPassGateOpen] = useState(false);
+
 
   const [formData, setFormData] = useState({
     code: 0,
@@ -255,7 +258,7 @@ export default function SuppliersPage() {
               variant={isManagementActive ? "destructive" : "outline"}
               onClick={() => {
                 if (isManagementActive) {
-                  setIsManagementActive(false);
+                  toggleManagementMode(false);
                   toast.info("تم إغلاق وضع الإدارة");
                 } else {
                   setIsPassGateOpen(true);
@@ -631,8 +634,9 @@ export default function SuppliersPage() {
         <PasswordProtectionGate
           isOpen={isPassGateOpen}
           onClose={() => setIsPassGateOpen(false)}
-          onSuccess={() => setIsManagementActive(true)}
+          onSuccess={() => toggleManagementMode(true)}
         />
+
       </div>
     </>
   );

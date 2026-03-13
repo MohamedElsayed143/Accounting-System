@@ -43,6 +43,8 @@ import {
 import { toast } from "sonner";
 import TransferDialog from "./components/TransferDialog";
 import { usePermissions } from "@/hooks/use-permissions";
+import { useManagementMode } from "@/hooks/use-management-mode";
+
 
 // تعريف نوع المعاملات
 interface Transaction {
@@ -85,9 +87,11 @@ export default function TreasuryPage() {
   } | null>(null);
   const [isArchiving, setIsArchiving] = useState(false);
   const [showTransfer, setShowTransfer] = useState(false);
-  const [isManagementActive, setIsManagementActive] = useState(false);
+  const { isManagementActive, toggleManagementMode } = useManagementMode();
   const [isPassGateOpen, setIsPassGateOpen] = useState(false);
   const { hasPermission, isAdmin } = usePermissions();
+
+
 
   const loadData = () => {
     getTreasuryData().then(setData);
@@ -190,12 +194,13 @@ export default function TreasuryPage() {
                 variant={isManagementActive ? "destructive" : "outline"}
                 onClick={() => {
                   if (isManagementActive) {
-                    setIsManagementActive(false);
+                    toggleManagementMode(false);
                     toast.info("تم إغلاق وضع الإدارة");
                   } else {
                     setIsPassGateOpen(true);
                   }
                 }}
+
                 className="gap-2 border-dashed border-2 transition-all"
               >
                 {isManagementActive ? (
@@ -599,10 +604,7 @@ export default function TreasuryPage() {
       <PasswordProtectionGate
         isOpen={isPassGateOpen}
         onClose={() => setIsPassGateOpen(false)}
-        onSuccess={() => {
-            setIsManagementActive(true);
-            toast.success("تم تفعيل وضع الإدارة بنجاح");
-        }}
+        onSuccess={() => toggleManagementMode(true)}
       />
     </>
   );

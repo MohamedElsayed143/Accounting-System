@@ -139,9 +139,9 @@ export async function createSalesInvoice(data: {
     total: number;
     productId: number;
   }[];
-  topNotes?: string[];
   notes?: string[];
   dueDate?: string;
+  printableTitle?: string;
 }) {
   const session = await getSession();
   if (!session) throw new Error("يجب تسجيل الدخول أولاً");
@@ -202,8 +202,9 @@ export async function createSalesInvoice(data: {
         ...(data as any),
         safeId: safeIdVal,
         bankId: bankIdVal,
+        printableTitle: data.printableTitle,
         invoiceDate: new Date(data.invoiceDate),
-        dueDate: (data as any).dueDate ? new Date((data as any).dueDate) : null,
+        dueDate: data.dueDate ? new Date(data.dueDate) : null,
         items: {
           create: data.items.map((item) => ({
             description: item.description,
@@ -341,6 +342,7 @@ export async function updateSalesInvoice(
     topNotes?: string[];
     notes?: string[];
     dueDate?: string;
+    printableTitle?: string;
   }
 ) {
   const session = await getSession();
@@ -462,8 +464,9 @@ export async function updateSalesInvoice(
         ...(data as any),
         safeId: safeIdVal,
         bankId: bankIdVal,
+        printableTitle: data.printableTitle,
         invoiceDate: new Date(data.invoiceDate),
-        dueDate: (data as any).dueDate ? new Date((data as any).dueDate) : null,
+        dueDate: data.dueDate ? new Date(data.dueDate) : null,
         items: {
           deleteMany: {},
           create: data.items.map((item) => ({

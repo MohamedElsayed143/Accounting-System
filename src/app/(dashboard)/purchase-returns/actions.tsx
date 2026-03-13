@@ -102,6 +102,44 @@ export async function createPurchaseReturn(data: PurchaseReturnInput) {
     });
     if (!invoice) throw new Error("فاتورة الشراء غير موجودة");
 
+    // ✅ التحقق من الكميات عبر مرتجعات سابقة
+    const previousReturns = await prisma.purchaseReturn.findMany({
+      where: { invoiceId: data.invoiceId },
+      include: { items: true },
+    });
+
+    // حساب إجمالي المرتجعات لكل صنف سابقاً
+    const previousReturnsByItem = new Map<number, number>();
+    previousReturns.forEach(ret => {
+      ret.items.forEach(item => {
+        if (item.invoiceItemId) {
+          const current = previousReturnsByItem.get(item.invoiceItemId) || 0;
+          previousReturnsByItem.set(item.invoiceItemId, current + item.quantity);
+        }
+      });
+    });
+
+    // التحقق من أن الكمية المرتجعة لكل صنف لا تتجاوز الكمية المتاحة
+    for (const returnItem of data.items) {
+      if (!returnItem.invoiceItemId) continue;
+      const originalItem = invoice.items.find(item => item.id === returnItem.invoiceItemId);
+      if (!originalItem) {
+        throw new Error(`الصنف غير موجود في فاتورة الشراء الأصلية`);
+      }
+      const returnedSoFar = previousReturnsByItem.get(returnItem.invoiceItemId) || 0;
+      const available = originalItem.quantity - returnedSoFar;
+      if (returnItem.quantity > available) {
+        throw new Error(`الكمية المرتجعة للصنف "${originalItem.description}" (${returnItem.quantity}) تتجاوز المتاح (${available})`);
+      }
+    }
+
+    // التحقق من أن قيمة المرتجع لا تتجاوز الرصيد المتبقي من الفاتورة
+    const previousReturnsTotal = previousReturns.reduce((sum, ret) => sum + ret.total, 0);
+    const availableTotal = invoice.total - previousReturnsTotal;
+    if (data.total > availableTotal) {
+      throw new Error(`إجمالي المرتجع (${data.total.toLocaleString()} ج.م) يتجاوز الرصيد المتبقي من الفاتورة (${availableTotal.toLocaleString()} ج.م)`);
+    }
+
     // التحقق من صحة طريقة الرد
     if (data.refundMethod === 'safe' && !data.safeId) {
       throw new Error("يجب اختيار الخزنة");
@@ -284,7 +322,7 @@ export async function deletePurchaseReturn(id: number) {
       }
 
       // 3. عكس حركة الخزنة/البنك (كان + قبض، سيصبح - صرف)
-      if (purchaseReturn.refundMethod === 'safe' && purchaseReturn.safeId) {
+      if ((purchaseReturn.refundMethod === 'safe' || purchaseReturn.refundMethod === 'cash') && purchaseReturn.safeId) {
         await tx.treasurySafe.update({
           where: { id: purchaseReturn.safeId },
           data: { balance: { decrement: purchaseReturn.total } },

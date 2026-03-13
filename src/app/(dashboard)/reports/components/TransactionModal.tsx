@@ -158,12 +158,9 @@ export function TransactionModal({
           >
             إغلاق
           </button>
-          <button 
-            onClick={() => window.print()}
-            className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
-          >
-            <Printer className="w-4 h-4" /> طباعة
-          </button>
+          
+            
+          
         </div>
       </div>
     </div>

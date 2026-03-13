@@ -1174,8 +1174,10 @@ export async function archiveSafe(safeId: number) {
     // تحقق من وجود معاملات
     const relatedVouchers = await prisma.paymentVoucher.count({ where: { safeId } });
     const relatedReceipts = await prisma.receiptVoucher.count({ where: { safeId } });
+    const relatedSalesInvoices = await prisma.salesInvoice.count({ where: { safeId, status: 'cash' } });
+    const relatedPurchaseInvoices = await prisma.purchaseInvoice.count({ where: { safeId, status: 'cash' } });
     
-    const hasTransactions = relatedVouchers > 0 || relatedReceipts > 0;
+    const hasTransactions = relatedVouchers > 0 || relatedReceipts > 0 || relatedSalesInvoices > 0 || relatedPurchaseInvoices > 0;
 
     if (!hasTransactions) {
       await prisma.treasurySafe.delete({ where: { id: safeId } });

@@ -7,12 +7,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface DynamicNotesProps {
+  title: string;
+  onTitleChange?: (title: string) => void;
   notes: string[];
   onChange: (notes: string[]) => void;
   disabled?: boolean;
 }
 
-export function DynamicNotes({ notes, onChange, disabled }: DynamicNotesProps) {
+export function DynamicNotes({ title, onTitleChange, notes, onChange, disabled }: DynamicNotesProps) {
   const addNote = () => {
     onChange([...notes, ""]);
   };
@@ -30,10 +32,20 @@ export function DynamicNotes({ notes, onChange, disabled }: DynamicNotesProps) {
 
   return (
     <Card className="border-none shadow-sm overflow-hidden">
-      <CardHeader className="bg-white border-b py-4 flex flex-row items-center justify-between">
-        <CardTitle className="text-base font-bold flex items-center gap-2">
-          <div className="w-2 h-6 bg-blue-500 rounded-full" /> ملاحظات إضافية
-        </CardTitle>
+      <CardHeader className="bg-white border-b py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="w-2 h-6 bg-blue-500 rounded-full shrink-0" />
+          {onTitleChange && !disabled ? (
+            <input
+              value={title}
+              onChange={(e) => onTitleChange(e.target.value)}
+              className="text-base font-bold bg-slate-50 border-none rounded px-2 py-1 focus:ring-2 focus:ring-blue-200 outline-none w-full"
+              placeholder="عنوان الملاحظات..."
+            />
+          ) : (
+            <CardTitle className="text-base font-bold">{title || "ملاحظات إضافية"}</CardTitle>
+          )}
+        </div>
         {!disabled && (
           <Button
             type="button"

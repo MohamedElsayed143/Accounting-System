@@ -78,6 +78,7 @@ export async function createQuotation(data: {
   total: number;
   topNotes?: string[];
   notes?: string[];
+  printableTitle?: string;
   items: {
     productId?: number | null;
     description: string;
@@ -115,6 +116,7 @@ export async function createQuotation(data: {
       total: data.total,
       topNotes: data.topNotes || [],
       notes: data.notes || [],
+      printableTitle: data.printableTitle,
       items: {
         create: data.items.map((item) => ({
           productId: item.productId || null,
@@ -146,6 +148,7 @@ export async function updateQuotation(
     total: number;
     topNotes?: string[];
     notes?: string[];
+    printableTitle?: string;
     items: {
       productId?: number | null;
       description: string;
@@ -182,6 +185,7 @@ export async function updateQuotation(
       total: data.total,
       topNotes: data.topNotes || [],
       notes: data.notes || [],
+      printableTitle: data.printableTitle,
       items: {
         deleteMany: {},
         create: data.items.map((item) => ({

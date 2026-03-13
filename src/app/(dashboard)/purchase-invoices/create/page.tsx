@@ -116,6 +116,8 @@ function InvoiceFormStep({
   const [settings, setSettings] = useState<any>(null);
   const [globalSettings, setGlobalSettings] = useState<any>(null);
   const [printableTitle, setPrintableTitle] = useState<string>("فاتورة مشتريات");
+  const [topNotesTitle, setTopNotesTitle] = useState<string>("ملاحظات هامة");
+  const [notesTitle, setNotesTitle] = useState<string>("ملاحظات إضافية");
 
   // بيانات المرتجعات
   const [returnsTotal, setReturnsTotal] = useState<number>(0);
@@ -344,8 +346,9 @@ function InvoiceFormStep({
         dueDate: (paymentType === "credit" || globalSettings?.showDueDateOnInvoices) ? dueDate : undefined,
         safeId: paymentType === "cash" && treasuryType === "safe" ? Number(selectedSafeId) : undefined,
         bankId: paymentType === "cash" && treasuryType === "bank" ? Number(selectedBankId) : undefined,
-        topNotes,
-        notes,
+        topNotes: { title: topNotesTitle, items: topNotes } as any,
+        notes: { title: notesTitle, items: notes } as any,
+        printableTitle,
         items: items.map(({ description, quantity, unitPrice, sellingPrice, profitMargin, taxRate, discount, total, productId }) => ({
           description,
           quantity,
@@ -398,7 +401,7 @@ function InvoiceFormStep({
   };
 
   return (
-    <div className="flex-1 space-y-6 p-6 bg-slate-50/50 min-h-screen" dir="rtl">
+    <div className="flex-1 space-y-6 p-6 print:p-0 print:space-y-0 print:bg-white bg-slate-50/50 min-h-screen print:min-h-0" dir="rtl">
       <div className="print:hidden flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <Button variant="outline" size="icon" onClick={onBack} className="rounded-full shadow-sm">
@@ -436,6 +439,8 @@ function InvoiceFormStep({
       <div className="print:hidden">
         <div className="mb-6">
           <DynamicNotes
+            title={topNotesTitle}
+            onTitleChange={setTopNotesTitle}
             notes={topNotes}
             onChange={setTopNotes}
             disabled={isViewMode}
@@ -508,6 +513,32 @@ function InvoiceFormStep({
                           <SelectItem value="pending">معلقة</SelectItem>
                         </SelectContent>
                       </Select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label className="text-slate-600 text-sm font-bold flex items-center gap-1">
+                        مسمى الفاتورة
+                      </Label>
+                      <Input
+                        value={printableTitle}
+                        onChange={(e) => setPrintableTitle(e.target.value)}
+                        disabled={isViewMode}
+                        className="bg-slate-50 border-slate-200 w-44 font-bold"
+                        placeholder="مثلاً: فاتورة مشتريات"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label className="text-slate-600 text-sm font-bold flex items-center gap-1">
+                        مسمى الفاتورة
+                      </Label>
+                      <Input
+                        value={printableTitle}
+                        onChange={(e) => setPrintableTitle(e.target.value)}
+                        disabled={isViewMode}
+                        className="bg-slate-50 border-slate-200 w-44 font-bold"
+                        placeholder="مثلاً: فاتورة مشتريات"
+                      />
                     </div>
 
                     <div className="space-y-1.5">
@@ -730,7 +761,13 @@ function InvoiceFormStep({
               </CardContent>
             </Card>
 
-            <DynamicNotes notes={notes} onChange={setNotes} disabled={isViewMode} />
+            <DynamicNotes 
+              title={notesTitle} 
+              onTitleChange={setNotesTitle} 
+              notes={notes} 
+              onChange={setNotes} 
+              disabled={isViewMode} 
+            />
           </div>
 
           <div className="space-y-6">
@@ -819,14 +856,18 @@ function InvoiceFormStep({
           description: item.description,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
+          discount: item.discount || 0,
           total: item.total
         }))}
         subtotal={subtotal}
+        discount={itemsDiscount + discount}
         tax={totalTax}
         total={netTotal}
         currencyCode={settings?.currencyCode}
         topNotes={topNotes}
+        topNotesTitle={topNotesTitle}
         notes={notes}
+        notesTitle={notesTitle}
         companyName={settings?.companyName}
         companyNameEn={settings?.companyNameEn}
         companyLogo={settings?.companyLogo}

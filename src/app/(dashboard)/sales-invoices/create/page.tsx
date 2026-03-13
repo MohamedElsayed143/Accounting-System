@@ -136,6 +136,8 @@ function InvoiceFormStep({
   const [notifSettings, setNotifSettings] = useState<any>(null);
   const [showZeroStock, setShowZeroStock] = useState(false);
   const [printableTitle, setPrintableTitle] = useState<string>("فاتورة مبيعات");
+  const [topNotesTitle, setTopNotesTitle] = useState<string>("ملاحظات هامة");
+  const [notesTitle, setNotesTitle] = useState<string>("ملاحظات إضافية");
 
   // قائمة جميع المنتجات
   const [products, setProducts] = useState<ProductData[]>([]);
@@ -205,8 +207,24 @@ function InvoiceFormStep({
                 stockBalance: item.product?.currentStock || 0,
               }));
                 setItems(formattedItems);
-              setTopNotes((invoice as any).topNotes || []);
-              setNotes((invoice as any).notes || []);
+              
+              // Handle topNotes (could be string[] or {title, items})
+              const rawTopNotes = (invoice as any).topNotes;
+              if (rawTopNotes && typeof rawTopNotes === 'object' && 'items' in rawTopNotes) {
+                setTopNotesTitle(rawTopNotes.title || "ملاحظات هامة");
+                setTopNotes(rawTopNotes.items || []);
+              } else {
+                setTopNotes(rawTopNotes || []);
+              }
+
+              // Handle bottom notes
+              const rawNotes = (invoice as any).notes;
+              if (rawNotes && typeof rawNotes === 'object' && 'items' in rawNotes) {
+                setNotesTitle(rawNotes.title || "ملاحظات إضافية");
+                setNotes(rawNotes.items || []);
+              } else {
+                setNotes(rawNotes || []);
+              }
             }
           }
         })
@@ -403,8 +421,9 @@ function InvoiceFormStep({
       dueDate: (paymentType === "credit" || notifSettings?.showDueDateOnInvoices) ? dueDate : undefined,
       safeId: (paymentType === "cash" && treasuryType === "safe" && selectedSafeId) ? Number(selectedSafeId) : undefined,
       bankId: (paymentType === "cash" && treasuryType === "bank" && selectedBankId) ? Number(selectedBankId) : undefined,
-      topNotes,
-      notes,
+      topNotes: { title: topNotesTitle, items: topNotes } as any,
+      notes: { title: notesTitle, items: notes } as any,
+      printableTitle,
       items: items.map(({ description, quantity, unitPrice, taxRate, discount, total, productId }) => {
         if (!productId) throw new Error("يجب اختيار منتج لكل صنف");
         return {
@@ -459,7 +478,7 @@ function InvoiceFormStep({
   };
 
   return (
-    <div className="flex-1 space-y-6 p-6 bg-slate-50/50 min-h-screen" dir="rtl">
+    <div className="flex-1 space-y-6 p-6 print:p-0 print:space-y-0 print:bg-white bg-slate-50/50 min-h-screen print:min-h-0" dir="rtl">
       <div className="print:hidden flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <Button
@@ -511,6 +530,8 @@ function InvoiceFormStep({
       <div className="print:hidden">
         <div className="mb-6">
           <DynamicNotes
+            title={topNotesTitle}
+            onTitleChange={setTopNotesTitle}
             notes={topNotes}
             onChange={setTopNotes}
             disabled={isViewMode}
@@ -585,6 +606,19 @@ function InvoiceFormStep({
                           <SelectItem value="pending">معلقة</SelectItem>
                         </SelectContent>
                       </Select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label className="text-slate-600 text-sm font-bold flex items-center gap-1">
+                        مسمى الفاتورة
+                      </Label>
+                      <Input
+                        value={printableTitle}
+                        onChange={(e) => setPrintableTitle(e.target.value)}
+                        disabled={isViewMode}
+                        className="bg-slate-50 border-slate-200 w-44 font-bold"
+                        placeholder="مثلاً: فاتورة مبيعات"
+                      />
                     </div>
 
                     <div className="space-y-1.5">
@@ -829,7 +863,13 @@ function InvoiceFormStep({
               </CardContent>
             </Card>
 
-            <DynamicNotes notes={notes} onChange={setNotes} disabled={isViewMode} />
+            <DynamicNotes 
+              title={notesTitle} 
+              onTitleChange={setNotesTitle} 
+              notes={notes} 
+              onChange={setNotes} 
+              disabled={isViewMode} 
+            />
           </div>
 
           <div className="space-y-6">
@@ -937,14 +977,18 @@ function InvoiceFormStep({
           description: i.description,
           quantity: i.quantity,
           unitPrice: i.unitPrice,
+          discount: i.discount || 0,
           total: i.total
         }))}
         subtotal={subtotal}
+        discount={itemsDiscount + discount}
         tax={totalTax}
         total={grandTotal}
         currencyCode={settings?.currencyCode}
         topNotes={topNotes}
+        topNotesTitle={topNotesTitle}
         notes={notes}
+        notesTitle={notesTitle}
         companyName={settings?.companyName}
         companyNameEn={settings?.companyNameEn}
         companyLogo={settings?.companyLogo}

@@ -40,15 +40,20 @@ export function PrintableStatement({
   const finalBalance = openingBalance + totalDebit - totalCredit;
 
   return (
-    <div className="hidden print:block bg-white text-slate-800 p-4" dir="rtl">
+    <div className="hidden print:block bg-white text-slate-800 w-full" dir="rtl">
       <style dangerouslySetInnerHTML={{ __html: `
-        @page {
-          size: A4;
-          margin: 12mm 15mm;
-        }
         @media print {
+          .print\\:block {
+            width: 100% !important;
+            max-width: 100% !important;
+            position: absolute;
+            top: 0;
+            left: 0;
+            margin: 0;
+            padding: 0;
+          }
           body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          .avoid-break { break-inside: avoid; }
+          .avoid-break { break-inside: avoid; page-break-inside: avoid; }
         }
         .stmt-table th {
           background-color: #1e293b !important;
@@ -70,25 +75,37 @@ export function PrintableStatement({
         .total-card { background-color: #f1f5f9 !important; border: 2px solid #334155 !important; }
       `}} />
 
-      {/* ─── Header ─── */}
-      <div className="flex justify-between items-center border-b-2 border-slate-100 pb-5 mb-6 avoid-break">
-        <div className="flex items-center gap-5">
-          {showLogo && companyLogo && (
-            <img src={companyLogo} alt="Logo" className="w-16 h-16 object-contain rounded-lg" />
-          )}
-          <div>
-            <h1 className="text-2xl font-black text-slate-900">{title}</h1>
-            <p className="text-sm font-bold text-slate-600">{companyName}</p>
-            <p className="text-xs text-slate-400 font-medium uppercase tracking-wider">{companyNameEn}</p>
+      <div className="p-[10mm] max-w-full mx-auto">
+        {/* ─── Header: Branding First ─── */}
+        <div className="flex justify-between items-start border-b-2 border-slate-100 pb-4 mb-5 avoid-break">
+          <div className="flex items-start gap-4">
+            {showLogo && companyLogo && (
+              <img src={companyLogo} alt="Logo" className="w-16 h-16 object-contain rounded-lg shrink-0" />
+            )}
+
+            <div className="pt-1">
+              <p className="text-base font-extrabold text-slate-800 leading-tight">{companyName}</p>
+              <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider mt-1">
+                {companyNameEn}
+              </p>
+
+              <div className="mt-2 space-y-0.5">
+                <p className="text-sm font-bold text-slate-700">كشف حساب</p>
+                <p className="text-[11px] text-slate-500 font-medium">
+                  بيان حركة: {accountName}
+                </p>
+                <p className="text-[11px] text-slate-500 font-medium">
+                  تاريخ الطباعة: {new Date().toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="text-left bg-slate-50 px-3 py-2 rounded-xl border border-slate-100 min-w-[120px]">
+            <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">نوع التقرير</div>
+            <div className="text-sm font-black text-slate-900">{title}</div>
           </div>
         </div>
-        <div className="text-left bg-slate-50 p-4 rounded-xl border border-slate-100">
-          <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">تاريخ الطباعة</div>
-          <div className="text-sm font-black text-slate-900">
-            {new Date().toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })}
-          </div>
-        </div>
-      </div>
 
       {/* ─── Info Grid ─── */}
       <div className="grid grid-cols-2 gap-5 mb-6 avoid-break">
@@ -232,6 +249,7 @@ export function PrintableStatement({
         <p style={{ fontSize: "10px", fontWeight: "700", color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.25em" }}>
           تَمَّ الإِصْدَارُ عَبْرَ {companyName} • {companyNameEn}
         </p>
+      </div>
       </div>
     </div>
   );

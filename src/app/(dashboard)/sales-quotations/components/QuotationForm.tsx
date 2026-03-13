@@ -69,6 +69,9 @@ export function QuotationForm({ quotationId, readOnly, onBack }: QuotationFormPr
   const [notes, setNotes] = useState<string[]>([]);
   const [currentStatus, setCurrentStatus] = useState<string>("Draft");
   const [companySettings, setCompanySettings] = useState<any>(null);
+  const [printableTitle, setPrintableTitle] = useState<string>("عرض سعر");
+  const [topNotesTitle, setTopNotesTitle] = useState<string>("ملاحظات هامة");
+  const [notesTitle, setNotesTitle] = useState<string>("ملاحظات إضافية");
 
   // تحميل رقم العرض التالي وإعدادات الشركة
   useEffect(() => {
@@ -115,8 +118,23 @@ export function QuotationForm({ quotationId, readOnly, onBack }: QuotationFormPr
               setItems(formattedItems);
             }
 
-            setTopNotes((quotation as any).topNotes || []);
-            setNotes((quotation as any).notes || []);
+            // Handle topNotes
+            const rawTopNotes = (quotation as any).topNotes;
+            if (rawTopNotes && typeof rawTopNotes === 'object' && 'items' in rawTopNotes) {
+              setTopNotesTitle(rawTopNotes.title || "ملاحظات هامة");
+              setTopNotes(rawTopNotes.items || []);
+            } else {
+              setTopNotes(rawTopNotes || []);
+            }
+
+            // Handle bottom notes
+            const rawNotes = (quotation as any).notes;
+            if (rawNotes && typeof rawNotes === 'object' && 'items' in rawNotes) {
+              setNotesTitle(rawNotes.title || "ملاحظات إضافية");
+              setNotes(rawNotes.items || []);
+            } else {
+              setNotes(rawNotes || []);
+            }
           }
         })
         .catch((error) => {
@@ -242,8 +260,9 @@ export function QuotationForm({ quotationId, readOnly, onBack }: QuotationFormPr
         totalTax,
         discount: globalDiscount,
         total: grandTotal,
-        topNotes,
-        notes,
+        topNotes: { title: topNotesTitle, items: topNotes } as any,
+        notes: { title: notesTitle, items: notes } as any,
+        printableTitle,
         items: items.map(({ description, quantity, price, taxRate, discount, total, productId }) => {
           return { productId: productId || null, description, quantity, unitPrice: price, taxRate, discount, total };
         }),
@@ -281,7 +300,7 @@ export function QuotationForm({ quotationId, readOnly, onBack }: QuotationFormPr
   }
 
   return (
-    <div className="flex-1 space-y-6 p-6 bg-slate-50/50 min-h-screen" dir="rtl">
+    <div className="flex-1 space-y-6 p-6 print:p-0 print:space-y-0 print:bg-white bg-slate-50/50 min-h-screen print:min-h-0" dir="rtl">
       {/* ─── العنوان والأزرار ─── */}
       <div className="print:hidden flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
@@ -317,6 +336,8 @@ export function QuotationForm({ quotationId, readOnly, onBack }: QuotationFormPr
       <div className="print:hidden">
         <div className="mb-6">
           <DynamicNotes
+            title={topNotesTitle}
+            onTitleChange={setTopNotesTitle}
             notes={topNotes}
             onChange={setTopNotes}
             disabled={isViewMode}
@@ -383,6 +404,19 @@ export function QuotationForm({ quotationId, readOnly, onBack }: QuotationFormPr
                       />
                     </div>
 
+                    <div className="space-y-1.5">
+                      <Label className="text-slate-600 text-sm font-bold flex items-center gap-1">
+                        مسمى العرض
+                      </Label>
+                      <Input
+                        value={printableTitle}
+                        onChange={(e) => setPrintableTitle(e.target.value)}
+                        disabled={isViewMode}
+                        className="bg-slate-50 border-slate-200 w-44 font-bold"
+                        placeholder="مثلاً: عرض سعر"
+                      />
+                    </div>
+
                     {/* Status (only in edit/view mode) */}
                     {quotationId && (
                       <div className="space-y-1.5">
@@ -428,7 +462,13 @@ export function QuotationForm({ quotationId, readOnly, onBack }: QuotationFormPr
             </Card>
 
             {/* الملاحظات */}
-            <DynamicNotes notes={notes} onChange={setNotes} disabled={isViewMode} />
+            <DynamicNotes 
+              title={notesTitle} 
+              onTitleChange={setNotesTitle} 
+              notes={notes} 
+              onChange={setNotes} 
+              disabled={isViewMode} 
+            />
           </div>
 
           {/* ─── ملخص العرض ─── */}
@@ -524,11 +564,12 @@ export function QuotationForm({ quotationId, readOnly, onBack }: QuotationFormPr
         date={quotationDate}
         partnerName={customer?.name || guestCustomerName || "عميل عام"}
         partnerLabel={customer ? `كود العميل: ${customer.code || "---"}` : "عرض سعر لعميل غير مسجل"}
-        title="عرض سعر"
+        title={printableTitle}
         items={items.map((item) => ({
           description: item.description,
           quantity: item.quantity,
           unitPrice: item.price,
+          discount: item.discount || 0,
           total: item.total,
         }))}
         subtotal={subtotal}
@@ -536,7 +577,9 @@ export function QuotationForm({ quotationId, readOnly, onBack }: QuotationFormPr
         tax={totalTax}
         total={grandTotal}
         topNotes={topNotes}
+        topNotesTitle={topNotesTitle}
         notes={notes}
+        notesTitle={notesTitle}
         companyName={companySettings?.companyName}
         companyNameEn={companySettings?.companyNameEn}
         companyLogo={companySettings?.companyLogo}

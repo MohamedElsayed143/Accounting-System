@@ -49,6 +49,8 @@ import {
   deleteCustomerAction,
 } from "./actions";
 import { usePermissions } from "@/hooks/use-permissions";
+import { useManagementMode } from "@/hooks/use-management-mode";
+
 
 interface Customer {
   id: number;
@@ -70,8 +72,9 @@ export default function CustomersPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [deleteCustomer, setDeleteCustomer] = useState<Customer | null>(null);
-  const [isManagementActive, setIsManagementActive] = useState(false);
+  const { isManagementActive, toggleManagementMode } = useManagementMode();
   const [isPassGateOpen, setIsPassGateOpen] = useState(false);
+
 
   const [formData, setFormData] = useState({
     code: 0,
@@ -257,7 +260,7 @@ export default function CustomersPage() {
               variant={isManagementActive ? "destructive" : "outline"}
               onClick={() => {
                 if (isManagementActive) {
-                  setIsManagementActive(false);
+                  toggleManagementMode(false);
                   toast.info("تم إغلاق وضع الإدارة");
                 } else {
                   setIsPassGateOpen(true);
@@ -615,8 +618,9 @@ export default function CustomersPage() {
         <PasswordProtectionGate
           isOpen={isPassGateOpen}
           onClose={() => setIsPassGateOpen(false)}
-          onSuccess={() => setIsManagementActive(true)}
+          onSuccess={() => toggleManagementMode(true)}
         />
+
       </div>
     </>
   );

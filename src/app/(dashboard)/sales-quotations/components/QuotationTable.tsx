@@ -66,7 +66,7 @@ export function QuotationTable({
                     placeholder="اسم البند..."
                     className="bg-transparent border-none shadow-none focus-visible:ring-1 focus-visible:ring-primary/20 h-auto p-1 font-bold text-slate-800"
                   />
-                  {item.productId && (
+                  {!!item.productId && (
                     <span className="text-[10px] text-muted-foreground font-mono mr-1">
                       PID: {item.productId}
                     </span>
