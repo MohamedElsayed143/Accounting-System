@@ -217,7 +217,96 @@ export async function createSalesInvoice(data: {
           })),
         },
       },
+      include: {
+        customer: { select: { accountId: true, name: true } }
+      }
     });
+
+    // 3.1. إنشاء قيد المحاسبة (Auto-Posting)
+    const customerAccountId = invoice.customer?.accountId;
+    if (!customerAccountId) throw new Error("العميل غير مربوط بحساب محاسبي");
+
+    const salesRevenueAccount = await tx.account.findUnique({ where: { code: '4101' } });
+    if (!salesRevenueAccount) throw new Error("حساب المبيعات (4101) غير موجود");
+
+    const lastEntry = await tx.journalEntry.findFirst({
+        orderBy: { entryNumber: 'desc' },
+        select: { entryNumber: true }
+    });
+    const entryNumber = (lastEntry?.entryNumber || 0) + 1;
+
+    await tx.journalEntry.create({
+        data: {
+            entryNumber,
+            date: invoice.invoiceDate,
+            description: `فاتورة مبيعات #${invoice.invoiceNumber} - ${invoice.customerName}`,
+            sourceType: 'SALES_INVOICE',
+            sourceId: invoice.id,
+            items: {
+                create: [
+                    {
+                        accountId: customerAccountId,
+                        debit: invoice.total,
+                        credit: 0,
+                        description: `قيمة فاتورة مبيعات #${invoice.invoiceNumber}`
+                    },
+                    {
+                        accountId: salesRevenueAccount.id,
+                        debit: 0,
+                        credit: invoice.total,
+                        description: `إيراد مبيعات فاتورة #${invoice.invoiceNumber}`
+                    }
+                ]
+            }
+        }
+    });
+
+    // 3.2. إذا كانت الفاتورة كاش، نسجل سند القبض آلياً في القيد (أو قيد إضافي)
+    // هنا سنقوم بعمل قيد تسوية فورية من حساب العميل إلى الخزنة/البنك لضمان توازن حساب العميل
+    if (data.status === "cash") {
+        let treasuryAccountId: number | null = null;
+        if (data.safeId) {
+            const safe = await tx.treasurySafe.findUnique({ where: { id: data.safeId }, select: { accountId: true } });
+            treasuryAccountId = safe?.accountId || null;
+        } else if (data.bankId) {
+            const bank = await tx.treasuryBank.findUnique({ where: { id: data.bankId }, select: { accountId: true } });
+            treasuryAccountId = bank?.accountId || null;
+        }
+
+        if (treasuryAccountId) {
+            const lastEntryCash = await tx.journalEntry.findFirst({
+                orderBy: { entryNumber: 'desc' },
+                select: { entryNumber: true }
+            });
+            const entryNumberCash = (lastEntryCash?.entryNumber || 0) + 1;
+
+            await tx.journalEntry.create({
+                data: {
+                    entryNumber: entryNumberCash,
+                    date: invoice.invoiceDate,
+                    description: `سداد نقدي فاتورة #${invoice.invoiceNumber} - ${invoice.customerName}`,
+                    sourceType: 'RECEIPT_VOUCHER', // Treated as a system-generated receipt
+                    sourceId: invoice.id,
+                    items: {
+                        create: [
+                            {
+                                accountId: treasuryAccountId,
+                                debit: invoice.total,
+                                credit: 0,
+                                description: `تحصيل نقدي فاتورة #${invoice.invoiceNumber}`
+                            },
+                            {
+                                accountId: customerAccountId,
+                                debit: 0,
+                                credit: invoice.total,
+                                description: `تسوية سداد فاتورة #${invoice.invoiceNumber}`
+                            }
+                        ]
+                    }
+                }
+            });
+        }
+    }
 
     // 3.5 تحديث الخزنة أو البنك إذا كانت الفاتورة كاش
     if (data.status === "cash" && (data.safeId || data.bankId)) {
@@ -480,7 +569,102 @@ export async function updateSalesInvoice(
           })),
         },
       },
+      include: {
+          customer: { select: { accountId: true } }
+      }
     });
+
+    // 3.6. تحديث قيد المحاسبة (حذف القديم وإنشاء جديد)
+    await tx.journalEntry.deleteMany({
+        where: { sourceType: 'SALES_INVOICE', sourceId: id }
+    });
+    // أيضاً حذف أي سند قبض نظامي مرتبط بهذه الفاتورة
+    await tx.journalEntry.deleteMany({
+        where: { sourceType: 'RECEIPT_VOUCHER', sourceId: id, description: { contains: `سداد نقدي فاتورة #${invoice.invoiceNumber}` } }
+    });
+
+    const customerAccountId = invoice.customer?.accountId;
+    if (customerAccountId) {
+        const salesRevenueAccount = await tx.account.findUnique({ where: { code: '4101' } });
+        if (salesRevenueAccount) {
+            const lastEntry = await tx.journalEntry.findFirst({
+                orderBy: { entryNumber: 'desc' },
+                select: { entryNumber: true }
+            });
+            const entryNumber = (lastEntry?.entryNumber || 0) + 1;
+
+            await tx.journalEntry.create({
+                data: {
+                    entryNumber,
+                    date: invoice.invoiceDate,
+                    description: `تعديل فاتورة مبيعات #${invoice.invoiceNumber} - ${invoice.customerName}`,
+                    sourceType: 'SALES_INVOICE',
+                    sourceId: invoice.id,
+                    items: {
+                        create: [
+                            {
+                                accountId: customerAccountId,
+                                debit: invoice.total,
+                                credit: 0,
+                                description: `تعديل قيمة فاتورة مبيعات #${invoice.invoiceNumber}`
+                            },
+                            {
+                                accountId: salesRevenueAccount.id,
+                                debit: 0,
+                                credit: invoice.total,
+                                description: `تعديل إيراد مبيعات فاتورة #${invoice.invoiceNumber}`
+                            }
+                        ]
+                    }
+                }
+            });
+
+            if (data.status === "cash") {
+                let treasuryAccountId: number | null = null;
+                if (data.safeId) {
+                    const safe = await tx.treasurySafe.findUnique({ where: { id: data.safeId }, select: { accountId: true } });
+                    treasuryAccountId = safe?.accountId || null;
+                } else if (data.bankId) {
+                    const bank = await tx.treasuryBank.findUnique({ where: { id: data.bankId }, select: { accountId: true } });
+                    treasuryAccountId = bank?.accountId || null;
+                }
+
+                if (treasuryAccountId) {
+                    const lastEntryCash = await tx.journalEntry.findFirst({
+                        orderBy: { entryNumber: 'desc' },
+                        select: { entryNumber: true }
+                    });
+                    const entryNumberCash = (lastEntryCash?.entryNumber || 0) + 1;
+
+                    await tx.journalEntry.create({
+                        data: {
+                            entryNumber: entryNumberCash,
+                            date: invoice.invoiceDate,
+                            description: `سداد نقدي فاتورة #${invoice.invoiceNumber} - ${invoice.customerName}`,
+                            sourceType: 'RECEIPT_VOUCHER',
+                            sourceId: invoice.id,
+                            items: {
+                                create: [
+                                    {
+                                        accountId: treasuryAccountId,
+                                        debit: invoice.total,
+                                        credit: 0,
+                                        description: `تحصيل نقدي فاتورة #${invoice.invoiceNumber}`
+                                    },
+                                    {
+                                        accountId: customerAccountId,
+                                        debit: 0,
+                                        credit: invoice.total,
+                                        description: `تسوية سداد فاتورة #${invoice.invoiceNumber}`
+                                    }
+                                ]
+                            }
+                        }
+                    });
+                }
+            }
+        }
+    }
 
     // 3.5 تطبيق أثر الخزنة الجديد إذا كانت كاش
     if (data.status === "cash" && (data.safeId || data.bankId)) {
@@ -640,6 +824,16 @@ export async function deleteSalesInvoice(id: number) {
     }
 
     await tx.stockMovement.deleteMany({ where: { salesInvoiceId: id } });
+    
+    // 3. حذف القيود المحاسبية المرتبطة
+    await tx.journalEntry.deleteMany({
+        where: { sourceType: 'SALES_INVOICE', sourceId: id }
+    });
+    // حذف أي سند قبض نظامي مرتبط بهذه الفاتورة
+    await tx.journalEntry.deleteMany({
+        where: { sourceType: 'RECEIPT_VOUCHER', sourceId: id, description: { contains: `سداد نقدي فاتورة` } }
+    });
+
     return await tx.salesInvoice.delete({ where: { id } });
   });
 

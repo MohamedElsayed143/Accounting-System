@@ -64,7 +64,7 @@ export function LedgerTable({ transactions, openingBalance, isLoading, onViewDet
   }
 
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden flex flex-col">
+    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden flex flex-col print:hidden">
       {/* Table Body */}
       <div className="overflow-x-auto print:hidden">
         <table className="w-full text-right">

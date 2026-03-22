@@ -185,9 +185,25 @@ function InvoiceFormStep({
                 stockBalance: item.product?.currentStock || 0,
               }));
                setItems(formattedItems);
-               setTopNotes(((invoice as any).topNotes as string[]) || []);
-               setNotes(((invoice as any).notes as string[]) || []);
-            }
+                
+                // Handle topNotes (Json format: {title, items})
+                const rawTopNotes = (invoice as any).topNotes;
+                if (rawTopNotes && typeof rawTopNotes === 'object' && 'items' in rawTopNotes) {
+                  setTopNotesTitle(rawTopNotes.title || "ملاحظات هامة");
+                  setTopNotes(rawTopNotes.items || []);
+                } else {
+                  setTopNotes(rawTopNotes || []);
+                }
+
+                // Handle bottom notes
+                const rawNotes = (invoice as any).notes;
+                if (rawNotes && typeof rawNotes === 'object' && 'items' in rawNotes) {
+                  setNotesTitle(rawNotes.title || "ملاحظات إضافية");
+                  setNotes(rawNotes.items || []);
+                } else {
+                  setNotes(rawNotes || []);
+                }
+             }
           }
         })
         .catch((error) => {
@@ -513,19 +529,6 @@ function InvoiceFormStep({
                           <SelectItem value="pending">معلقة</SelectItem>
                         </SelectContent>
                       </Select>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <Label className="text-slate-600 text-sm font-bold flex items-center gap-1">
-                        مسمى الفاتورة
-                      </Label>
-                      <Input
-                        value={printableTitle}
-                        onChange={(e) => setPrintableTitle(e.target.value)}
-                        disabled={isViewMode}
-                        className="bg-slate-50 border-slate-200 w-44 font-bold"
-                        placeholder="مثلاً: فاتورة مشتريات"
-                      />
                     </div>
 
                     <div className="space-y-1.5">

@@ -22,6 +22,7 @@ import {
   PieChart,
   LogOut,
   Zap,
+  FolderTree,
 } from "lucide-react";
 import {
   Sidebar,
@@ -136,6 +137,18 @@ const treasuryNavItem = {
   ],
 };
 
+const accountingNavItem = {
+  title: "المحاسبة",
+  href: "/ledger",
+  icon: Calculator,
+  subItems: [
+    { title: "دفتر الأستاذ العام", href: "/ledger" },
+    { title: "دفتر اليومية", href: "/journal" },
+    { title: "إضافة قيد يدوي", href: "/journal/new" },
+    { title: "شجرة الحسابات", href: "/ledger/coa" },
+  ],
+};
+
 const inventoryNavItem = {
   title: "المخزون",
   href: "/inventory",
@@ -156,6 +169,7 @@ const otherNavItems = [
     href: "/reports",
     icon: BarChart3,
     subItems: [
+      { title: "ميزان المراجعة", href: "/reports/trial-balance" },
       { title: "تقارير العملاء/الموردين", href: "/reports" },
       { title: "كشف حساب الخزنة", href: "/reports/treasury" },
       { title: "كشف حساب البنوك", href: "/reports/banks" },
@@ -179,9 +193,12 @@ export function AppSidebar() {
     getAuthSession().then((session) => {
       if (session?.user) {
         setUser(session.user);
+      } else {
+        // If session is null (e.g. database reset but cookie exists), redirect to login
+        router.push("/login");
       }
     });
-  }, []);
+  }, [router]);
 
   const handleLogout = async () => {
     await logoutAction();
@@ -427,6 +444,53 @@ export function AppSidebar() {
           </SidebarGroup>
         )}
 
+        {/* ✅ قسم المحاسبة */}
+        {(isAdmin || hasPermission("reports_ledger")) && (
+          <SidebarGroup className="mt-4">
+            <SidebarGroupLabel className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">
+              المحاسبة
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <Collapsible
+                  defaultOpen={isActive(accountingNavItem.href)}
+                  className="group/collapsible"
+                >
+                  <SidebarMenuItem>
+                    <CollapsibleTrigger asChild>
+                      <SidebarMenuButton
+                        isActive={isActive(accountingNavItem.href)}
+                        className="group hover:bg-primary/10 transition-all"
+                      >
+                        <accountingNavItem.icon className="h-4 w-4 group-hover:scale-110 transition-transform" />
+                        <span className="font-medium">{accountingNavItem.title}</span>
+                        <ChevronDown className="mr-auto h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-180" />
+                      </SidebarMenuButton>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <SidebarMenuSub className="mr-4 border-r-2 border-primary/20">
+                        {accountingNavItem.subItems.map((subItem) => (
+                          <SidebarMenuSubItem key={subItem.href}>
+                            <SidebarMenuSubButton
+                              asChild
+                              isActive={pathname === subItem.href}
+                              className="hover:bg-primary/5 transition-all"
+                            >
+                              <Link href={subItem.href} className="text-sm font-medium">
+                                {subItem.title}
+                              </Link>
+                            </SidebarMenuSubButton>
+                          </SidebarMenuSubItem>
+                        ))}
+                      </SidebarMenuSub>
+                    </CollapsibleContent>
+                  </SidebarMenuItem>
+                </Collapsible>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
         {/* ✅ قسم المخزون */}
         {hasPermission("inventory_view") && (
           <SidebarGroup className="mt-4">
@@ -528,7 +592,7 @@ export function AppSidebar() {
           </SidebarGroup>
         )}
 
-        {(isAdmin || (hasPermission("reports_customers_suppliers") || hasPermission("reports_treasury_banks"))) && (
+        {(isAdmin || (hasPermission("reports_customers_suppliers") || hasPermission("reports_treasury_banks") || hasPermission("reports_ledger"))) && (
           <SidebarGroup className="mt-4">
             <SidebarGroupLabel className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">
               الإدارة
@@ -542,7 +606,7 @@ export function AppSidebar() {
                     
                     // Hide reports menu entirely if worker has no report permissions
                     if (item.href === "/reports" && user?.role === "WORKER") {
-                      const hasSomeReports = hasPermission("reports_customers_suppliers") || hasPermission("reports_treasury_banks");
+                      const hasSomeReports = hasPermission("reports_customers_suppliers") || hasPermission("reports_treasury_banks") || hasPermission("reports_ledger");
                       return hasSomeReports;
                     }
                     
@@ -573,6 +637,7 @@ export function AppSidebar() {
                                 if (user?.role === "ADMIN") return true;
                                 if (sub.href === "/reports") return hasPermission("reports_customers_suppliers");
                                 if (sub.href === "/reports/treasury" || sub.href === "/reports/banks") return hasPermission("reports_treasury_banks");
+                                if (sub.href === "/ledger") return hasPermission("reports_ledger");
                                 return true;
                               })
                               .map((subItem) => (

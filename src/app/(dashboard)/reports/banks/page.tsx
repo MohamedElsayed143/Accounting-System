@@ -19,12 +19,12 @@ import { AccountSearchDropdown } from "../components/AccountSearchDropdown";
 import { LedgerTable } from "../components/LedgerTable";
 import { PrintableStatement } from "../components/PrintableStatement";
 import { TransactionModal } from "../components/TransactionModal";
-import { getAccountTransactions } from "../actions";
+import { getAccountLedger } from "../../ledger/actions";
 import { getCompanySettingsAction } from "../../settings/actions";
 import type { TransactionType } from "../actions";
 
 export default function BankReportPage() {
-  const [selectedBank, setSelectedBank] = useState<{ id: number; name: string; accountNumber?: string | null } | null>(null);
+  const [selectedBank, setSelectedBank] = useState<{ id: number; accountId: number; name: string; accountNumber?: string | null } | null>(null);
   const [fromDate, setFromDate] = useState<string>("");
   const [toDate, setToDate] = useState<string>("");
   const [transactionType, setTransactionType] = useState<string>("الكل");
@@ -38,14 +38,23 @@ export default function BankReportPage() {
     if (!selectedBank) return;
     setIsLoading(true);
     try {
-      const data = await getAccountTransactions(
-        selectedBank.id,
-        "bank",
+      const data = await getAccountLedger(
+        selectedBank.accountId,
         fromDate ? new Date(fromDate) : undefined,
-        toDate ? new Date(toDate) : undefined,
-        transactionType
+        toDate ? new Date(toDate) : undefined
       );
-      setTransactions(data.transactions);
+      setTransactions(data.transactions.map(t => ({
+        id: String(t.id),
+        date: t.date,
+        createdAt: t.date, 
+        type: t.sourceType === 'MANUAL' ? 'قيد يدوي' : (t.sourceType || 'قيد'),
+        documentId: t.entryNumber ? `JE-${String(t.entryNumber).padStart(4, "0")}` : '',
+        description: t.description || '',
+        paymentMethod: 'نقدي',
+        debit: t.debit,
+        credit: t.credit,
+        runningBalance: t.balance
+      })));
       setOpeningBalance(data.openingBalance);
     } catch (error) {
       console.error("Error fetching transactions:", error);
@@ -110,7 +119,13 @@ export default function BankReportPage() {
             </label>
             <AccountSearchDropdown 
               type="bank" 
-              onSelect={(acc) => setSelectedBank(acc ? { id: acc.id, name: acc.name, accountNumber: acc.accountNumber } : null)} 
+              onSelect={(acc) => {
+                if (acc && acc.accountId) {
+                  setSelectedBank({ id: acc.id, accountId: acc.accountId, name: acc.name, accountNumber: acc.accountNumber });
+                } else {
+                  setSelectedBank(null);
+                }
+              }} 
             />
           </div>
 

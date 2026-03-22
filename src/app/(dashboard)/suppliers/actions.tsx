@@ -79,6 +79,18 @@ export async function saveSupplier(data: {
       },
     });
 
+    // Update linked account name if it exists
+    const supplier = await prisma.supplier.findUnique({
+      where: { id: data.id },
+      include: { account: true }
+    });
+    if (supplier?.accountId) {
+      await prisma.account.update({
+        where: { id: supplier.accountId },
+        data: { name: `${supplier.code} - ${supplier.name}` }
+      });
+    }
+
     const session = await getSession();
     if (session) {
       await triggerStaffActivityAlert(
@@ -89,14 +101,30 @@ export async function saveSupplier(data: {
     }
   } else {
     // إضافة جديد
-    await prisma.supplier.create({
-      data: {
-        name: data.name,
-        code: data.code,
-        phone: data.phone,
-        address: data.address,
-        category: data.category,
-      },
+    await prisma.$transaction(async (tx) => {
+      // 1. Create the account in COA first
+      const suppParent = await tx.account.findUnique({ where: { code: '2101' } });
+      if (!suppParent) throw new Error("حساب الموردين الرئيسي (2101) غير موجود");
+
+      const accountCode = `2101${data.code.toString().padStart(4, '0')}`;
+      const account = await tx.account.create({
+        data: {
+          code: accountCode,
+          name: `${data.code} - ${data.name}`,
+          type: 'LIABILITY',
+          parentId: suppParent.id,
+          level: suppParent.level + 1,
+          isSelectable: true,
+        }
+      });
+
+      // 2. Create the supplier and link to account
+      await tx.supplier.create({
+        data: {
+          ...data,
+          accountId: account.id
+        },
+      });
     });
 
     const session = await getSession();

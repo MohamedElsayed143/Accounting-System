@@ -3,7 +3,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
-import { Plus, Trash2, AlertTriangle, ShieldCheck, ShieldAlert } from "lucide-react";
+import { Plus, Trash2, AlertTriangle, ShieldCheck, ShieldAlert, Eye, Edit } from "lucide-react";
 
 import { Navbar } from "@/components/layout/navbar";
 import { Button } from "@/components/ui/button";
@@ -274,6 +274,9 @@ export default function SalesInvoicesPage() {
                           <TableHead className="font-bold text-center whitespace-nowrap">
                             المرتجعات
                           </TableHead>
+                          <TableHead className="font-bold text-center whitespace-nowrap">
+                            الإجراءات
+                          </TableHead>
                         </TableRow>
 
                       </TableHeader>
@@ -324,6 +327,43 @@ export default function SalesInvoicesPage() {
                               ) : (
                                 <span className="text-muted-foreground text-sm">لا يوجد</span>
                               )}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                  asChild
+                                >
+                                  <Link href={`/sales-invoices/create?id=${invoice.id}&mode=view`}>
+                                    <Eye className="h-4 w-4" />
+                                  </Link>
+                                </Button>
+                                
+                                {isManagementActive && (
+                                  <>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8 text-amber-600 hover:text-amber-700 hover:bg-amber-50"
+                                      asChild
+                                    >
+                                      <Link href={`/sales-invoices/create?id=${invoice.id}`}>
+                                        <Edit className="h-4 w-4" />
+                                      </Link>
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8 text-destructive hover:text-destructive/90 hover:bg-destructive/10"
+                                      onClick={() => openDeleteDialog(invoice)}
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </>
+                                )}
+                              </div>
                             </TableCell>
                           </TableRow>
 

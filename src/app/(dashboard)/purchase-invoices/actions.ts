@@ -210,7 +210,95 @@ export async function createPurchaseInvoice(data: {
           })),
         },
       },
+      include: {
+        supplier: { select: { accountId: true, name: true } }
+      }
     });
+
+    // 3.1. إنشاء قيد المحاسبة (Auto-Posting)
+    const supplierAccountId = invoice.supplier?.accountId;
+    if (!supplierAccountId) throw new Error("المورد غير مربوط بحساب محاسبي");
+
+    const purchasesAccount = await tx.account.findUnique({ where: { code: '5101' } });
+    if (!purchasesAccount) throw new Error("حساب المشتريات (5101) غير موجود");
+
+    const lastEntry = await tx.journalEntry.findFirst({
+        orderBy: { entryNumber: 'desc' },
+        select: { entryNumber: true }
+    });
+    const entryNumber = (lastEntry?.entryNumber || 0) + 1;
+
+    await tx.journalEntry.create({
+        data: {
+            entryNumber,
+            date: invoice.invoiceDate,
+            description: `فاتورة مشتريات #${invoice.invoiceNumber} - ${invoice.supplierName}`,
+            sourceType: 'PURCHASE_INVOICE',
+            sourceId: invoice.id,
+            items: {
+                create: [
+                    {
+                        accountId: purchasesAccount.id,
+                        debit: invoice.total,
+                        credit: 0,
+                        description: `قيمة فاتورة مشتريات #${invoice.invoiceNumber}`
+                    },
+                    {
+                        accountId: supplierAccountId,
+                        debit: 0,
+                        credit: invoice.total,
+                        description: `استحقاق مورد فاتورة #${invoice.invoiceNumber}`
+                    }
+                ]
+            }
+        }
+    });
+
+    // 3.2. إذا كانت الفاتورة كاش، نسجل سند الصرف آلياً
+    if (data.status === "cash") {
+        let treasuryAccountId: number | null = null;
+        if (data.safeId) {
+            const safe = await tx.treasurySafe.findUnique({ where: { id: data.safeId }, select: { accountId: true } });
+            treasuryAccountId = safe?.accountId || null;
+        } else if (data.bankId) {
+            const bank = await tx.treasuryBank.findUnique({ where: { id: data.bankId }, select: { accountId: true } });
+            treasuryAccountId = bank?.accountId || null;
+        }
+
+        if (treasuryAccountId) {
+            const lastEntryCash = await tx.journalEntry.findFirst({
+                orderBy: { entryNumber: 'desc' },
+                select: { entryNumber: true }
+            });
+            const entryNumberCash = (lastEntryCash?.entryNumber || 0) + 1;
+
+            await tx.journalEntry.create({
+                data: {
+                    entryNumber: entryNumberCash,
+                    date: invoice.invoiceDate,
+                    description: `سداد نقدي فاتورة مشتريات #${invoice.invoiceNumber} - ${invoice.supplierName}`,
+                    sourceType: 'PAYMENT_VOUCHER',
+                    sourceId: invoice.id,
+                    items: {
+                        create: [
+                            {
+                                accountId: supplierAccountId,
+                                debit: invoice.total,
+                                credit: 0,
+                                description: `تسوية سداد فاتورة مشتريات #${invoice.invoiceNumber}`
+                            },
+                            {
+                                accountId: treasuryAccountId,
+                                debit: 0,
+                                credit: invoice.total,
+                                description: `صرف نقدي فاتورة مشتريات #${invoice.invoiceNumber}`
+                            }
+                        ]
+                    }
+                }
+            });
+        }
+    }
 
     // 3.5 تحديث الخزنة أو البنك إذا كانت الفاتورة كاش (خصم للمشتريات) (فقط إذا لم تكن معلقة)
     if (data.status === "cash" && (data.safeId || data.bankId)) {
@@ -267,6 +355,9 @@ export async function createPurchaseInvoice(data: {
         pendingAlerts.push({ type: 'stock', name: updatedProduct.name, value: updatedProduct.currentStock, limit: updatedProduct.minStock });
       }
     }
+
+    revalidatePath("/purchase-invoices");
+    revalidatePath("/inventory/stock");
 
     return invoice;
   });
@@ -327,7 +418,7 @@ export async function updatePurchaseInvoice(
 
   const pendingAlerts: { type: 'treasury' | 'stock', name: string, value: number, limit?: number }[] = [];
 
-  const canEdit = await hasPermission(session.userId, "purchase_create");
+  const canEdit = await hasPermission(session.userId, "purchase_edit");
   if (!canEdit) throw new Error("ليس لديك صلاحية تعديل فواتير مشتريات");
 
   if (!data.supplierId) throw new Error("يجب اختيار المورد أولاً");
@@ -464,7 +555,102 @@ export async function updatePurchaseInvoice(
           })),
         },
       },
+      include: {
+        supplier: { select: { accountId: true } }
+      }
     });
+
+    // 3.6. تحديث قيد المحاسبة (حذف القديم وإنشاء جديد)
+    await tx.journalEntry.deleteMany({
+        where: { sourceType: 'PURCHASE_INVOICE', sourceId: id }
+    });
+    // أيضاً حذف أي سند صرف نظامي مرتبط بهذه الفاتورة
+    await tx.journalEntry.deleteMany({
+        where: { sourceType: 'PAYMENT_VOUCHER', sourceId: id, description: { contains: `سداد نقدي فاتورة مشتريات #${invoice.invoiceNumber}` } }
+    });
+
+    const supplierAccountId = invoice.supplier?.accountId;
+    if (supplierAccountId) {
+        const purchasesAccount = await tx.account.findUnique({ where: { code: '5101' } });
+        if (purchasesAccount) {
+            const lastEntry = await tx.journalEntry.findFirst({
+                orderBy: { entryNumber: 'desc' },
+                select: { entryNumber: true }
+            });
+            const entryNumber = (lastEntry?.entryNumber || 0) + 1;
+
+            await tx.journalEntry.create({
+                data: {
+                    entryNumber,
+                    date: invoice.invoiceDate,
+                    description: `تعديل فاتورة مشتريات #${invoice.invoiceNumber} - ${invoice.supplierName}`,
+                    sourceType: 'PURCHASE_INVOICE',
+                    sourceId: invoice.id,
+                    items: {
+                        create: [
+                            {
+                                accountId: purchasesAccount.id,
+                                debit: invoice.total,
+                                credit: 0,
+                                description: `تعديل قيمة فاتورة مشتريات #${invoice.invoiceNumber}`
+                            },
+                            {
+                                accountId: supplierAccountId,
+                                debit: 0,
+                                credit: invoice.total,
+                                description: `تعديل استحقاق مورد فاتورة #${invoice.invoiceNumber}`
+                            }
+                        ]
+                    }
+                }
+            });
+
+            if (data.status === "cash") {
+                let treasuryAccountId: number | null = null;
+                if (data.safeId) {
+                    const safe = await tx.treasurySafe.findUnique({ where: { id: data.safeId }, select: { accountId: true } });
+                    treasuryAccountId = safe?.accountId || null;
+                } else if (data.bankId) {
+                    const bank = await tx.treasuryBank.findUnique({ where: { id: data.bankId }, select: { accountId: true } });
+                    treasuryAccountId = bank?.accountId || null;
+                }
+
+                if (treasuryAccountId) {
+                    const lastEntryCash = await tx.journalEntry.findFirst({
+                        orderBy: { entryNumber: 'desc' },
+                        select: { entryNumber: true }
+                    });
+                    const entryNumberCash = (lastEntryCash?.entryNumber || 0) + 1;
+
+                    await tx.journalEntry.create({
+                        data: {
+                            entryNumber: entryNumberCash,
+                            date: invoice.invoiceDate,
+                            description: `سداد نقدي فاتورة مشتريات #${invoice.invoiceNumber} - ${invoice.supplierName}`,
+                            sourceType: 'PAYMENT_VOUCHER',
+                            sourceId: invoice.id,
+                            items: {
+                                create: [
+                                    {
+                                        accountId: supplierAccountId,
+                                        debit: invoice.total,
+                                        credit: 0,
+                                        description: `تسوية سداد فاتورة مشتريات #${invoice.invoiceNumber}`
+                                    },
+                                    {
+                                        accountId: treasuryAccountId,
+                                        debit: 0,
+                                        credit: invoice.total,
+                                        description: `صرف نقدي فاتورة مشتريات #${invoice.invoiceNumber}`
+                                    }
+                                ]
+                            }
+                        }
+                    });
+                }
+            }
+        }
+    }
 
     // 4. تطبيق أثر الخزنة الجديد إذا كانت كاش
     if (data.status === "cash" && (data.safeId || data.bankId)) {
@@ -538,16 +724,19 @@ export async function updatePurchaseInvoice(
     }
   }
 
-  return { invoice: result };
-}
+    revalidatePath("/purchase-invoices");
+    revalidatePath("/inventory/stock");
+
+    return { invoice: result };
+  }
 
 // ─── حذف فاتورة (مع حذف حركات المخزون المرتبطة) ─────────────────────────
 export async function deletePurchaseInvoice(id: number) {
   const user_session = await getSession();
   if (!user_session) throw new Error("يجب تسجيل الدخول أولاً");
 
-  const isAdmin = user_session.user.role === "ADMIN";
-  if (!isAdmin) throw new Error("ليس لديك صلاحية حذف فواتير مشتريات");
+  const canDelete = await hasPermission(user_session.userId, "purchase_delete");
+  if (!canDelete) throw new Error("ليس لديك صلاحية حذف فواتير مشتريات");
 
   const pendingAlerts: { type: 'treasury', name: string, value: number }[] = [];
 
@@ -618,6 +807,16 @@ export async function deletePurchaseInvoice(id: number) {
     const hasTransactions = relatedVouchers > 0 || relatedReceipts > 0 || relatedSalesInvoices > 0 || relatedPurchaseInvoices > 0;
 
     await tx.stockMovement.deleteMany({ where: { purchaseInvoiceId: id } });
+    
+    // 3. حذف القيود المحاسبية المرتبطة
+    await tx.journalEntry.deleteMany({
+        where: { sourceType: 'PURCHASE_INVOICE', sourceId: id }
+    });
+    // حذف أي سند صرف نظامي مرتبط بهذه الفاتورة
+    await tx.journalEntry.deleteMany({
+        where: { sourceType: 'PAYMENT_VOUCHER', sourceId: id, description: { contains: `سداد نقدي فاتورة` } }
+    });
+
     const deletedInvoice = await tx.purchaseInvoice.delete({ where: { id: id } });
 
     if (user_session && deletedInvoice) {
@@ -627,6 +826,8 @@ export async function deletePurchaseInvoice(id: number) {
         `تم حذف فاتورة مشتريات #${deletedInvoice.invoiceNumber} من المورد ${deletedInvoice.supplierName} بقيمة ${deletedInvoice.total}`
       );
     }
+    revalidatePath("/purchase-invoices");
+    revalidatePath("/inventory/stock");
   });
 
   for (const alert of pendingAlerts) {

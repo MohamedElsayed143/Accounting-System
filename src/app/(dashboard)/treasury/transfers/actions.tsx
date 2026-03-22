@@ -87,7 +87,7 @@ export async function createTransfer(data: TransferInput, skipApproval: boolean 
       });
     }
 
-    // 3. تسجيل عملية التحويل
+    // 3. تسجيل عملية التحويل والمعالجة المحاسبية
     const result = await tx.treasuryTransfer.create({
       data: {
         transferNumber: data.transferNumber,
@@ -103,10 +103,53 @@ export async function createTransfer(data: TransferInput, skipApproval: boolean 
       }
     });
 
+    // 4. الحصول على أرقام الحسابات المحاسبية للتحويل
+    const fromAccount = data.fromType === "safe" 
+      ? await tx.treasurySafe.findUnique({ where: { id: data.fromId }, select: { accountId: true, name: true, balance: true } })
+      : await tx.treasuryBank.findUnique({ where: { id: data.fromId }, select: { accountId: true, name: true, balance: true } });
+    
+    const toAccount = data.toType === "safe"
+      ? await tx.treasurySafe.findUnique({ where: { id: data.toId }, select: { accountId: true, name: true, balance: true } })
+      : await tx.treasuryBank.findUnique({ where: { id: data.toId }, select: { accountId: true, name: true, balance: true } });
+
+    if (fromAccount?.accountId && toAccount?.accountId) {
+      const lastEntry = await tx.journalEntry.findFirst({
+        orderBy: { entryNumber: 'desc' },
+        select: { entryNumber: true }
+      });
+      const entryNumber = (lastEntry?.entryNumber || 0) + 1;
+
+      await tx.journalEntry.create({
+        data: {
+          entryNumber,
+          date: new Date(data.date),
+          description: `تحويل من ${fromAccount.name} إلى ${toAccount.name}`,
+          sourceType: 'TRANSFER',
+          sourceId: result.id,
+          items: {
+            create: [
+              {
+                accountId: fromAccount.accountId,
+                debit: 0,
+                credit: data.amount,
+                description: `تحويل صادر`
+              },
+              {
+                accountId: toAccount.accountId,
+                debit: data.amount,
+                credit: 0,
+                description: `تحويل وارد`
+              }
+            ]
+          }
+        }
+      });
+    }
+
     return {
       transfer: result,
-      fromName: (data.fromType === "safe" ? await tx.treasurySafe.findUnique({ where: { id: data.fromId }, select: { name: true, balance: true } }) : await tx.treasuryBank.findUnique({ where: { id: data.fromId }, select: { name: true, balance: true } })),
-      toName: (data.toType === "safe" ? await tx.treasurySafe.findUnique({ where: { id: data.toId }, select: { name: true, balance: true } }) : await tx.treasuryBank.findUnique({ where: { id: data.toId }, select: { name: true, balance: true } }))
+      fromName: fromAccount,
+      toName: toAccount
     };
   });
 

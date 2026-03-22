@@ -17,37 +17,36 @@ import {
   TrendingUp
 } from "lucide-react";
 import { AccountSearchDropdown } from "../components/AccountSearchDropdown";
-import { LedgerTable } from "../components/LedgerTable";
-import { PrintableStatement } from "../components/PrintableStatement";
-import { TransactionModal } from "../components/TransactionModal";
-import { getAccountTransactions } from "../actions";
+import { LedgerTable } from "@/components/accounting/LedgerTable";
+import { LedgerPrintableStatement } from "@/components/accounting/LedgerPrintableStatement";
+import { getAccountLedger } from "../../ledger/actions";
 import { getCompanySettingsAction } from "../../settings/actions";
-import type { TransactionType } from "../actions";
 
 export default function TreasuryReportPage() {
-  const [selectedSafe, setSelectedSafe] = useState<{ id: number; name: string } | null>(null);
+  const [selectedSafe, setSelectedSafe] = useState<{ id: number; accountId: number; name: string } | null>(null);
   const [fromDate, setFromDate] = useState<string>("");
   const [toDate, setToDate] = useState<string>("");
-  const [transactionType, setTransactionType] = useState<string>("الكل");
-  const [transactions, setTransactions] = useState<TransactionType[]>([]);
-  const [openingBalance, setOpeningBalance] = useState(0);
+  const [ledgerData, setLedgerData] = useState<{
+    openingBalance: number;
+    closingBalance: number;
+    totalDebits: number;
+    totalCredits: number;
+    transactions: any[];
+  } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [companySettings, setCompanySettings] = useState<any>(null);
-  const [selectedTransaction, setSelectedTransaction] = useState<TransactionType | null>(null);
+  const [selectedTransaction, setSelectedTransaction] = useState<any>(null);
 
   const fetchTransactions = async () => {
     if (!selectedSafe) return;
     setIsLoading(true);
     try {
-      const data = await getAccountTransactions(
-        selectedSafe.id,
-        "safe",
+      const data = await getAccountLedger(
+        selectedSafe.accountId,
         fromDate ? new Date(fromDate) : undefined,
-        toDate ? new Date(toDate) : undefined,
-        transactionType
+        toDate ? new Date(toDate) : undefined
       );
-      setTransactions(data.transactions);
-      setOpeningBalance(data.openingBalance);
+      setLedgerData(data);
     } catch (error) {
       console.error("Error fetching transactions:", error);
     } finally {
@@ -63,19 +62,16 @@ export default function TreasuryReportPage() {
     if (selectedSafe) {
       fetchTransactions();
     }
-  }, [selectedSafe, fromDate, toDate, transactionType]);
+  }, [selectedSafe, fromDate, toDate]);
 
-  const { totalDebit, totalCredit, currentBalance, receiptsTotal, paymentsTotal, transfersTotal } = useMemo(() => {
-    let totalDebit = 0, totalCredit = 0, receiptsTotal = 0, paymentsTotal = 0, transfersTotal = 0;
-    transactions.forEach(t => {
-      totalDebit += t.debit;
-      totalCredit += t.credit;
-      if (t.type === 'سند قبض') receiptsTotal += t.debit;
-      if (t.type === 'سند صرف') paymentsTotal += t.credit;
-      if (t.type === 'تحويل وارد') transfersTotal += t.debit;
-    });
-    return { totalDebit, totalCredit, currentBalance: openingBalance + totalDebit - totalCredit, receiptsTotal, paymentsTotal, transfersTotal };
-  }, [transactions, openingBalance]);
+  const stats = useMemo(() => {
+    if (!ledgerData) return { totalDebit: 0, totalCredit: 0, currentBalance: 0 };
+    return {
+      totalDebit: ledgerData.totalDebits,
+      totalCredit: ledgerData.totalCredits,
+      currentBalance: ledgerData.closingBalance
+    };
+  }, [ledgerData]);
 
   return (
     <div className="flex flex-col gap-6 p-2 md:p-6 max-w-[1600px] mx-auto min-h-screen">
@@ -112,7 +108,13 @@ export default function TreasuryReportPage() {
             </label>
             <AccountSearchDropdown 
               type="safe" 
-              onSelect={(acc) => setSelectedSafe(acc ? { id: acc.id, name: acc.name } : null)} 
+              onSelect={(acc) => {
+                if (acc && acc.accountId) {
+                  setSelectedSafe({ id: acc.id, accountId: acc.accountId, name: acc.name });
+                } else {
+                  setSelectedSafe(null);
+                }
+              }} 
             />
           </div>
 
@@ -141,23 +143,17 @@ export default function TreasuryReportPage() {
             />
           </div>
 
-          {/* Type Filter */}
-          <div className="space-y-2">
+          {/* Type Filter - (Optional, can be hidden if ledger logic handles it) */}
+          <div className="space-y-2 opacity-50 cursor-not-allowed">
             <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-2">
               <Filter className="w-3 h-3" /> نوع الحركة
             </label>
             <div className="relative">
               <select
-                value={transactionType}
-                onChange={(e) => setTransactionType(e.target.value)}
-                className="w-full h-11 px-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900 focus:ring-2 focus:ring-blue-500 appearance-none transition-all text-sm outline-none"
+                disabled
+                className="w-full h-11 px-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900 appearance-none transition-all text-sm outline-none"
               >
                 <option value="الكل">جميع الحركات</option>
-                <option value="سند قبض">سندات القبض</option>
-                <option value="سند صرف">سندات الصرف</option>
-                <option value="تحويل صادر">تحويلات صادرة</option>
-                <option value="تحويل وارد">تحويلات واردة</option>
-                <option value="مرتجع">مرتجعات</option>
               </select>
               <ChevronDown className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
             </div>
@@ -166,15 +162,12 @@ export default function TreasuryReportPage() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4 print:hidden">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 print:hidden">
         {[
-          { label: 'الرصيد السابق', value: openingBalance, icon: HistoryIcon, color: 'text-slate-600', bg: 'bg-slate-100' },
-          { label: 'إجمالي المدين', value: totalDebit, icon: ArrowUpRight, color: 'text-emerald-600', bg: 'bg-emerald-100' },
-          { label: 'إجمالي الدائن', value: totalCredit, icon: ArrowDownLeft, color: 'text-rose-600', bg: 'bg-rose-100' },
-          { label: 'الرصيد الحالي', value: currentBalance, icon: Wallet, color: 'text-blue-600', bg: 'bg-blue-100' },
-          { label: 'عدد الحركات', value: transactions.length, icon: Activity, color: 'text-purple-600', bg: 'bg-purple-100', isCount: true },
-          { label: 'سندات القبض', value: receiptsTotal, icon: Receipt, color: 'text-amber-600', bg: 'bg-amber-100' },
-          { label: 'سندات الصرف', value: paymentsTotal, icon: TrendingUp, color: 'text-indigo-600', bg: 'bg-indigo-100' },
+          { label: 'الرصيد السابق', value: ledgerData?.openingBalance || 0, icon: HistoryIcon, color: 'text-slate-600', bg: 'bg-slate-100' },
+          { label: 'إجمالي المدين', value: stats.totalDebit, icon: ArrowUpRight, color: 'text-emerald-600', bg: 'bg-emerald-100' },
+          { label: 'إجمالي الدائن', value: stats.totalCredit, icon: ArrowDownLeft, color: 'text-rose-600', bg: 'bg-rose-100' },
+          { label: 'الرصيد الحالي', value: stats.currentBalance, icon: Wallet, color: 'text-blue-600', bg: 'bg-blue-100' },
         ].map((item, idx) => (
           <div key={idx} className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between mb-2">
@@ -185,21 +178,24 @@ export default function TreasuryReportPage() {
             </div>
             <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{item.label}</p>
             <p className={`text-xl font-bold mt-1 ${item.color}`}>
-              {item.isCount ? item.value : item.value.toLocaleString('ar-EG')}
-              {!item.isCount && <span className="text-xs font-normal"> {companySettings?.currencyCode || 'ج.م'}</span>}
+              {item.value.toLocaleString('ar-EG')}
+              <span className="text-xs font-normal"> {companySettings?.currencyCode || 'ج.م'}</span>
             </p>
           </div>
         ))}
       </div>
 
       {/* Transactions Table */}
-      {selectedSafe ? (
+      {selectedSafe && ledgerData ? (
         <LedgerTable 
-          transactions={transactions} 
-          openingBalance={openingBalance} 
-          isLoading={isLoading}
-          onViewDetails={setSelectedTransaction}
+          transactions={ledgerData.transactions} 
+          openingBalance={ledgerData.openingBalance}
+          closingBalance={ledgerData.closingBalance}
+          totalDebits={ledgerData.totalDebits}
+          totalCredits={ledgerData.totalCredits}
         />
+      ) : selectedSafe ? (
+        <div className="py-20 text-center text-slate-400">جاري تحميل البيانات...</div>
       ) : (
         <div className="bg-white dark:bg-slate-900 rounded-3xl border-2 border-dashed border-slate-200 dark:border-slate-800 py-32 flex flex-col items-center justify-center gap-4 text-center print:hidden">
           <div className="w-20 h-20 bg-slate-50 dark:bg-slate-800 rounded-3xl flex items-center justify-center text-slate-300">
@@ -213,28 +209,27 @@ export default function TreasuryReportPage() {
       )}
 
       {/* Printable Version */}
-      {selectedSafe && (
-        <PrintableStatement
-          title="كشف حساب خزنة"
+      {selectedSafe && ledgerData && (
+        <LedgerPrintableStatement 
+          title="كشف حساب الخزنة"
           accountName={selectedSafe.name}
-          fromDate={fromDate ? new Date(fromDate) : undefined}
-          toDate={toDate ? new Date(toDate) : undefined}
-          transactions={transactions}
-          openingBalance={openingBalance}
+          accountCode="1101"
+          fromDate={fromDate}
+          toDate={toDate}
+          openingBalance={ledgerData.openingBalance}
+          closingBalance={ledgerData.closingBalance}
+          totalDebits={ledgerData.totalDebits}
+          totalCredits={ledgerData.totalCredits}
+          transactions={ledgerData.transactions}
           companyName={companySettings?.companyName}
           companyNameEn={companySettings?.companyNameEn}
           companyLogo={companySettings?.companyLogo}
           companyStamp={companySettings?.companyStamp}
           showLogo={companySettings?.showLogoOnPrint}
           showStamp={companySettings?.showStampOnPrint}
+          currency={companySettings?.currencyCode}
         />
       )}
-
-      <TransactionModal
-        transaction={selectedTransaction}
-        companySettings={companySettings}
-        onClose={() => setSelectedTransaction(null)}
-      />
     </div>
   );
 }

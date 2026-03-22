@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -16,16 +10,18 @@ datasource db {
 model Customer {
   id              Int              @id @default(autoincrement())
   name            String           @db.VarChar(255)
-  code            Int              @unique // كود العميل الفريد
+  code            Int              @unique
   phone           String?          @db.VarChar(20)
-  address         String?          @db.Text
-  category        String?          @db.VarChar(100) // تصنيف العميل (مثال: Retail)
-  invoices        SalesInvoice[]
-  receiptVouchers ReceiptVoucher[]
-  salesReturns    SalesReturn[]
-  quotations      Quotation[]
+  address         String?
+  category        String?          @db.VarChar(100)
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
+  accountId       Int?             @unique
+  account         Account?         @relation(fields: [accountId], references: [id])
+  quotations      Quotation[]
+  receiptVouchers ReceiptVoucher[]
+  invoices        SalesInvoice[]
+  salesReturns    SalesReturn[]
 }
 
 model Supplier {
@@ -33,46 +29,46 @@ model Supplier {
   name            String            @db.VarChar(255)
   code            Int               @unique
   phone           String?           @db.VarChar(20)
-  address         String?           @db.Text
+  address         String?
   category        String?           @db.VarChar(100)
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
-  invoices        PurchaseInvoice[]
+  accountId       Int?              @unique
   paymentVouchers PaymentVoucher[]
+  invoices        PurchaseInvoice[]
   purchaseReturns PurchaseReturn[]
+  account         Account?          @relation(fields: [accountId], references: [id])
 }
 
 model SalesInvoice {
-  id            Int                @id @default(autoincrement())
-  invoiceNumber Int                @unique
-  customerName  String             @db.VarChar(255)
-  customerId    Int
-  customer      Customer           @relation(fields: [customerId], references: [id])
-  invoiceDate   DateTime
-  subtotal      Float
-  totalTax      Float
-  discount      Float              @default(0)
-  total         Float
-  status        InvoiceStatus      @default(cash)
-  // ربط الخزنة/البنك للفواتير الكاش
-  safeId        Int?
-  safe          TreasurySafe?      @relation(fields: [safeId], references: [id])
-  bankId        Int?
-  bank          TreasuryBank?      @relation(fields: [bankId], references: [id])
-  description   String?
-  topNotes      Json?
-  notes         Json?
+  id             Int                @id @default(autoincrement())
+  invoiceNumber  Int                @unique
+  customerName   String             @db.VarChar(255)
+  customerId     Int
+  invoiceDate    DateTime
+  subtotal       Float
+  totalTax       Float
+  discount       Float              @default(0)
+  total          Float
+  status         InvoiceStatus      @default(cash)
+  safeId         Int?
+  bankId         Int?
+  description    String?
+  topNotes       Json?
+  notes          Json?
   printableTitle String?
-  createdAt     DateTime           @default(now())
-  updatedAt     DateTime           @updatedAt
-  dueDate       DateTime?          // تاريخ الاستحقاق (تحصيل)
-  items         SalesInvoiceItem[]
-  salesReturns  SalesReturn[]
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  dueDate        DateTime?
+  bank           TreasuryBank?      @relation(fields: [bankId], references: [id])
+  customer       Customer           @relation(fields: [customerId], references: [id])
+  safe           TreasurySafe?      @relation(fields: [safeId], references: [id])
+  items          SalesInvoiceItem[]
+  salesReturns   SalesReturn[]
 }
 
 model SalesInvoiceItem {
   id          Int          @id @default(autoincrement())
-  invoice     SalesInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   invoiceId   Int
   description String       @db.VarChar(255)
   quantity    Float
@@ -81,6 +77,7 @@ model SalesInvoiceItem {
   discount    Float        @default(0)
   total       Float
   productId   Int?
+  invoice     SalesInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   product     Product?     @relation(fields: [productId], references: [id])
 }
 
@@ -89,174 +86,155 @@ model PurchaseInvoice {
   invoiceNumber   Int                   @unique
   supplierName    String                @db.VarChar(255)
   supplierId      Int
-  supplier        Supplier              @relation(fields: [supplierId], references: [id])
   invoiceDate     DateTime
   subtotal        Float
   totalTax        Float
   discount        Float                 @default(0)
   total           Float
   status          InvoiceStatus         @default(cash)
-  // ربط الخزنة/البنك للفواتير الكاش
   safeId          Int?
-  safe            TreasurySafe?         @relation(fields: [safeId], references: [id])
   bankId          Int?
-  bank            TreasuryBank?         @relation(fields: [bankId], references: [id])
   description     String?
   topNotes        Json?
   notes           Json?
-  printableTitle   String?
+  printableTitle  String?
   createdAt       DateTime              @default(now())
   updatedAt       DateTime              @updatedAt
-  dueDate         DateTime?             // تاريخ الاستحقاق (دفع)
+  dueDate         DateTime?
+  bank            TreasuryBank?         @relation(fields: [bankId], references: [id])
+  safe            TreasurySafe?         @relation(fields: [safeId], references: [id])
+  supplier        Supplier              @relation(fields: [supplierId], references: [id])
   items           PurchaseInvoiceItem[]
   purchaseReturns PurchaseReturn[]
 }
 
 model PurchaseInvoiceItem {
-  id          Int             @id @default(autoincrement())
-  invoice     PurchaseInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  invoiceId   Int
-  description String          @db.VarChar(255)
-  quantity    Float
-  unitPrice     Float
-  sellingPrice  Float           @default(0)
-  profitMargin  Float           @default(0)
-  taxRate       Float           @default(0)
-  discount      Float           @default(0)
-  total         Float
-  productId     Int?
-  product       Product?        @relation(fields: [productId], references: [id])
+  id           Int             @id @default(autoincrement())
+  invoiceId    Int
+  description  String          @db.VarChar(255)
+  quantity     Float
+  unitPrice    Float
+  sellingPrice Float           @default(0)
+  profitMargin Float           @default(0)
+  taxRate      Float           @default(0)
+  discount     Float           @default(0)
+  total        Float
+  productId    Int?
+  invoice      PurchaseInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  product      Product?        @relation(fields: [productId], references: [id])
 }
 
-enum InvoiceStatus {
-  cash
-  credit
-  pending
-}
-
-// ========== الخزائن ==========
 model TreasurySafe {
-  id              Int              @id @default(autoincrement())
-  name            String           @db.VarChar(255)
-  balance         Float            @default(0)
-  description     String?          @db.Text
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-  isPrimary       Boolean          @default(false)
-  isActive        Boolean          @default(true)
-  salesReturns    SalesReturn[] // مرتجعات مبيعات تم ردها إلى هذه الخزنة
-  purchaseReturns PurchaseReturn[] // مرتجعات مشتريات تم سحبها من هذه الخزنة
-  salesInvoices    SalesInvoice[]   // فواتير مبيعات كاش دخلت هذه الخزنة
-  purchaseInvoices PurchaseInvoice[] // فواتير مشتريات كاش خرجت من هذه الخزنة
-  receiptVouchers ReceiptVoucher[]
-  paymentVouchers PaymentVoucher[]
-  transfersFrom   TreasuryTransfer[] @relation("TransferFromSafe")
-  transfersTo     TreasuryTransfer[] @relation("TransferToSafe")
+  id               Int                @id @default(autoincrement())
+  name             String             @db.VarChar(255)
+  balance          Float              @default(0)
+  description      String?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  isPrimary        Boolean            @default(false)
+  isActive         Boolean            @default(true)
+  accountId        Int?               @unique
+  paymentVouchers  PaymentVoucher[]
+  purchaseInvoices PurchaseInvoice[]
+  purchaseReturns  PurchaseReturn[]
+  receiptVouchers  ReceiptVoucher[]
+  salesInvoices    SalesInvoice[]
+  salesReturns     SalesReturn[]
+  account          Account?           @relation(fields: [accountId], references: [id])
+  transfersFrom    TreasuryTransfer[] @relation("TransferFromSafe")
+  transfersTo      TreasuryTransfer[] @relation("TransferToSafe")
 }
 
-// ========== البنوك ==========
 model TreasuryBank {
-  id              Int              @id @default(autoincrement())
-  name            String           @db.VarChar(255)
-  accountNumber   String?          @db.VarChar(100)
-  branch          String?          @db.VarChar(255)
-  balance         Float            @default(0)
-  description     String?          @db.Text
-  isActive        Boolean          @default(true)
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-  salesReturns    SalesReturn[] // مرتجعات مبيعات تم ردها إلى هذا البنك
-  purchaseReturns PurchaseReturn[] // مرتجعات مشتريات تم سحبها من هذا البنك
-  salesInvoices    SalesInvoice[]   // فواتير مبيعات كاش دخلت هذا البنك
-  purchaseInvoices PurchaseInvoice[] // فواتير مشتريات كاش خرجت من هذا البنك
-  receiptVouchers ReceiptVoucher[]
-  paymentVouchers PaymentVoucher[]
-  transfersFrom   TreasuryTransfer[] @relation("TransferFromBank")
-  transfersTo     TreasuryTransfer[] @relation("TransferToBank")
+  id               Int                @id @default(autoincrement())
+  name             String             @db.VarChar(255)
+  accountNumber    String?            @db.VarChar(100)
+  branch           String?            @db.VarChar(255)
+  balance          Float              @default(0)
+  description      String?
+  isActive         Boolean            @default(true)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  accountId        Int?               @unique
+  paymentVouchers  PaymentVoucher[]
+  purchaseInvoices PurchaseInvoice[]
+  purchaseReturns  PurchaseReturn[]
+  receiptVouchers  ReceiptVoucher[]
+  salesInvoices    SalesInvoice[]
+  salesReturns     SalesReturn[]
+  account          Account?           @relation(fields: [accountId], references: [id])
+  transfersFrom    TreasuryTransfer[] @relation("TransferFromBank")
+  transfersTo      TreasuryTransfer[] @relation("TransferToBank")
 }
 
-// ========== سندات القبض ==========
 model ReceiptVoucher {
   id              Int              @id @default(autoincrement())
   voucherNumber   String           @unique @db.VarChar(50)
   date            DateTime
   amount          Float
-  description     String?          @db.Text
-  purchaseReturns PurchaseReturn[] // سندات القبض المرتبطة بمرتجعات المشتريات
-  // من العميل
+  description     String?
   customerId      Int
+  accountType     String           @db.VarChar(10)
+  safeId          Int?
+  bankId          Int?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  bank            TreasuryBank?    @relation(fields: [bankId], references: [id])
   customer        Customer         @relation(fields: [customerId], references: [id])
-
-  // إلى خزنة أو بنك
-  accountType String        @db.VarChar(10) // "safe" or "bank"
-  safeId      Int?
-  safe        TreasurySafe? @relation(fields: [safeId], references: [id])
-  bankId      Int?
-  bank        TreasuryBank? @relation(fields: [bankId], references: [id])
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  safe            TreasurySafe?    @relation(fields: [safeId], references: [id])
+  purchaseReturns PurchaseReturn[] @relation("PurchaseReturnToReceiptVoucher")
 
   @@index([customerId])
   @@index([safeId])
   @@index([bankId])
 }
 
-// ========== سندات الصرف ==========
 model PaymentVoucher {
   id            Int           @id @default(autoincrement())
   voucherNumber String        @unique @db.VarChar(50)
   date          DateTime
   amount        Float
-  description   String?       @db.Text
-  salesReturns  SalesReturn[] // سندات الصرف المرتبطة بمرتجعات المبيعات
-  // من خزنة أو بنك
-  accountType   String        @db.VarChar(10) // "safe" or "bank"
+  description   String?
+  accountType   String        @db.VarChar(10)
   safeId        Int?
-  safe          TreasurySafe? @relation(fields: [safeId], references: [id])
   bankId        Int?
+  supplierId    Int
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
   bank          TreasuryBank? @relation(fields: [bankId], references: [id])
-
-  // إلى المورد
-  supplierId Int
-  supplier   Supplier @relation(fields: [supplierId], references: [id])
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  safe          TreasurySafe? @relation(fields: [safeId], references: [id])
+  supplier      Supplier      @relation(fields: [supplierId], references: [id])
+  salesReturns  SalesReturn[] @relation("PaymentVoucherToSalesReturn")
 
   @@index([supplierId])
   @@index([safeId])
   @@index([bankId])
 }
 
-// ========== مرتجعات المبيعات ==========
 model SalesReturn {
-  id           Int           @id @default(autoincrement())
-  returnNumber Int           @unique
-  invoiceId    Int // الفاتورة الأصلية
-  invoice      SalesInvoice  @relation(fields: [invoiceId], references: [id])
-  customerId   Int
-  customer     Customer      @relation(fields: [customerId], references: [id])
-  returnDate   DateTime
-  subtotal     Float // إجمالي قبل الخصم/الضريبة
-  discount     Float         @default(0)
-  totalTax     Float         @default(0)
-  total        Float // الإجمالي النهائي
-  reason       String? // سبب الإرجاع
-  status       ReturnStatus  @default(pending) // pending, completed, rejected
-  // طريقة الرد: إما نقدي أو إلى الخزنة/البنك
-  refundMethod RefundMethod  @default(cash) // cash, bank, safe
-  safeId       Int?
-  safe         TreasurySafe? @relation(fields: [safeId], references: [id])
-  bankId       Int?
-  bank         TreasuryBank? @relation(fields: [bankId], references: [id])
-  description  String? // ملاحظات إضافية
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-
+  id              Int               @id @default(autoincrement())
+  returnNumber    Int               @unique
+  invoiceId       Int
+  customerId      Int
+  returnDate      DateTime
+  subtotal        Float
+  discount        Float             @default(0)
+  totalTax        Float             @default(0)
+  total           Float
+  reason          String?
+  status          ReturnStatus      @default(pending)
+  refundMethod    RefundMethod      @default(cash)
+  safeId          Int?
+  bankId          Int?
+  description     String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  bank            TreasuryBank?     @relation(fields: [bankId], references: [id])
+  customer        Customer          @relation(fields: [customerId], references: [id])
+  invoice         SalesInvoice      @relation(fields: [invoiceId], references: [id])
+  safe            TreasurySafe?     @relation(fields: [safeId], references: [id])
   items           SalesReturnItem[]
-  // سندات الصرف المرتبطة (إذا تم رد المبلغ)
-  paymentVouchers PaymentVoucher[] // يمكن ربطها بسندات صرف
+  paymentVouchers PaymentVoucher[]  @relation("PaymentVoucherToSalesReturn")
 
   @@index([invoiceId])
   @@index([customerId])
@@ -266,42 +244,39 @@ model SalesReturn {
 model SalesReturnItem {
   id            Int         @id @default(autoincrement())
   returnId      Int
-  return        SalesReturn @relation(fields: [returnId], references: [id], onDelete: Cascade)
-  invoiceItemId Int? // لو أردنا ربط بند معين في الفاتورة الأصلية
+  invoiceItemId Int?
   description   String      @db.VarChar(255)
   quantity      Float
   unitPrice     Float
   taxRate       Float       @default(0)
   total         Float
+  return        SalesReturn @relation(fields: [returnId], references: [id], onDelete: Cascade)
 }
 
-// ========== مرتجعات المشتريات ==========
 model PurchaseReturn {
-  id           Int             @id @default(autoincrement())
-  returnNumber Int             @unique
-  invoiceId    Int // فاتورة الشراء الأصلية
-  invoice      PurchaseInvoice @relation(fields: [invoiceId], references: [id])
-  supplierId   Int
-  supplier     Supplier        @relation(fields: [supplierId], references: [id])
-  returnDate   DateTime
-  subtotal     Float
-  discount     Float           @default(0)
-  totalTax     Float           @default(0)
-  total        Float
-  reason       String?
-  status       ReturnStatus    @default(pending)
-  // طريقة الاسترداد: نقدي أو إلى الخزنة/البنك
-  refundMethod RefundMethod    @default(cash)
-  safeId       Int?
-  safe         TreasurySafe?   @relation(fields: [safeId], references: [id])
-  bankId       Int?
-  bank         TreasuryBank?   @relation(fields: [bankId], references: [id])
-  description  String?
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
-
+  id              Int                  @id @default(autoincrement())
+  returnNumber    Int                  @unique
+  invoiceId       Int
+  supplierId      Int
+  returnDate      DateTime
+  subtotal        Float
+  discount        Float                @default(0)
+  totalTax        Float                @default(0)
+  total           Float
+  reason          String?
+  status          ReturnStatus         @default(pending)
+  refundMethod    RefundMethod         @default(cash)
+  safeId          Int?
+  bankId          Int?
+  description     String?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  bank            TreasuryBank?        @relation(fields: [bankId], references: [id])
+  invoice         PurchaseInvoice      @relation(fields: [invoiceId], references: [id])
+  safe            TreasurySafe?        @relation(fields: [safeId], references: [id])
+  supplier        Supplier             @relation(fields: [supplierId], references: [id])
   items           PurchaseReturnItem[]
-  receiptVouchers ReceiptVoucher[] // سندات قبض (إذا استرداد نقدي)
+  receiptVouchers ReceiptVoucher[]     @relation("PurchaseReturnToReceiptVoucher")
 
   @@index([invoiceId])
   @@index([supplierId])
@@ -311,45 +286,22 @@ model PurchaseReturn {
 model PurchaseReturnItem {
   id            Int            @id @default(autoincrement())
   returnId      Int
-  return        PurchaseReturn @relation(fields: [returnId], references: [id], onDelete: Cascade)
   invoiceItemId Int?
   description   String         @db.VarChar(255)
   quantity      Float
   unitPrice     Float
   taxRate       Float          @default(0)
   total         Float
-}
-
-enum ReturnStatus {
-  pending
-  completed
-  rejected
-}
-
-enum RefundMethod {
-  cash
-  safe
-  bank
-  credit
-}
-
-// ========== المخزون ==========
-
-enum MovementType {
-  PURCHASE
-  SALE
-  PURCHASE_RETURN
-  SALE_RETURN
-  ADJUSTMENT
+  return        PurchaseReturn @relation(fields: [returnId], references: [id], onDelete: Cascade)
 }
 
 model Category {
   id        Int       @id @default(autoincrement())
   name      String    @db.VarChar(100)
   code      String?   @unique @db.VarChar(50)
-  products  Product[]
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
+  products  Product[]
 }
 
 model Warehouse {
@@ -357,9 +309,9 @@ model Warehouse {
   name           String          @db.VarChar(100)
   location       String?         @db.VarChar(255)
   isDefault      Boolean         @default(false)
-  stockMovements StockMovement[]
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
+  stockMovements StockMovement[]
 }
 
 model Product {
@@ -375,31 +327,31 @@ model Product {
   currentStock         Float                 @default(0)
   isActive             Boolean               @default(true)
   categoryId           Int?
-  category             Category?             @relation(fields: [categoryId], references: [id])
-  stockMovements       StockMovement[]
-  salesInvoiceItems    SalesInvoiceItem[]
-  purchaseInvoiceItems PurchaseInvoiceItem[]
-  quotationItems       QuotationItem[]
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
+  category             Category?             @relation(fields: [categoryId], references: [id])
+  purchaseInvoiceItems PurchaseInvoiceItem[]
+  quotationItems       QuotationItem[]
+  salesInvoiceItems    SalesInvoiceItem[]
+  stockMovements       StockMovement[]
 }
 
 model StockMovement {
   id                Int          @id @default(autoincrement())
   productId         Int
-  product           Product      @relation(fields: [productId], references: [id])
   movementType      MovementType
   quantity          Float
   unitPrice         Float        @default(0)
   reference         String?      @db.VarChar(100)
-  notes             String?      @db.Text
+  notes             String?
   warehouseId       Int?
-  warehouse         Warehouse?   @relation(fields: [warehouseId], references: [id])
   purchaseInvoiceId Int?
   salesInvoiceId    Int?
   purchaseReturnId  Int?
   salesReturnId     Int?
   createdAt         DateTime     @default(now())
+  product           Product      @relation(fields: [productId], references: [id])
+  warehouse         Warehouse?   @relation(fields: [warehouseId], references: [id])
 
   @@index([productId])
   @@index([movementType])
@@ -407,7 +359,251 @@ model StockMovement {
   @@index([warehouseId])
 }
 
-// ========== عروض الأسعار ==========
+model Quotation {
+  id             Int             @id @default(autoincrement())
+  code           String          @unique @db.VarChar(20)
+  customerId     Int?
+  customerName   String?         @db.VarChar(255)
+  date           DateTime
+  subtotal       Float
+  totalTax       Float           @default(0)
+  discount       Float           @default(0)
+  total          Float
+  topNotes       Json?
+  notes          Json?
+  printableTitle String?
+  status         QuotationStatus @default(Draft)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  customer       Customer?       @relation(fields: [customerId], references: [id])
+  items          QuotationItem[]
+
+  @@index([customerId])
+  @@index([date])
+}
+
+model QuotationItem {
+  id          Int       @id @default(autoincrement())
+  quotationId Int
+  productId   Int?
+  description String    @db.VarChar(255)
+  quantity    Float
+  unitPrice   Float
+  taxRate     Float     @default(0)
+  discount    Float     @default(0)
+  total       Float
+  product     Product?  @relation(fields: [productId], references: [id])
+  quotation   Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+}
+
+model TreasuryTransfer {
+  id             Int           @id @default(autoincrement())
+  transferNumber String        @unique @db.VarChar(50)
+  date           DateTime
+  amount         Float
+  description    String?
+  fromType       String        @db.VarChar(10)
+  fromSafeId     Int?
+  fromBankId     Int?
+  toType         String        @db.VarChar(10)
+  toSafeId       Int?
+  toBankId       Int?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  fromBank       TreasuryBank? @relation("TransferFromBank", fields: [fromBankId], references: [id])
+  fromSafe       TreasurySafe? @relation("TransferFromSafe", fields: [fromSafeId], references: [id])
+  toBank         TreasuryBank? @relation("TransferToBank", fields: [toBankId], references: [id])
+  toSafe         TreasurySafe? @relation("TransferToSafe", fields: [toSafeId], references: [id])
+
+  @@index([fromSafeId])
+  @@index([fromBankId])
+  @@index([toSafeId])
+  @@index([toBankId])
+}
+
+model SystemSettings {
+  id        Int      @id @default(1)
+  settings  Json
+  updatedAt DateTime @updatedAt
+}
+
+model User {
+  id                       Int                     @id @default(autoincrement())
+  username                 String                  @unique @db.VarChar(50)
+  password                 String                  @db.VarChar(255)
+  role                     String                  @default("WORKER") @db.VarChar(20)
+  createdAt                DateTime                @default(now())
+  updatedAt                DateTime                @updatedAt
+  modifiedAccounts         Account[]               @relation("AccountModifier")
+  createdJournalEntries    JournalEntry[]          @relation("JournalCreator")
+  notifications            Notification[]
+  sessions                 Session[]
+  approvedTreasuryRequests TreasuryActionRequest[] @relation("Approver")
+  treasuryRequests         TreasuryActionRequest[] @relation("Requester")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    Int
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model CompanySettings {
+  id                 Int      @id @default(1)
+  companyName        String?  @default("شركة المحاسبة الحديثة")
+  companyNameEn      String?  @default("Modern Accounting Co.")
+  companyLogo        String?
+  companyStamp       String?
+  showLogoOnPrint    Boolean  @default(true)
+  showStampOnPrint   Boolean  @default(true)
+  salesPrefix        String   @default("INV")
+  purchasePrefix     String   @default("PUR")
+  quotationPrefix    String   @default("QUO")
+  invoiceName        String   @default("فاتورة ضريبية")
+  startNumber        Int      @default(1)
+  termsAndConditions String?
+  taxEnabled         Boolean  @default(true)
+  taxName            String   @default("VAT")
+  taxPercentage      Float    @default(15)
+  taxType            TaxType  @default(EXCLUSIVE)
+  currencyCode       String   @default("ج.م")
+  decimalPlaces      Int      @default(2)
+  updatedAt          DateTime @updatedAt
+}
+
+model Notification {
+  id        Int              @id @default(autoincrement())
+  title     String           @db.VarChar(255)
+  message   String
+  type      NotificationType @default(INFO)
+  isRead    Boolean          @default(false)
+  userId    Int?
+  createdAt DateTime         @default(now())
+  user      User?            @relation(fields: [userId], references: [id])
+}
+
+model GeneralSettings {
+  id                             Int      @id @default(1)
+  staffActivityAlerts            Boolean  @default(true)
+  inventoryAlerts                Boolean  @default(true)
+  vaultBankAlerts                Boolean  @default(true)
+  minVaultBalance                Float    @default(1000)
+  financialAlerts                Boolean  @default(true)
+  showDueDateOnInvoices          Boolean  @default(false)
+  updatedAt                      DateTime @updatedAt
+  requireApprovalForTransfers    Boolean  @default(false)
+  requireApprovalForSafeCreation Boolean  @default(false)
+  requireApprovalForBankCreation Boolean  @default(false)
+  requireApprovalForVouchers     Boolean  @default(false)
+}
+
+model TreasuryActionRequest {
+  id          Int                @id @default(autoincrement())
+  type        TreasuryActionType
+  data        Json
+  status      RequestStatus      @default(PENDING)
+  reason      String?
+  requesterId Int
+  approverId  Int?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  approver    User?              @relation("Approver", fields: [approverId], references: [id])
+  requester   User               @relation("Requester", fields: [requesterId], references: [id])
+
+  @@index([requesterId])
+  @@index([approverId])
+  @@index([status])
+}
+
+model Account {
+  id               Int           @id @default(autoincrement())
+  code             String        @unique
+  name             String        @db.VarChar(255)
+  nameEn           String?       @db.VarChar(255)
+  type             AccountType
+  parentId         Int?
+  isSelectable     Boolean       @default(true)
+  level            Int           @default(1)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  lastModifiedById Int?
+  lastModifiedBy   User?         @relation("AccountModifier", fields: [lastModifiedById], references: [id])
+  parent           Account?      @relation("AccountHierarchy", fields: [parentId], references: [id])
+  children         Account[]     @relation("AccountHierarchy")
+  customer         Customer?
+  journalItems     JournalItem[]
+  supplier         Supplier?
+  treasuryBank     TreasuryBank?
+  treasurySafe     TreasurySafe?
+
+  @@index([parentId])
+  @@index([code])
+}
+
+model JournalEntry {
+  id          Int           @id @default(autoincrement())
+  entryNumber Int           @unique
+  date        DateTime
+  description String?
+  reference   String?       @db.VarChar(100)
+  sourceType  SourceType    @default(MANUAL)
+  sourceId    Int?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  createdById Int?
+  createdBy   User?         @relation("JournalCreator", fields: [createdById], references: [id])
+  items       JournalItem[]
+
+  @@index([date])
+  @@index([sourceType, sourceId])
+}
+
+model JournalItem {
+  id             Int          @id @default(autoincrement())
+  journalEntryId Int
+  accountId      Int
+  description    String?
+  debit          Float        @default(0)
+  credit         Float        @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  account        Account      @relation(fields: [accountId], references: [id])
+  journalEntry   JournalEntry @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+  @@index([journalEntryId])
+}
+
+enum InvoiceStatus {
+  cash
+  credit
+  pending
+}
+
+enum ReturnStatus {
+  pending
+  completed
+  rejected
+}
+
+enum RefundMethod {
+  cash
+  safe
+  bank
+  credit
+}
+
+enum MovementType {
+  PURCHASE
+  SALE
+  PURCHASE_RETURN
+  SALE_RETURN
+  ADJUSTMENT
+}
 
 enum QuotationStatus {
   Draft
@@ -417,172 +613,16 @@ enum QuotationStatus {
   Converted
 }
 
-model Quotation {
-  id           Int              @id @default(autoincrement())
-  code         String           @unique @db.VarChar(20)
-  customerId   Int?
-  customerName String?          @db.VarChar(255)
-  customer     Customer?        @relation(fields: [customerId], references: [id])
-  date         DateTime
-  subtotal     Float
-  totalTax     Float            @default(0)
-  discount     Float            @default(0)
-  total        Float
-  topNotes     Json?
-  notes        Json?
-  printableTitle String?
-  status       QuotationStatus  @default(Draft)
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @updatedAt
-  items        QuotationItem[]
-
-  @@index([customerId])
-  @@index([date])
-}
-
-model QuotationItem {
-  id          Int       @id @default(autoincrement())
-  quotationId Int
-  quotation   Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
-  productId   Int?
-  product     Product?  @relation(fields: [productId], references: [id])
-  description String    @db.VarChar(255)
-  quantity    Float
-  unitPrice   Float
-  taxRate     Float     @default(0)
-  discount    Float     @default(0)
-  total       Float
-}
-
-// ========== التحويلات بين الحسابات ==========
-model TreasuryTransfer {
-  id            Int           @id @default(autoincrement())
-  transferNumber String        @unique @db.VarChar(50)
-  date          DateTime
-  amount        Float
-  description   String?       @db.Text
-  
-  fromType      String        @db.VarChar(10) // "safe" or "bank"
-  fromSafeId    Int?
-  fromSafe      TreasurySafe? @relation("TransferFromSafe", fields: [fromSafeId], references: [id])
-  fromBankId    Int?
-  fromBank      TreasuryBank? @relation("TransferFromBank", fields: [fromBankId], references: [id])
-  
-  toType        String        @db.VarChar(10) // "safe" or "bank"
-  toSafeId      Int?
-  toSafe        TreasurySafe? @relation("TransferToSafe", fields: [toSafeId], references: [id])
-  toBankId      Int?
-  toBank        TreasuryBank? @relation("TransferToBank", fields: [toBankId], references: [id])
-  
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-
-  @@index([fromSafeId])
-  @@index([fromBankId])
-  @@index([toSafeId])
-  @@index([toBankId])
-}
-
-// ========== إعدادات النظام ==========
-model SystemSettings {
-  id        Int      @id @default(1) // Single row table
-  settings  Json     // يخزن كامل كائن الإعدادات (company, invoice, tax, inventory, appearance, rbac)
-  updatedAt DateTime @updatedAt
-}
-
-// ========== نظام المصادقة والمستخدمين ==========
-model User {
-  id        Int       @id @default(autoincrement())
-  username  String    @unique @db.VarChar(50)
-  password  String    @db.VarChar(255) // Hashed
-  role      String    @default("WORKER") @db.VarChar(20) // "ADMIN" or "WORKER"
-  sessions  Session[]
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-
-  treasuryRequests         TreasuryActionRequest[] @relation("Requester")
-  approvedTreasuryRequests TreasuryActionRequest[] @relation("Approver")
-  notifications            Notification[]
-}
-
-model Session {
-  id        String   @id @default(cuid())
-  userId    Int
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-
-  @@index([userId])
-}
-
 enum TaxType {
   INCLUSIVE
   EXCLUSIVE
 }
-
-// ========== إعدادات الشركة والفواتير (Singleton) ==========
-model CompanySettings {
-  id                 Int      @id @default(1)
-  companyName        String?  @default("شركة المحاسبة الحديثة")
-  companyNameEn      String?  @default("Modern Accounting Co.")
-  companyLogo        String?  @db.Text
-  companyStamp       String?  @db.Text
-  showLogoOnPrint    Boolean  @default(true)
-  showStampOnPrint   Boolean  @default(true)
-  salesPrefix        String   @default("INV")
-  purchasePrefix     String   @default("PUR")
-  quotationPrefix    String   @default("QUO")
-  invoiceName        String   @default("فاتورة ضريبية")
-  startNumber        Int      @default(1)
-  termsAndConditions String?  @db.Text
-
-  // Financial Settings
-  taxEnabled    Boolean @default(true)
-  taxName       String  @default("VAT")
-  taxPercentage Float   @default(15)
-  taxType       TaxType @default(EXCLUSIVE)
-
-  currencyCode  String @default("ج.م")
-  decimalPlaces Int    @default(2)
-
-  updatedAt DateTime @updatedAt
-}
-
-// ========== نظام التنبيهات ==========
 
 enum NotificationType {
   INFO
   WARNING
   SUCCESS
   ERROR
-}
-
-model Notification {
-  id        Int              @id @default(autoincrement())
-  title     String           @db.VarChar(255)
-  message   String           @db.Text
-  type      NotificationType @default(INFO)
-  isRead    Boolean          @default(false)
-  userId    Int?
-  user      User?            @relation(fields: [userId], references: [id])
-  createdAt DateTime         @default(now())
-}
-
-model GeneralSettings {
-  id                    Int      @id @default(1)
-  staffActivityAlerts   Boolean  @default(true)
-  inventoryAlerts       Boolean  @default(true)
-  vaultBankAlerts      Boolean  @default(true)
-  minVaultBalance       Float    @default(1000)
-  financialAlerts       Boolean  @default(true)
-  showDueDateOnInvoices Boolean  @default(false)
-  updatedAt             DateTime @updatedAt
-
-  // Approval Workflow Settings
-  requireApprovalForTransfers    Boolean @default(false)
-  requireApprovalForSafeCreation Boolean @default(false)
-  requireApprovalForBankCreation Boolean @default(false)
-  requireApprovalForVouchers     Boolean @default(false)
 }
 
 enum TreasuryActionType {
@@ -599,23 +639,21 @@ enum RequestStatus {
   REJECTED
 }
 
-model TreasuryActionRequest {
-  id          Int                @id @default(autoincrement())
-  type        TreasuryActionType
-  data        Json // Stores input data for the action
-  status      RequestStatus      @default(PENDING)
-  reason      String?            @db.Text // For rejection
-  
-  requesterId Int
-  requester   User               @relation("Requester", fields: [requesterId], references: [id])
-  
-  approverId  Int?
-  approver    User?              @relation("Approver", fields: [approverId], references: [id])
-  
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
+enum AccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  REVENUE
+  EXPENSE
+}
 
-  @@index([requesterId])
-  @@index([approverId])
-  @@index([status])
+enum SourceType {
+  MANUAL
+  SALES_INVOICE
+  PURCHASE_INVOICE
+  RECEIPT_VOUCHER
+  PAYMENT_VOUCHER
+  SALES_RETURN
+  PURCHASE_RETURN
+  TRANSFER
 }

@@ -6,7 +6,8 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:reset": "npx tsx scripts/db-reset-clean.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

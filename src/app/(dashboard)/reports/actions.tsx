@@ -366,7 +366,7 @@ export async function getSafes() {
     return await prisma.treasurySafe.findMany({
       where: { isActive: true },
       orderBy: { name: 'asc' },
-      select: { id: true, name: true, balance: true }
+      select: { id: true, name: true, balance: true, accountId: true }
     });
   } catch (error) {
     console.error("Error fetching safes:", error);
@@ -380,7 +380,7 @@ export async function getBanks() {
     return await prisma.treasuryBank.findMany({
       where: { isActive: true },
       orderBy: { name: 'asc' },
-      select: { id: true, name: true, balance: true, accountNumber: true }
+      select: { id: true, name: true, balance: true, accountNumber: true, accountId: true }
     });
   } catch (error) {
     console.error("Error fetching banks:", error);

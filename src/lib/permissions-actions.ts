@@ -18,7 +18,7 @@ export async function getRBACPermissions(): Promise<Record<string, boolean | str
     "treasury_view", "treasury_manage", "treasury_vouchers",
     "inventory_view", "inventory_manage",
     "statistics_view",
-    "reports_customers_suppliers", "reports_treasury_banks",
+    "reports_customers_suppliers", "reports_treasury_banks", "reports_ledger",
     "returns_sales", "returns_purchase"
   ];
 

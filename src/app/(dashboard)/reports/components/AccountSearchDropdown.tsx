@@ -21,6 +21,7 @@ import { getSafes, getBanks } from "../actions";
 
 interface Account {
   id: number;
+  accountId?: number | null;
   name: string;
   balance: number;
   type: 'safe' | 'bank';

@@ -25,6 +25,7 @@ export default function LoginPage() {
       setLoading(false);
     } else {
       toast.success("تم تسجيل الدخول بنجاح");
+      localStorage.removeItem("isManagementActive");
       const redirectPath = res.role === "WORKER" ? "/sales-invoices" : "/statistics";
       router.push(redirectPath);
       router.refresh(); // Force a refresh to load session data

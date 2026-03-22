@@ -49,6 +49,9 @@ export function Navbar({ title }: NavbarProps) {
           const count = await getUnreadNotificationsCount();
           setUnreadCount(count);
         }
+      } else {
+        // If session is null (e.g. database reset but cookie exists), redirect to login
+        router.push("/login");
       }
 
       if (settings?.companyLogo) {

@@ -43,31 +43,56 @@ export interface InitialData {
 // دالة مساعدة للتأكد من وجود الخزنة الرئيسية
 async function ensureMainSafe() {
   const safe = await prisma.treasurySafe.findFirst({
-    where: { isPrimary: true }
+    where: { isPrimary: true },
+    include: { account: true }
   });
   
-  if (!safe) {
-    // If not found by flag, try by name for backward compatibility
-    const oldMain = await prisma.treasurySafe.findFirst({
-      where: { name: "الخزنة الرئيسية" }
-    });
+  if (!safe || !safe.accountId) {
+    // 1. Ensure COA Parent exists
+    const parent = await prisma.account.findUnique({ where: { code: '1101' } });
+    if (!parent) throw new Error("Parent COA account 1101 missing");
 
-    if (oldMain) {
-      return await prisma.treasurySafe.update({
-        where: { id: oldMain.id },
-        data: { isPrimary: true }
+    const result = await prisma.$transaction(async (tx) => {
+      let existingSafe = await tx.treasurySafe.findFirst({
+        where: { OR: [{ isPrimary: true }, { name: "الخزنة الرئيسية" }] }
       });
-    }
 
-    // If still not found, create it
-    return await prisma.treasurySafe.create({
-      data: {
-        name: "الخزنة الرئيسية",
-        balance: 0,
-        description: "الخزنة الثابتة للنظام",
-        isPrimary: true,
+      // Find or create COA account
+      let account = await tx.account.findFirst({
+        where: { code: '1101' }
+      });
+
+      if (!account) {
+        account = await tx.account.create({
+          data: {
+            code: '1101',
+            name: "النقدية في الخزينة",
+            type: parent.type,
+            parentId: parent.id,
+            level: parent.level + 1,
+            isSelectable: true
+          }
+        });
       }
+
+      if (existingSafe) {
+        return await tx.treasurySafe.update({
+          where: { id: existingSafe.id },
+          data: { isPrimary: true, accountId: account.id }
+        });
+      }
+
+      return await tx.treasurySafe.create({
+        data: {
+          name: "الخزنة الرئيسية",
+          balance: 0,
+          description: "الخزنة الثابتة للنظام",
+          isPrimary: true,
+          accountId: account.id
+        }
+      });
     });
+    return result;
   }
   
   return safe;
@@ -84,11 +109,29 @@ export async function getTreasuryData() {
   const [safes, banks, recentReceipts, recentPayments, recentSalesInvoices, recentPurchaseInvoices, recentSalesReturns, recentPurchaseReturns, recentTransfers] = await Promise.all([
     prisma.treasurySafe.findMany({ 
       where: { isActive: true },
-      orderBy: { createdAt: 'desc' } 
+      orderBy: { createdAt: 'desc' },
+      include: {
+        account: {
+          include: {
+            journalItems: {
+              select: { debit: true, credit: true }
+            }
+          }
+        }
+      }
     }),
     prisma.treasuryBank.findMany({ 
-      where: { isActive: true }, // البنوك النشطة فقط
-      orderBy: { createdAt: 'desc' } 
+      where: { isActive: true },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        account: {
+          include: {
+            journalItems: {
+              select: { debit: true, credit: true }
+            }
+          }
+        }
+      }
     }),
     prisma.receiptVoucher.findMany({
       take: 20,
@@ -158,16 +201,37 @@ export async function getTreasuryData() {
     }),
   ]);
 
+  // Process real-time ledger balances
+  const processedSafes = safes.map(s => {
+    let balance = s.balance;
+    if (s.account) {
+      const totalDebit = s.account.journalItems.reduce((sum: number, item: { debit: number; credit: number }) => sum + (Number(item.debit) || 0), 0);
+      const totalCredit = s.account.journalItems.reduce((sum: number, item: { debit: number; credit: number }) => sum + (Number(item.credit) || 0), 0);
+      balance = totalDebit - totalCredit;
+    }
+    return { ...s, balance };
+  });
+
+  const processedBanks = banks.map(b => {
+    let balance = b.balance;
+    if (b.account) {
+      const totalDebit = b.account.journalItems.reduce((sum: number, item: { debit: number; credit: number }) => sum + (Number(item.debit) || 0), 0);
+      const totalCredit = b.account.journalItems.reduce((sum: number, item: { debit: number; credit: number }) => sum + (Number(item.credit) || 0), 0);
+      balance = totalDebit - totalCredit;
+    }
+    return { ...b, balance };
+  });
+
   const stats: TreasuryStats = {
-    totalAccounts: safes.length + banks.length,
-    totalBanksBalance: banks.reduce((sum, b) => sum + b.balance, 0),
-    totalSafeBalance: safes.reduce((sum, s) => sum + s.balance, 0),
+    totalAccounts: processedSafes.length + processedBanks.length,
+    totalBanksBalance: processedBanks.reduce((sum, b) => sum + b.balance, 0),
+    totalSafeBalance: processedSafes.reduce((sum, s) => sum + s.balance, 0),
     grandTotal: 0,
   };
   stats.grandTotal = stats.totalBanksBalance + stats.totalSafeBalance;
 
   const allAccounts: AccountSummary[] = [
-    ...safes.map(s => ({ 
+    ...processedSafes.map(s => ({ 
       id: s.id, 
       name: s.name, 
       type: "safe" as const, 
@@ -176,7 +240,7 @@ export async function getTreasuryData() {
       accountNumber: null,
       branch: null
     })),
-    ...banks.map(b => ({ 
+    ...processedBanks.map(b => ({ 
       id: b.id, 
       name: b.name, 
       type: "bank" as const, 
@@ -302,14 +366,50 @@ export async function createBank(data: { name: string; accountNumber: string; br
   }
 
   try {
-    const bank = await prisma.treasuryBank.create({
-      data: {
-        name: data.name,
-        accountNumber: data.accountNumber || null,
-        branch: data.branch || null,
-        balance: data.initialBalance || 0,
-        isActive: true,
-      },
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Find Bank Parent Account
+      const parent = await tx.account.findUnique({
+        where: { code: '1102' }
+      });
+
+      if (!parent) throw new Error("حساب البنوك الرئيسي (1102) غير موجود في شجرة الحسابات");
+
+      // 2. Suggest Next Code
+      const lastChild = await tx.account.findFirst({
+        where: { parentId: parent.id },
+        orderBy: { code: 'desc' },
+        select: { code: true }
+      });
+      
+      const newCode = lastChild 
+        ? (parseInt(lastChild.code) + 1).toString() 
+        : parent.code + "01";
+
+      // 3. Create COA Account
+      const account = await tx.account.create({
+        data: {
+          code: newCode,
+          name: data.name,
+          type: parent.type,
+          parentId: parent.id,
+          level: parent.level + 1,
+          isSelectable: true,
+        }
+      });
+
+      // 4. Create Bank and link accountId
+      const bank = await tx.treasuryBank.create({
+        data: {
+          name: data.name,
+          accountNumber: data.accountNumber || null,
+          branch: data.branch || null,
+          balance: data.initialBalance || 0,
+          isActive: true,
+          accountId: account.id, // Link to COA
+        },
+      });
+
+      return bank;
     });
 
     const session = await getSession();
@@ -322,10 +422,10 @@ export async function createBank(data: { name: string; accountNumber: string; br
     }
 
     revalidatePath("/treasury");
-    return { success: true, data: bank };
+    return { success: true, data: result };
   } catch (error) {
     console.error("Error creating bank:", error);
-    return { success: false, error: "فشل في إضافة البنك" };
+    return { success: false, error: "فشل في إضافة البنك وتزامن الحسابات" };
   }
 }
 
@@ -938,40 +1038,55 @@ export async function createReceiptVoucher(data: {
     const pendingAlerts: { type: 'treasury', name: string, balance: number }[] = [];
 
     const result = await prisma.$transaction(async (tx) => {
-      
+      // 1. Get current entry number
+      const lastEntry = await tx.journalEntry.findFirst({
+        orderBy: { entryNumber: 'desc' },
+        select: { entryNumber: true }
+      });
+      const entryNumber = (lastEntry?.entryNumber || 0) + 1;
+
+      // 2. Find Treasury/Bank Account ID
+      let treasuryAccountId: number;
       if (accountType === "safe") {
         const safe = await tx.treasurySafe.findUnique({ 
-          where: { id: accountId } 
+          where: { id: accountId },
+          select: { accountId: true, name: true, balance: true }
         });
-        if (!safe) throw new Error("الخزنة غير موجودة");
-        
+        if (!safe || !safe.accountId) throw new Error("الخزنة غير مربوطة بحساب محاسبي");
+        treasuryAccountId = safe.accountId;
+
         const updatedSafe = await tx.treasurySafe.update({
           where: { id: accountId },
           data: { balance: { increment: amount } },
           select: { name: true, balance: true }
         });
-        if (updatedSafe) {
-          pendingAlerts.push({ type: 'treasury', name: updatedSafe.name, balance: updatedSafe.balance });
-        }
-      } else if (accountType === "bank") {
+        pendingAlerts.push({ type: 'treasury', name: updatedSafe.name, balance: updatedSafe.balance });
+      } else {
         const bank = await tx.treasuryBank.findUnique({ 
-          where: { id: accountId } 
+          where: { id: accountId },
+          select: { accountId: true, name: true, balance: true }
         });
-        if (!bank) throw new Error("البنك غير موجود");
+        if (!bank || !bank.accountId) throw new Error("البنك غير مربوط بحساب محاسبي");
+        treasuryAccountId = bank.accountId;
 
         const updatedBank = await tx.treasuryBank.update({
           where: { id: accountId },
           data: { balance: { increment: amount } },
           select: { name: true, balance: true }
         });
-        if (updatedBank) {
-          pendingAlerts.push({ type: 'treasury', name: updatedBank.name, balance: updatedBank.balance });
-        }
-      } else {
-        throw new Error("نوع الحساب غير معروف");
+        pendingAlerts.push({ type: 'treasury', name: updatedBank.name, balance: updatedBank.balance });
       }
 
-      return await tx.receiptVoucher.create({
+      // 3. Get specifically linked Customer Account
+      const customer = await tx.customer.findUnique({
+        where: { id: customerId },
+        select: { accountId: true, name: true }
+      });
+      if (!customer?.accountId) throw new Error("العميل غير مربوط بحساب محاسبي");
+      const customerAccountId = customer.accountId;
+
+      // 4. Create Receipt Voucher
+      const voucher = await tx.receiptVoucher.create({
         data: {
           voucherNumber,
           date: new Date(date),
@@ -983,11 +1098,38 @@ export async function createReceiptVoucher(data: {
           bankId: accountType === "bank" ? accountId : null,
         },
         include: {
-          customer: { select: { name: true } },
-          safe: { select: { name: true } },
-          bank: { select: { name: true } },
+          customer: { select: { name: true } }
         }
       });
+
+      // 5. Create Journal Entry
+      await tx.journalEntry.create({
+          data: {
+              entryNumber,
+              date: new Date(date),
+              description: `سند قبض #${voucherNumber} - ${voucher.customer.name}`,
+              sourceType: 'RECEIPT_VOUCHER',
+              sourceId: voucher.id,
+              items: {
+                  create: [
+                      {
+                          accountId: treasuryAccountId,
+                          debit: amount,
+                          credit: 0,
+                          description: `إيداع في ${accountType === 'safe' ? 'الخزينة' : 'البنك'}`
+                      },
+                      {
+                          accountId: customerAccountId,
+                          debit: 0,
+                          credit: amount,
+                          description: `تحصيل من العميل: ${voucher.customer.name}`
+                      }
+                  ]
+              }
+          }
+      });
+
+      return voucher;
     });
 
     revalidatePath("/treasury");
@@ -1126,22 +1268,50 @@ export async function createSafe(data: { name: string; initialBalance: number; d
   }
 
   try {
-    // التحقق من تكرار الاسم
-    const existing = await prisma.treasurySafe.findFirst({
-      where: { name: data.name }
-    });
-    if (existing) {
-      return { success: false, error: "يوجد خزنة بنفس هذا الاسم بالفعل" };
-    }
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Find Safe Parent Account
+      const parent = await tx.account.findUnique({
+        where: { code: '1101' }
+      });
 
-    const safe = await prisma.treasurySafe.create({
-      data: {
-        name: data.name,
-        balance: data.initialBalance || 0,
-        description: data.description || "",
-        isPrimary: false,
-        isActive: true,
-      },
+      if (!parent) throw new Error("حساب الخزينة الرئيسي (1101) غير موجود في شجرة الحسابات");
+
+      // 2. Suggest Next Code
+      const lastChild = await tx.account.findFirst({
+        where: { parentId: parent.id },
+        orderBy: { code: 'desc' },
+        select: { code: true }
+      });
+      
+      const newCode = lastChild 
+        ? (parseInt(lastChild.code) + 1).toString() 
+        : parent.code + "01";
+
+      // 3. Create COA Account
+      const account = await tx.account.create({
+        data: {
+          code: newCode,
+          name: data.name,
+          type: parent.type,
+          parentId: parent.id,
+          level: parent.level + 1,
+          isSelectable: true,
+        }
+      });
+
+      // 4. Create Safe and link accountId
+      const safe = await tx.treasurySafe.create({
+        data: {
+          name: data.name,
+          balance: data.initialBalance || 0,
+          description: data.description || "",
+          isPrimary: false,
+          isActive: true,
+          accountId: account.id, // Link to COA
+        },
+      });
+
+      return safe;
     });
 
     const session = await getSession();
@@ -1154,10 +1324,10 @@ export async function createSafe(data: { name: string; initialBalance: number; d
     }
 
     revalidatePath("/treasury");
-    return { success: true, data: safe };
+    return { success: true, data: result };
   } catch (error) {
     console.error("Error creating safe:", error);
-    return { success: false, error: "فشل في إضافة الخزنة" };
+    return { success: false, error: "فشل في إضافة الخزنة وتزامن الحسابات" };
   }
 }
 

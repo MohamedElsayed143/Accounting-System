@@ -9,6 +9,8 @@ export type PermissionKey =
   | "sales_pending_view"
   | "purchase_view"
   | "purchase_create"
+  | "purchase_edit"
+  | "purchase_delete"
   | "customers_view"
   | "customers_retail_only"
   | "customers_manage"
@@ -22,6 +24,7 @@ export type PermissionKey =
   | "statistics_view"
   | "reports_customers_suppliers"
   | "reports_treasury_banks"
+  | "reports_ledger"
   | "returns_sales"
   | "returns_purchase";
 

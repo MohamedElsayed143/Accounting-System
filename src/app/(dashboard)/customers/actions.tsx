@@ -78,8 +78,26 @@ export async function saveCustomer(data: {
     if (data.id) {
       await prisma.customer.update({
         where: { id: data.id },
-        data,
+        data: {
+          name: data.name,
+          code: data.code,
+          phone: data.phone,
+          address: data.address,
+          category: data.category,
+        },
       });
+
+      // Update linked account name if it exists
+      const customer = await prisma.customer.findUnique({
+        where: { id: data.id },
+        include: { account: true }
+      });
+      if (customer?.accountId) {
+        await prisma.account.update({
+          where: { id: customer.accountId },
+          data: { name: `${customer.code} - ${customer.name}` }
+        });
+      }
       
       const session = await getSession();
       if (session) {
@@ -90,8 +108,30 @@ export async function saveCustomer(data: {
         );
       }
     } else {
-      await prisma.customer.create({
-        data,
+      await prisma.$transaction(async (tx) => {
+        // 1. Create the account in COA first
+        const custParent = await tx.account.findUnique({ where: { code: '1103' } });
+        if (!custParent) throw new Error("حساب العملاء الرئيسي (1103) غير موجود");
+
+        const accountCode = `1103${data.code.toString().padStart(4, '0')}`;
+        const account = await tx.account.create({
+          data: {
+            code: accountCode,
+            name: `${data.code} - ${data.name}`,
+            type: 'ASSET',
+            parentId: custParent.id,
+            level: custParent.level + 1,
+            isSelectable: true,
+          }
+        });
+
+        // 2. Create the customer and link to account
+        await tx.customer.create({
+          data: {
+            ...data,
+            accountId: account.id
+          },
+        });
       });
 
       const session = await getSession();
