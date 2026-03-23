@@ -33,7 +33,10 @@ interface Account {
 export default function ReceiptVoucherPage() {
   const [formData, setFormData] = useState({
     voucherNumber: `RV-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 900 + 100))}`,
-    date: new Date().toISOString().split("T")[0],
+    date: (() => {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    })(),
     amount: "",
     customerId: "",
     accountType: "" as "safe" | "bank" | "",

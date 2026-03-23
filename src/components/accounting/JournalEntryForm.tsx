@@ -69,7 +69,10 @@ export function JournalEntryForm() {
   const [loading, setLoading] = useState(false);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [entryNumber, setEntryNumber] = useState<number | string>("...");
-  const [date, setDate] = useState<string>(new Date().toISOString().split("T")[0]);
+  const [date, setDate] = useState<string>(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  });
   const [description, setDescription] = useState("");
   const [reference, setReference] = useState("");
   const [lines, setLines] = useState<JournalLine[]>([

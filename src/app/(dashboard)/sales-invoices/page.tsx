@@ -90,7 +90,7 @@ export default function SalesInvoicesPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [invoiceToDelete, setInvoiceToDelete] = useState<InvoiceRow | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const { isManagementActive, toggleManagementMode } = useManagementMode();
+  const { isManagementActive, toggleManagementMode, isUserAdmin } = useManagementMode();
   const [isPassGateOpen, setIsPassGateOpen] = useState(false);
 
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
@@ -187,6 +187,7 @@ export default function SalesInvoicesPage() {
             </p>
           </div>
           <div className="flex gap-2 items-center">
+          {isUserAdmin && (
             <Button
               variant={isManagementActive ? "destructive" : "outline"}
               onClick={() => {
@@ -211,6 +212,7 @@ export default function SalesInvoicesPage() {
                 </>
               )}
             </Button>
+          )}
 
             {isManagementActive && hasPermission("sales_create") && (
               <Button

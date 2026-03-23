@@ -28,7 +28,18 @@ import {
   AlertTriangle,
   Users,
   Bell,
+  Trash,
 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Loader2 } from "lucide-react";
 import { Navbar } from "@/components/layout/navbar";
 import { 
@@ -448,6 +459,8 @@ export default function SystemSettingsPage() {
   const [initialLoad, setInitialLoad] = useState(true);
   const [saved, setSaved] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<any | null>(null);
+  const [isDeletingUser, setIsDeletingUser] = useState(false);
 
   // Load from database
   useEffect(() => {
@@ -584,18 +597,27 @@ export default function SystemSettingsPage() {
     }
   };
 
-  const handleDeleteUser = async (id: number) => {
-    if (!confirm("هل أنت متأكد من حذف هذا المستخدم؟")) return;
+  const handleDeleteUser = (user: any) => {
+    setUserToDelete(user);
+  };
+
+  const confirmDeleteUser = async () => {
+    if (!userToDelete) return;
+    
+    setIsDeletingUser(true);
     try {
-      const res = await deleteUser(id);
+      const res = await deleteUser(userToDelete.id);
       if (res?.error) {
         toast.error(res.error);
       } else {
-        toast.success("تم حذف المستخدم");
+        toast.success(`تم حذف المستخدم "${userToDelete.username}" بنجاح`);
         loadUsers();
       }
     } catch (err) {
       toast.error("حدث خطأ أثناء الحذف");
+    } finally {
+      setIsDeletingUser(false);
+      setUserToDelete(null);
     }
   };
 
@@ -1305,7 +1327,7 @@ export default function SystemSettingsPage() {
                               </td>
                               <td className="px-5 py-3 text-center">
                                 <button
-                                  onClick={() => handleDeleteUser(u.id)}
+                                  onClick={() => handleDeleteUser(u)}
                                   className="p-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-lg transition-all"
                                   title="حذف المستخدم"
                                 >
@@ -1338,6 +1360,62 @@ export default function SystemSettingsPage() {
           </div>
         </div>
       </div>
+
+      <AlertDialog open={!!userToDelete} onOpenChange={(open) => !open && setUserToDelete(null)}>
+        <AlertDialogContent className="sm:max-w-[440px] border-0 shadow-2xl rounded-[2.5rem] p-0 overflow-hidden bg-white dark:bg-slate-900" dir="rtl">
+          <div className="p-8 bg-rose-50/50 dark:bg-rose-950/10 border-b border-rose-100/50 dark:border-rose-900/20">
+            <div className="flex items-center gap-4">
+              <div className="p-3 rounded-2xl bg-rose-100 dark:bg-rose-900/40 text-rose-600 shadow-sm animate-pulse">
+                <Trash className="w-6 h-6" />
+              </div>
+              <div className="text-right">
+                <AlertDialogTitle className="text-xl font-black text-slate-900 dark:text-white tracking-tight">
+                  تأكيد حذف المستخدم
+                </AlertDialogTitle>
+                <AlertDialogDescription className="text-rose-600/80 font-bold text-xs mt-0.5">
+                  هذا الإجراء سيقوم بإزالة وصول الموظف للنظام نهائياً
+                </AlertDialogDescription>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-8 space-y-6">
+            <div className="p-6 rounded-3xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 space-y-3">
+              <div className="flex items-center gap-2 text-slate-400">
+                <UserIcon className="w-4 h-4" />
+                <span className="text-[10px] font-black uppercase tracking-widest">بيانات الحساب</span>
+              </div>
+              <div>
+                <p className="text-lg font-black text-slate-800 dark:text-slate-100">{userToDelete?.username}</p>
+                <p className="text-xs font-bold text-slate-400 mt-0.5">
+                  الصلاحية: {userToDelete?.role === "ADMIN" ? "مدير" : "موظف"}
+                </p>
+              </div>
+            </div>
+
+            <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed font-medium px-1">
+              أنت على وشك حذف حساب الموظف <span className="font-black text-slate-900 dark:text-white">"{userToDelete?.username}"</span>. 
+              لن يتمكن هذا المستخدم من تسجيل الدخول مرة أخرى.
+            </p>
+
+            <div className="grid grid-cols-2 gap-3 pt-2">
+              <AlertDialogCancel className="h-14 rounded-2xl font-black text-slate-600 border-slate-200 hover:bg-slate-50 transition-all">
+                إلغاء العملية
+              </AlertDialogCancel>
+              <AlertDialogAction 
+                onClick={(e) => {
+                  e.preventDefault();
+                  confirmDeleteUser();
+                }}
+                className="h-14 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white font-black shadow-lg shadow-rose-200 dark:shadow-none transition-all disabled:opacity-50"
+                disabled={isDeletingUser}
+              >
+                {isDeletingUser ? <Loader2 className="w-5 h-5 animate-spin" /> : "تأكيد الحذف النهائي"}
+              </AlertDialogAction>
+            </div>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

@@ -47,7 +47,7 @@ interface JournalEntry {
 
 export function JournalList({ initialEntries }: { initialEntries: JournalEntry[] }) {
   const [searchTerm, setSearchTerm] = React.useState("");
-  const { isManagementActive, toggleManagementMode } = useManagementMode();
+  const { isManagementActive, toggleManagementMode, isUserAdmin } = useManagementMode();
   const [isPassGateOpen, setIsPassGateOpen] = React.useState(false);
 
   const filteredEntries = initialEntries.filter(entry => 
@@ -74,30 +74,32 @@ export function JournalList({ initialEntries }: { initialEntries: JournalEntry[]
         </div>
         
         <div className="flex items-center gap-4">
-          <Button
-            onClick={() => isManagementActive ? toggleManagementMode(false) : setIsPassGateOpen(true)}
-            variant={isManagementActive ? "default" : "outline"}
-            className={cn(
-              "h-14 px-6 gap-3 font-black rounded-2xl transition-all shadow-lg",
-              isManagementActive 
-                ? "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200" 
-                : "hover:bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
-            )}
-          >
-            {isManagementActive ? (
-              <>
-                <ShieldCheck className="w-6 h-6" />
-                وضع الإدارة مفعل
-                <Unlock className="w-4 h-4 opacity-50" />
-              </>
-            ) : (
-              <>
-                <ShieldAlert className="w-6 h-6 text-amber-500" />
-                تفعيل وضع الإدارة
-                <Lock className="w-4 h-4 opacity-50" />
-              </>
-            )}
-          </Button>
+          {isUserAdmin && (
+            <Button
+              onClick={() => isManagementActive ? toggleManagementMode(false) : setIsPassGateOpen(true)}
+              variant={isManagementActive ? "default" : "outline"}
+              className={cn(
+                "h-14 px-6 gap-3 font-black rounded-2xl transition-all shadow-lg",
+                isManagementActive 
+                  ? "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200" 
+                  : "hover:bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
+              )}
+            >
+              {isManagementActive ? (
+                <>
+                  <ShieldCheck className="w-6 h-6" />
+                  وضع الإدارة مفعل
+                  <Unlock className="w-4 h-4 opacity-50" />
+                </>
+              ) : (
+                <>
+                  <ShieldAlert className="w-6 h-6 text-amber-500" />
+                  تفعيل وضع الإدارة
+                  <Lock className="w-4 h-4 opacity-50" />
+                </>
+              )}
+            </Button>
+          )}
 
           <Link 
             href={isManagementActive ? "/journal/new" : "#"} 
@@ -166,7 +168,7 @@ export function JournalList({ initialEntries }: { initialEntries: JournalEntry[]
                           {format(new Date(entry.date), "dd MMMM yyyy", { locale: ar })}
                         </div>
                       </div>
-                      <h3 className="text-xl font-bold text-slate-900 dark:text-white line-clamp-1">{entry.description || "بدون بيان"}</h3>
+                      <h3 className="text-xl font-bold text-slate-900 dark:text-white line-clamp-1">{entry.description || entry.items[0]?.description || "بدون بيان"}</h3>
                     </div>
                   </div>
 
@@ -196,7 +198,10 @@ export function JournalList({ initialEntries }: { initialEntries: JournalEntry[]
                       {entry.items.slice(0, 3).map((item, i) => (
                         <div key={item.id} className="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
                            <span className="text-[10px] font-black text-slate-400 mono">{item.account.code}</span>
-                           <span className="text-xs font-bold text-slate-700 dark:text-slate-300">{item.account.name}</span>
+                           <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                             {item.account.name}
+                             {item.description && <span className="text-slate-400 font-medium mr-1">- {item.description}</span>}
+                           </span>
                         </div>
                       ))}
                       {entry.items.length > 3 && (

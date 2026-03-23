@@ -81,7 +81,7 @@ export default function PurchaseInvoicesPage() {
   );
   const [deleting, setDeleting] = useState(false);
   const [prefix, setPrefix] = useState<string>("PUR");
-  const { isManagementActive, toggleManagementMode } = useManagementMode();
+  const { isManagementActive, toggleManagementMode, isUserAdmin } = useManagementMode();
   const [isPassGateOpen, setIsPassGateOpen] = useState(false);
 
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
@@ -177,6 +177,7 @@ export default function PurchaseInvoicesPage() {
             </p>
           </div>
           <div className="flex gap-2 items-center">
+          {isUserAdmin && (
             <Button
               variant={isManagementActive ? "destructive" : "outline"}
               onClick={() => {
@@ -201,6 +202,7 @@ export default function PurchaseInvoicesPage() {
                 </>
               )}
             </Button>
+          )}
 
             {isManagementActive && hasPermission("purchase_create") && (
               <Button

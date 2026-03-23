@@ -72,7 +72,7 @@ export default function CustomersPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [deleteCustomer, setDeleteCustomer] = useState<Customer | null>(null);
-  const { isManagementActive, toggleManagementMode } = useManagementMode();
+  const { isManagementActive, toggleManagementMode, isUserAdmin } = useManagementMode();
   const [isPassGateOpen, setIsPassGateOpen] = useState(false);
 
 
@@ -255,42 +255,44 @@ export default function CustomersPage() {
             </p>
           </div>
 
-          <div className="flex gap-2 items-center">
-            <Button
-              variant={isManagementActive ? "destructive" : "outline"}
-              onClick={() => {
-                if (isManagementActive) {
-                  toggleManagementMode(false);
-                  toast.info("تم إغلاق وضع الإدارة");
-                } else {
-                  setIsPassGateOpen(true);
-                }
-              }}
-              className="gap-2 border-dashed border-2 transition-all"
-            >
-              {isManagementActive ? (
-                <>
-                  <ShieldAlert className="h-4 w-4" />
-                  إغلاق وضع الإدارة
-                </>
-              ) : (
-                <>
-                  <ShieldCheck className="h-4 w-4" />
-                  قائمة الحذف والتعديل
-                </>
-              )}
-            </Button>
-
-            {isManagementActive && hasPermission("customers_manage") && (
-              <Button 
-                onClick={openCreateModal} 
-                className="gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-lg hover:shadow-xl transition-all duration-200"
+          {isUserAdmin && (
+            <div className="flex gap-2 items-center">
+              <Button
+                variant={isManagementActive ? "destructive" : "outline"}
+                onClick={() => {
+                  if (isManagementActive) {
+                    toggleManagementMode(false);
+                    toast.info("تم إغلاق وضع الإدارة");
+                  } else {
+                    setIsPassGateOpen(true);
+                  }
+                }}
+                className="gap-2 border-dashed border-2 transition-all"
               >
-                <UserPlus className="h-4 w-4" />
-                إضافة عميل جديد
+                {isManagementActive ? (
+                  <>
+                    <ShieldAlert className="h-4 w-4" />
+                    إغلاق وضع الإدارة
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck className="h-4 w-4" />
+                    قائمة الحذف والتعديل
+                  </>
+                )}
               </Button>
-            )}
-          </div>
+
+              {isManagementActive && hasPermission("customers_manage") && (
+                <Button 
+                  onClick={openCreateModal} 
+                  className="gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-lg hover:shadow-xl transition-all duration-200"
+                >
+                  <UserPlus className="h-4 w-4" />
+                  إضافة عميل جديد
+                </Button>
+              )}
+            </div>
+          )}
         </div>
 
         <Card className="border-none shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm">

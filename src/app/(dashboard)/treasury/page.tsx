@@ -87,7 +87,7 @@ export default function TreasuryPage() {
   } | null>(null);
   const [isArchiving, setIsArchiving] = useState(false);
   const [showTransfer, setShowTransfer] = useState(false);
-  const { isManagementActive, toggleManagementMode } = useManagementMode();
+  const { isManagementActive, toggleManagementMode, isUserAdmin } = useManagementMode();
   const [isPassGateOpen, setIsPassGateOpen] = useState(false);
   const { hasPermission, isAdmin } = usePermissions();
 
@@ -190,6 +190,7 @@ export default function TreasuryPage() {
                 <h2 className="text-2xl font-bold mb-2">النقدية والبنوك</h2>
             </div>
             <div className="flex gap-2 items-center">
+            {isUserAdmin && (
               <Button
                 variant={isManagementActive ? "destructive" : "outline"}
                 onClick={() => {
@@ -215,6 +216,7 @@ export default function TreasuryPage() {
                   </>
                 )}
               </Button>
+            )}
             </div>
         </div>
 

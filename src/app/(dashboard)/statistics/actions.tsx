@@ -61,11 +61,11 @@ export async function getStatisticsSummary(fromDate?: Date, toDate?: Date) {
       prisma.supplier.count(),
       prisma.treasurySafe.findMany({
         where: { isActive: true },
-        select: { balance: true },
+        select: { accountId: true },
       }),
       prisma.treasuryBank.findMany({
         where: { isActive: true },
-        select: { balance: true },
+        select: { accountId: true },
       }),
       prisma.salesInvoice.aggregate({
         where: { status: "pending", ...dateFilterInvoice },
@@ -77,9 +77,25 @@ export async function getStatisticsSummary(fromDate?: Date, toDate?: Date) {
     const totalRevenue = (salesAgg._sum.total ?? 0) - (salesReturnsAgg._sum.total ?? 0);
     const totalPurchases = (purchasesAgg._sum.total ?? 0) - (purchaseReturnsAgg._sum.total ?? 0);
     const netProfit = totalRevenue - totalPurchases;
-    const treasuryBalance =
-      safes.reduce((s, x) => s + x.balance, 0) +
-      banks.reduce((s, x) => s + x.balance, 0);
+
+    // Calculate Real-time Treasury Balances from Ledger
+    const safeAccountIds = safes.map(s => s.accountId).filter(id => id !== null) as number[];
+    const bankAccountIds = banks.map(b => b.accountId).filter(id => id !== null) as number[];
+
+    const [safeLedger, bankLedger] = await Promise.all([
+      prisma.journalItem.aggregate({
+        where: { accountId: { in: safeAccountIds } },
+        _sum: { debit: true, credit: true }
+      }),
+      prisma.journalItem.aggregate({
+        where: { accountId: { in: bankAccountIds } },
+        _sum: { debit: true, credit: true }
+      })
+    ]);
+
+    const totalSafeBalance = (safeLedger._sum.debit || 0) - (safeLedger._sum.credit || 0);
+    const totalBanksBalance = (bankLedger._sum.debit || 0) - (bankLedger._sum.credit || 0);
+    const treasuryBalance = totalSafeBalance + totalBanksBalance;
 
     return {
       totalRevenue,
@@ -88,6 +104,8 @@ export async function getStatisticsSummary(fromDate?: Date, toDate?: Date) {
       customerCount,
       supplierCount,
       treasuryBalance,
+      totalSafeBalance,
+      totalBanksBalance,
       salesCount: salesAgg._count,
       purchasesCount: purchasesAgg._count,
       pendingTotal: pendingInvoicesAgg._sum.total ?? 0,
@@ -102,6 +120,8 @@ export async function getStatisticsSummary(fromDate?: Date, toDate?: Date) {
       customerCount: 0,
       supplierCount: 0,
       treasuryBalance: 0,
+      totalSafeBalance: 0,
+      totalBanksBalance: 0,
       salesCount: 0,
       purchasesCount: 0,
       pendingTotal: 0,

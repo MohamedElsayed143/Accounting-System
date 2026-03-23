@@ -427,7 +427,7 @@ export default function AccountTreePage() {
   const [accountToDelete, setAccountToDelete] = useState<AccountNode | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const { isManagementActive, toggleManagementMode } = useManagementMode();
+  const { isManagementActive, toggleManagementMode, isUserAdmin } = useManagementMode();
   const [isPassGateOpen, setIsPassGateOpen] = useState(false);
 
   const refreshTree = () => {
@@ -495,6 +495,7 @@ export default function AccountTreePage() {
           </div>
 
           <div className="flex items-center gap-4">
+          {isUserAdmin && (
             <Button
               onClick={() => isManagementActive ? toggleManagementMode(false) : setIsPassGateOpen(true)}
               variant={isManagementActive ? "default" : "outline"}
@@ -519,6 +520,7 @@ export default function AccountTreePage() {
                 </>
               )}
             </Button>
+          )}
           </div>
         </div>
 

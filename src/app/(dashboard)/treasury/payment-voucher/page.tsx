@@ -15,7 +15,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 export default function PaymentVoucherPage() {
   const [formData, setFormData] = useState({
     voucherNumber: `PV-${new Date().getFullYear()}-${Math.floor(Math.random() * 1000)}`,
-    date: new Date().toISOString().split("T")[0],
+    date: (() => {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    })(),
     amount: "",
     accountType: "" as "safe" | "bank" | "",
     accountId: "",

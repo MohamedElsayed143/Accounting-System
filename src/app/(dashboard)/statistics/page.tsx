@@ -426,8 +426,9 @@ export default function StatisticsPage() {
                 bg="bg-orange-100"
               />
               <KPICard
-                title="رصيد الخزينة"
+                title="إجمالي السيولة"
                 value={`${fmt(summary.treasuryBalance)} ${companySettings?.currencyCode || "ج.م"}`}
+                sub={`خزائن: ${fmt(summary.totalSafeBalance || 0)} | بنوك: ${fmt(summary.totalBanksBalance || 0)}`}
                 icon={Landmark}
                 color="text-cyan-600"
                 bg="bg-cyan-100"
