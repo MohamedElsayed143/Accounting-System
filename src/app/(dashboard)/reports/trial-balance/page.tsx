@@ -15,17 +15,20 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { getCompanySettingsAction } from "../../settings/actions";
+import { cn } from "@/lib/utils";
 
 export default function TrialBalancePage() {
   const [data, setData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [startDate, setStartDate] = useState<string>(new Date(new Date().getFullYear(), 0, 1).toISOString().split("T")[0]);
   const [endDate, setEndDate] = useState<string>(new Date().toISOString().split("T")[0]);
+  const [hideZeroBalance, setHideZeroBalance] = useState<boolean>(true);
   const [companySettings, setCompanySettings] = useState<any>(null);
 
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const res = await getTrialBalance(new Date(endDate));
+      const res = await getTrialBalance(new Date(startDate), new Date(endDate));
       setData(res);
     } catch (error) {
       console.error("Error fetching trial balance:", error);
@@ -53,7 +56,7 @@ export default function TrialBalancePage() {
              <h1 className="text-4xl font-black uppercase tracking-tighter">{companySettings?.companyName || "اسم الشركة"}</h1>
              <div className="h-1 w-20 bg-primary mx-auto" />
              <h2 className="text-2xl font-bold mt-4">تقرير ميزان المراجعة التحليلي</h2>
-             <p className="text-slate-500 font-bold">للفترة المنتهية في: {new Date(endDate).toLocaleDateString("ar-EG")}</p>
+             <p className="text-slate-500 font-bold">للفترة من {new Date(startDate).toLocaleDateString("ar-EG")} إلى {new Date(endDate).toLocaleDateString("ar-EG")}</p>
           </div>
         </div>
 
@@ -72,15 +75,30 @@ export default function TrialBalancePage() {
             </p>
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className="relative group">
-              <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-hover:text-primary transition-colors" />
-              <Input 
-                type="date" 
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="h-12 pr-10 pl-6 rounded-2xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus:ring-primary/20 shadow-sm font-bold w-48"
-              />
+          <div className="flex flex-wrap items-center gap-6">
+            <div className="relative group flex items-center gap-3">
+              <span className="text-base font-bold text-slate-600">من:</span>
+              <div className="relative">
+                <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-hover:text-primary transition-colors" />
+                <Input 
+                  type="date" 
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="h-14 pr-12 pl-6 rounded-2xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus:ring-primary/20 shadow-sm font-bold w-56 text-lg"
+                />
+              </div>
+            </div>
+            <div className="relative group flex items-center gap-3">
+              <span className="text-base font-bold text-slate-600">إلى:</span>
+              <div className="relative">
+                <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-hover:text-primary transition-colors" />
+                <Input 
+                  type="date" 
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="h-14 pr-12 pl-6 rounded-2xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus:ring-primary/20 shadow-sm font-bold w-56 text-lg"
+                />
+              </div>
             </div>
             <Button 
               onClick={fetchData}
@@ -92,19 +110,22 @@ export default function TrialBalancePage() {
           </div>
         </div>
 
-        {data && <TrialBalanceTable data={data} isLoading={isLoading} />}
+        {data && <TrialBalanceTable 
+          data={data} 
+          isLoading={isLoading} 
+          hideZeroBalance={hideZeroBalance}
+          setHideZeroBalance={setHideZeroBalance}
+          startDate={startDate}
+          endDate={endDate}
+        />}
 
-        {/* Print Signature Section (Hidden on Screen) */}
-        <div className="hidden print:grid grid-cols-2 gap-20 mt-32 px-12 text-center text-black">
-          <div className="space-y-6">
-            <div className="w-full h-px bg-slate-300" />
-            <p className="font-black text-lg">توقيع المحاسب العام</p>
+        {/* Print Stamp Section (Hidden on Screen) */}
+        {companySettings?.companyStamp && (
+          <div className="hidden print:flex flex-col items-end mt-16 px-12">
+            <p className="font-black text-lg mb-4 text-black">ختم الشركة المعتمد</p>
+            <img src={companySettings.companyStamp} alt="Company Stamp" className="h-32 w-auto opacity-90 mix-blend-multiply" />
           </div>
-          <div className="space-y-6">
-            <div className="w-full h-px bg-slate-300" />
-            <p className="font-black text-lg">اعتماد المدير المالي</p>
-          </div>
-        </div>
+        )}
       </div>
     </>
   );

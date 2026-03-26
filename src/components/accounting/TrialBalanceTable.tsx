@@ -11,10 +11,13 @@ import {
   Search,
   CheckCircle2,
   AlertCircle,
-  ExternalLink
+  ExternalLink,
+  Download
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { TrialBalanceRow } from "@/app/(dashboard)/reports/trial-balance/actions";
@@ -22,13 +25,21 @@ import { TrialBalanceRow } from "@/app/(dashboard)/reports/trial-balance/actions
 interface TrialBalanceTableProps {
   data: {
     rows: TrialBalanceRow[];
-    totals: { totalDebit: number; totalCredit: number };
+    totals: { 
+      totalOpeningDebit: number; totalOpeningCredit: number;
+      totalPeriodDebit: number; totalPeriodCredit: number;
+      totalClosingDebit: number; totalClosingCredit: number;
+    };
     isBalanced: boolean;
   };
   isLoading: boolean;
+  hideZeroBalance: boolean;
+  setHideZeroBalance: (val: boolean) => void;
+  startDate: string;
+  endDate: string;
 }
 
-export function TrialBalanceTable({ data, isLoading }: TrialBalanceTableProps) {
+export function TrialBalanceTable({ data, isLoading, hideZeroBalance, setHideZeroBalance, startDate, endDate }: TrialBalanceTableProps) {
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
 
   const toggleRow = (id: number) => {
@@ -43,6 +54,15 @@ export function TrialBalanceTable({ data, isLoading }: TrialBalanceTableProps) {
 
   const renderRows = (rows: TrialBalanceRow[], level = 0) => {
     return rows.map((row) => {
+      // Logic to hide zero balances
+      if (hideZeroBalance && 
+          Math.abs(row.openingBalance) < 0.001 && 
+          Math.abs(row.periodDebit) < 0.001 && 
+          Math.abs(row.periodCredit) < 0.001 && 
+          Math.abs(row.closingBalance) < 0.001) {
+        return null;
+      }
+
       const hasChildren = row.children && row.children.length > 0;
       const isExpanded = expandedRows.has(row.id);
 
@@ -81,16 +101,16 @@ export function TrialBalanceTable({ data, isLoading }: TrialBalanceTableProps) {
                 <span>{row.name}</span>
               )}
             </td>
-            <td className="py-4 px-6 text-left font-black text-emerald-600 dark:text-emerald-400">
+            <td className="py-4 px-6 text-left font-black text-emerald-600 dark:text-emerald-400 text-xl tracking-tight">
               {row.periodDebit > 0 ? row.periodDebit.toLocaleString("ar-EG", { minimumFractionDigits: 2 }) : "-"}
             </td>
-            <td className="py-4 px-6 text-left font-black text-rose-600 dark:text-rose-400">
+            <td className="py-4 px-6 text-left font-black text-rose-600 dark:text-rose-400 text-xl tracking-tight">
               {row.periodCredit > 0 ? row.periodCredit.toLocaleString("ar-EG", { minimumFractionDigits: 2 }) : "-"}
             </td>
-            <td className="py-4 px-6 text-left font-black text-slate-900 dark:text-white border-r border-slate-100 dark:border-slate-800">
-              {Math.abs(row.balance).toLocaleString("ar-EG", { minimumFractionDigits: 2 })}
-              <span className="text-[10px] mr-1 text-slate-400 font-bold">
-                {row.balance > 0 ? "مدين" : row.balance < 0 ? "دائن" : ""}
+            <td className="py-4 px-6 text-left font-black text-slate-900 dark:text-white border-r border-slate-100 dark:border-slate-800 text-xl tracking-tight">
+              {Math.abs(row.closingBalance).toLocaleString("ar-EG", { minimumFractionDigits: 2 })}
+              <span className="text-xs mr-2 text-slate-400 font-bold">
+                {row.closingBalance > 0 ? "مدين" : row.closingBalance < 0 ? "دائن" : ""}
               </span>
             </td>
           </tr>
@@ -98,6 +118,33 @@ export function TrialBalanceTable({ data, isLoading }: TrialBalanceTableProps) {
         </React.Fragment>
       );
     });
+  };
+
+  const exportToCSV = () => {
+    let csv = "\uFEFF"; // BOM for UTF-8 Excel support
+    csv += "كود الحساب,اسم الحساب,حركة مدين,حركة دائن,رصيد الإقفال,نوع رصيد الإقفال\n";
+    
+    const serializeRows = (rows: TrialBalanceRow[]) => {
+      rows.forEach(row => {
+        if (hideZeroBalance && Math.abs(row.openingBalance) < 0.001 && Math.abs(row.periodDebit) < 0.001 && Math.abs(row.periodCredit) < 0.001 && Math.abs(row.closingBalance) < 0.001) {
+          return;
+        }
+        const closingType = row.closingBalance > 0 ? "مدين" : row.closingBalance < 0 ? "دائن" : "صفر";
+        csv += `${row.code},"${row.name.replace(/"/g, '""')}",${row.periodDebit},${row.periodCredit},${Math.abs(row.closingBalance)},${closingType}\n`;
+        if (row.children) serializeRows(row.children);
+      });
+    };
+    
+    serializeRows(data.rows);
+    
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `trial_balance_${startDate}_to_${endDate}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   if (isLoading) {
@@ -111,17 +158,37 @@ export function TrialBalanceTable({ data, isLoading }: TrialBalanceTableProps) {
 
   return (
     <div className="space-y-8" dir="rtl">
-      {/* Table Section */}
+      <div className="flex items-center justify-between mb-4 print:hidden px-4">
+        <div className="flex items-center space-x-2 space-x-reverse">
+          <Switch 
+            id="hide-zero" 
+            checked={hideZeroBalance} 
+            onCheckedChange={setHideZeroBalance} 
+          />
+          <Label htmlFor="hide-zero" className="font-bold text-slate-700 dark:text-slate-300">
+            إخفاء الحسابات الصفرية
+          </Label>
+        </div>
+        <Button 
+          variant="outline" 
+          onClick={exportToCSV}
+          className="gap-2 rounded-xl text-emerald-700 border-emerald-200 hover:bg-emerald-50 dark:border-emerald-900 dark:hover:bg-emerald-900/30"
+        >
+          <Download size={16} />
+          تصدير لملف Excel
+        </Button>
+      </div>
+
       <Card className="border-0 shadow-2xl bg-white dark:bg-slate-900 ring-1 ring-slate-200 dark:ring-slate-800 overflow-hidden print:ring-0 print:shadow-none">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto print:overflow-visible print:w-full">
           <table className="w-full text-sm text-right">
             <thead className="bg-slate-900 text-white uppercase text-[11px] font-black tracking-widest border-b border-slate-800">
               <tr>
                 <th className="py-5 px-6">كود الحساب</th>
-                <th className="py-5 px-6">اسم الحساب (البيان)</th>
-                <th className="py-5 px-6 text-left">الحركة (مدين)</th>
-                <th className="py-5 px-6 text-left">الحركة (دائن)</th>
-                <th className="py-5 px-6 text-left">الرصيد الختامي</th>
+                <th className="py-5 px-6">اسم الحساب</th>
+                <th className="py-5 px-6 text-left">حركة مدين</th>
+                <th className="py-5 px-6 text-left">حركة دائن</th>
+                <th className="py-5 px-6 text-left">رصيد الإقفال</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -129,15 +196,15 @@ export function TrialBalanceTable({ data, isLoading }: TrialBalanceTableProps) {
             </tbody>
             <tfoot className="bg-slate-900 text-white border-t-4 border-primary/50">
               <tr className="font-black">
-                <td colSpan={2} className="py-6 px-6 text-lg">إجمالي الأرصدة (ميزان المراجعة)</td>
-                <td className="py-6 px-6 text-left text-2xl text-emerald-400">
-                  {data.totals.totalDebit.toLocaleString("ar-EG", { minimumFractionDigits: 2 })}
+                <td colSpan={2} className="py-6 px-6 text-lg">إجمالي الأرصدة</td>
+                <td className="py-6 px-6 text-left text-xl text-emerald-400">
+                  {data.totals.totalPeriodDebit.toLocaleString("ar-EG", { minimumFractionDigits: 2 })}
                 </td>
-                <td className="py-6 px-6 text-left text-2xl text-rose-400">
-                  {data.totals.totalCredit.toLocaleString("ar-EG", { minimumFractionDigits: 2 })}
+                <td className="py-6 px-6 text-left text-xl text-rose-400">
+                  {data.totals.totalPeriodCredit.toLocaleString("ar-EG", { minimumFractionDigits: 2 })}
                 </td>
-                <td className="py-6 px-6 text-left text-xl text-primary">
-                  {Math.abs(data.totals.totalDebit - data.totals.totalCredit).toLocaleString("ar-EG", { minimumFractionDigits: 2 })}
+                <td className="py-6 px-6 text-left text-2xl text-primary">
+                  {Math.abs(data.totals.totalClosingDebit - data.totals.totalClosingCredit).toLocaleString("ar-EG", { minimumFractionDigits: 2 })}
                 </td>
               </tr>
             </tfoot>

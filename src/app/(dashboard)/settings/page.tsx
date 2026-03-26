@@ -1326,13 +1326,15 @@ export default function SystemSettingsPage() {
                                 </span>
                               </td>
                               <td className="px-5 py-3 text-center">
-                                <button
-                                  onClick={() => handleDeleteUser(u)}
-                                  className="p-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-lg transition-all"
-                                  title="حذف المستخدم"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
+                                <div className="flex items-center justify-center gap-2">
+                                  <button
+                                    onClick={() => handleDeleteUser(u)}
+                                    className="p-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-lg transition-all"
+                                    title="حذف المستخدم"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
                               </td>
                             </tr>
                           ))}

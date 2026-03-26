@@ -113,7 +113,8 @@ export async function saveSupplier(data: {
           name: `${data.code} - ${data.name}`,
           type: 'LIABILITY',
           parentId: suppParent.id,
-          level: suppParent.level + 1,
+          level: 4,
+          isTerminal: true,
           isSelectable: true,
         }
       });

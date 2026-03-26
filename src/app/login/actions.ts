@@ -3,7 +3,7 @@
 import prisma from "@/lib/prisma";
 import { verifyPassword, setSessionCookie } from "@/lib/auth";
 
-export async function loginAction(formData: FormData) {
+export async function loginAction(formData: FormData, deviceId?: string) {
   const username = formData.get("username") as string;
   const password = formData.get("password") as string;
 
@@ -38,6 +38,22 @@ export async function loginAction(formData: FormData) {
       return { error: "اسم المستخدم أو كلمة المرور غير صحيحة" };
     }
 
+    // Device Locking Logic for Admins
+    if (user.role === "ADMIN" && deviceId) {
+      if (!user.authorizedDevices.includes(deviceId)) {
+        if (user.authorizedDevices.length < user.maxDevices) {
+          // Add new device
+          await prisma.user.update({
+            where: { id: user.id },
+            data: { authorizedDevices: { push: deviceId } }
+          });
+        } else {
+          // Mismatch
+          return { error: "لقد وصلت للحد الأقصى من الأجهزة المسموح بها. يرجى التواصل مع المطور" };
+        }
+      }
+    }
+
     // Create session
     const session = await prisma.session.create({
       data: {
@@ -49,9 +65,9 @@ export async function loginAction(formData: FormData) {
     await setSessionCookie(session.id);
 
     return { success: true, role: user.role };
-  } catch (error) {
+  } catch (error: any) {
     console.error("Login error:", error);
-    return { error: "حدث خطأ غير متوقع. يرجى المحاولة لاحقاً." };
+    return { error: `حدث خطأ غير متوقع: ${error?.message || "يرجى المحاولة لاحقاً."}` };
   }
 }
 

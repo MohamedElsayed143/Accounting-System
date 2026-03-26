@@ -14,11 +14,12 @@ export type TrialBalanceRow = {
   isSelectable: boolean;
   openingDebit: number;
   openingCredit: number;
+  openingBalance: number;
   periodDebit: number;
   periodCredit: number;
   closingDebit: number;
   closingCredit: number;
-  balance: number; // Net balance (Debit - Credit)
+  closingBalance: number;
   children?: TrialBalanceRow[];
 };
 
@@ -26,20 +27,21 @@ export type TrialBalanceRow = {
  * Fetches the trial balance report data.
  * Aggregates balances hierarchically.
  */
-export async function getTrialBalance(endDate?: Date) {
-  const eDate = endDate ? endOfDay(endDate) : endOfDay(new Date());
+export async function getTrialBalance(startDate: Date, endDate: Date) {
+  const eDate = endOfDay(endDate);
+  const sDate = startDate; // Already midnight if constructed properly, but let's use as is
 
   // 1. Fetch all accounts
   const accounts = await prisma.account.findMany({
     orderBy: { code: 'asc' },
   });
 
-  // 2. Fetch all journal items up to endDate grouped by account
-  const journalItems = await prisma.journalItem.groupBy({
+  // 2. Fetch Opening Balances (Before startDate)
+  const openingItems = await prisma.journalItem.groupBy({
     by: ['accountId'],
     where: {
       journalEntry: {
-        date: { lte: eDate }
+        date: { lt: sDate }
       }
     },
     _sum: {
@@ -48,18 +50,48 @@ export async function getTrialBalance(endDate?: Date) {
     }
   });
 
-  // Map sums to account IDs for quick lookup
-  const balanceMap = new Map<number, { debit: number; credit: number }>();
-  journalItems.forEach(item => {
-    balanceMap.set(item.accountId, {
+  // 3. Fetch Period Transactions (Between startDate and endDate)
+  const periodItems = await prisma.journalItem.groupBy({
+    by: ['accountId'],
+    where: {
+      journalEntry: {
+        date: { gte: sDate, lte: eDate }
+      }
+    },
+    _sum: {
+      debit: true,
+      credit: true
+    }
+  });
+
+  const openingMap = new Map<number, { debit: number; credit: number }>();
+  openingItems.forEach(item => {
+    openingMap.set(item.accountId, {
       debit: item._sum.debit || 0,
       credit: item._sum.credit || 0
     });
   });
 
-  // 3. Initialize rows with direct balances
+  const periodMap = new Map<number, { debit: number; credit: number }>();
+  periodItems.forEach(item => {
+    periodMap.set(item.accountId, {
+      debit: item._sum.debit || 0,
+      credit: item._sum.credit || 0
+    });
+  });
+
+  // 4. Initialize rows with direct balances
   const rows: TrialBalanceRow[] = accounts.map(acc => {
-    const b = balanceMap.get(acc.id) || { debit: 0, credit: 0 };
+    const ob = openingMap.get(acc.id) || { debit: 0, credit: 0 };
+    const pb = periodMap.get(acc.id) || { debit: 0, credit: 0 };
+    
+    // We calculate "Opening Balance" depending on the nature of the account (Assets/Expenses are Debit normal, etc.)
+    // But practically: net balance = Debit - Credit. Positive is Debit balance, Negative is Credit balance.
+    const openingBal = ob.debit - ob.credit;
+    const closingDebit = ob.debit + pb.debit;
+    const closingCredit = ob.credit + pb.credit;
+    const closingBal = closingDebit - closingCredit;
+
     return {
       id: acc.id,
       code: acc.code,
@@ -68,18 +100,18 @@ export async function getTrialBalance(endDate?: Date) {
       parentId: acc.parentId,
       level: acc.level,
       isSelectable: acc.isSelectable,
-      openingDebit: 0, // Simplified for now, can add opening balance logic if needed
-      openingCredit: 0,
-      periodDebit: b.debit,
-      periodCredit: b.credit,
-      closingDebit: b.debit, // For now period = total
-      closingCredit: b.credit,
-      balance: b.debit - b.credit,
+      openingDebit: ob.debit,
+      openingCredit: ob.credit,
+      openingBalance: openingBal,
+      periodDebit: pb.debit,
+      periodCredit: pb.credit,
+      closingDebit,
+      closingCredit,
+      closingBalance: closingBal,
     };
   });
 
-  // 4. Hierarchical Aggregation (Bottom-up)
-  // We sort by level descending to process children before parents
+  // 5. Hierarchical Aggregation (Bottom-up)
   const sortedLevels = [...new Set(rows.map(r => r.level))].sort((a, b) => b - a);
   
   const rowMap = new Map<number, TrialBalanceRow>();
@@ -90,11 +122,16 @@ export async function getTrialBalance(endDate?: Date) {
       if (row.level === level && row.parentId) {
         const parent = rowMap.get(row.parentId);
         if (parent) {
+          parent.openingDebit += row.openingDebit;
+          parent.openingCredit += row.openingCredit;
+          parent.openingBalance += row.openingBalance;
+
           parent.periodDebit += row.periodDebit;
           parent.periodCredit += row.periodCredit;
+
           parent.closingDebit += row.closingDebit;
           parent.closingCredit += row.closingCredit;
-          parent.balance += row.balance;
+          parent.closingBalance += row.closingBalance;
         }
       }
     }
@@ -112,16 +149,19 @@ export async function getTrialBalance(endDate?: Date) {
 
   const tree = buildTree(null);
 
-  // Calculate Grand Totals (only root accounts)
   const rootAccounts = rows.filter(r => r.parentId === null);
   const totals = {
-    totalDebit: rootAccounts.reduce((sum, r) => sum + r.periodDebit, 0),
-    totalCredit: rootAccounts.reduce((sum, r) => sum + r.periodCredit, 0),
+    totalOpeningDebit: rootAccounts.reduce((sum, r) => sum + r.openingDebit, 0),
+    totalOpeningCredit: rootAccounts.reduce((sum, r) => sum + r.openingCredit, 0),
+    totalPeriodDebit: rootAccounts.reduce((sum, r) => sum + r.periodDebit, 0),
+    totalPeriodCredit: rootAccounts.reduce((sum, r) => sum + r.periodCredit, 0),
+    totalClosingDebit: rootAccounts.reduce((sum, r) => sum + r.closingDebit, 0),
+    totalClosingCredit: rootAccounts.reduce((sum, r) => sum + r.closingCredit, 0),
   };
 
   return {
     rows: tree,
     totals,
-    isBalanced: Math.abs(totals.totalDebit - totals.totalCredit) < 0.001
+    isBalanced: Math.abs(totals.totalClosingDebit - totals.totalClosingCredit) < 0.001
   };
 }

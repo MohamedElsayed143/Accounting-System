@@ -12,10 +12,7 @@ import { AccountType } from "@prisma/client";
 export async function getJournalSelectableAccounts() {
   const accounts = await prisma.account.findMany({
     where: { 
-      isSelectable: true,
-      code: {
-        notIn: ['4101', '5101']
-      }
+      isTerminal: true,
     },
     orderBy: { code: 'asc' },
     select: {

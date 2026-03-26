@@ -120,7 +120,8 @@ export async function saveCustomer(data: {
             name: `${data.code} - ${data.name}`,
             type: 'ASSET',
             parentId: custParent.id,
-            level: custParent.level + 1,
+            level: 4,
+            isTerminal: true,
             isSelectable: true,
           }
         });

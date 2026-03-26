@@ -61,6 +61,7 @@ export async function getCOATree() {
         parentId: acc.parentId,
         level: acc.level,
         isSelectable: acc.isSelectable,
+        isTerminal: acc.isTerminal,
         treasurySafe: anyAcc.treasurySafe,
         treasuryBank: anyAcc.treasuryBank,
         customerId: anyAcc.customer?.id || null,
@@ -99,27 +100,12 @@ export async function getCOATree() {
 }
 
 /**
- * Fetches selectable (leaf) accounts for dropdowns.
+ * Fetches selectable (terminal leaf) accounts for dropdowns.
  */
 export async function getSelectableAccounts() {
-  // Get IDs of accounts that are parents (have children)
-  const parentIds = await prisma.account.findMany({
-    where: { parentId: { not: null } },
-    select: { parentId: true },
-    distinct: ['parentId'],
-  });
-  const parentIdSet = parentIds.map(p => p.parentId!);
-
   return await prisma.account.findMany({
     where: {
-      isSelectable: true,
-      OR: [
-        // Leaf accounts (no children)
-        { id: { notIn: parentIdSet } },
-        // Parent accounts linked to a treasury safe or bank (operational accounts)
-        { id: { in: parentIdSet }, treasurySafe: { isNot: null } },
-        { id: { in: parentIdSet }, treasuryBank: { isNot: null } },
-      ],
+      isTerminal: true,
     },
     orderBy: { code: 'asc' },
     include: {
@@ -245,7 +231,7 @@ export async function suggestNextAccountCode(parentId: number) {
 }
 
 /**
- * Creates a new sub-account with hierarchical validation.
+ * Creates a new sub-account with strict 4-level hierarchical validation.
  */
 export async function createSubAccount(data: {
   parentId: number;
@@ -260,41 +246,20 @@ export async function createSubAccount(data: {
   if (!data.isAdminMode) {
     throw new Error("يجب تفعيل وضع الإدارة لإضافة حسابات جديدة");
   }
+
   const parent = await prisma.account.findUnique({
     where: { id: data.parentId },
-    include: {
-      treasurySafe: true,
-      treasuryBank: true,
-      customer: true,
-      supplier: true
-    } as any
   });
 
   if (!parent) throw new Error("الحساب الأب غير موجود");
 
-  const anyParent = parent as any;
-  const RESTRICTED_CODES = ['4101', '5101', '301', '501'];
-
-  // Prevent nesting under operational accounts (Safes/Banks), Entities (Customer/Supplier), or System-Critical accounts
-  if (
-    anyParent.treasurySafe || 
-    anyParent.treasuryBank || 
-    anyParent.customer || 
-    anyParent.supplier || 
-    RESTRICTED_CODES.includes(anyParent.code)
-  ) {
-    if (anyParent.customer || anyParent.supplier) {
-      throw new Error("خطأ محاسبي: لا يمكن تفريع حسابات من مورد أو عميل مباشر");
-    }
-    if (RESTRICTED_CODES.includes(anyParent.code)) {
-      throw new Error("هذا الحساب هو حساب نظام أساسي ولا يمكن تفريعه؛ يرجى استخدامه مباشرة في العمليات المالية");
-    }
-    throw new Error("لا يمكن إضافة حسابات فرعية تحت حسابات الخزينة أو البنوك التشغيلية");
+  // Enforce 4-level hierarchy
+  if (parent.level >= 4 || parent.isTerminal) {
+    throw new Error("لا يمكن إضافة حسابات فرعية تحت حساب من المستوى الرابع (حساب طرفي)");
   }
 
-  // Inherit type and nature from parent
-  const newAccountType = parent.type;
   const newLevel = parent.level + 1;
+  const isTerminal = newLevel === 4;
 
   try {
     const result = await prisma.$transaction(async (tx) => {
@@ -310,26 +275,27 @@ export async function createSubAccount(data: {
           code: data.code,
           name: data.name,
           nameEn: data.nameEn,
-          type: newAccountType,
+          type: parent.type,
           parentId: data.parentId,
           level: newLevel,
-          isSelectable: true, // New accounts are leaves by default
+          isSelectable: isTerminal, // Only L4 is selectable/active for transactions
+          isTerminal: isTerminal,
           lastModifiedById: session.userId,
         }
       });
 
-      // 3. Ensure parent is no longer selectable if it was
+      // 3. Ensure parent is no longer selectable if it was (though in 4-level only L4 should be selectable)
       if (parent.isSelectable) {
         await tx.account.update({
           where: { id: data.parentId },
-          data: { isSelectable: false }
+          data: { isSelectable: false, isTerminal: false }
         });
       }
 
       return newAccount;
     });
 
-    // Revalidate paths to reflect changes
+    // Revalidate paths
     revalidatePath("/ledger/coa");
     revalidatePath("/journal/new");
     revalidatePath("/ledger");
@@ -367,19 +333,20 @@ export async function deleteAccount(accountId: number, isAdminMode: boolean) {
 
     if (!account) throw new Error("الحساب غير موجود");
 
-    // Root Protection
-    if (account.level === 1 || account.parentId === null) {
-      throw new Error("لا يمكن حذف الحسابات الرئيسية للنظام");
+    // Hierarchy Protection: Only Level 4 accounts can be deleted
+    // Levels 1, 2, and 3 are system-defined "Main" accounts and are protected
+    if (account.level < 4) {
+      throw new Error("لا يمكن حذف الحسابات الرئيسية (المستوى 1 و 2 و 3). فقط الحسابات الفرعية من المستوى الرابع هي القابلة للحذف.");
     }
 
-    // Check for children
+    // Check for children (redundant for L4 but safe)
     if (account._count.children > 0) {
       throw new Error("لا يمكن حذف الحساب لأنه يحتوي على حسابات فرعية");
     }
 
     // Check for transactions
     if (account._count.journalItems > 0) {
-      throw new Error("لا يمكن حذف حساب يحتوي على عمليات مالية");
+      throw new Error("لا يمكن حذف الحساب لأنه يحتوي على عمليات مالية مسجلة. يجب حذف العمليات المرتبطة به أولاً.");
     }
 
     // Check for treasury links
