@@ -110,10 +110,10 @@ export async function saveCustomer(data: {
     } else {
       await prisma.$transaction(async (tx) => {
         // 1. Create the account in COA first
-        const custParent = await tx.account.findUnique({ where: { code: '1103' } });
-        if (!custParent) throw new Error("حساب العملاء الرئيسي (1103) غير موجود");
+        const custParent = await tx.account.findUnique({ where: { code: '1202' } });
+        if (!custParent) throw new Error("حساب العملاء الرئيسي (1202) غير موجود");
 
-        const accountCode = `1103${data.code.toString().padStart(4, '0')}`;
+        const accountCode = `1202${data.code.toString().padStart(4, '0')}`;
         const account = await tx.account.create({
           data: {
             code: accountCode,
@@ -158,8 +158,15 @@ export async function saveCustomer(data: {
 export async function deleteCustomerAction(id: number) {
   const customer = await prisma.customer.findUnique({ where: { id } });
   
-  await prisma.customer.delete({
-    where: { id },
+  await prisma.$transaction(async (tx) => {
+    await tx.customer.delete({
+      where: { id },
+    });
+    
+    // Delete the corresponding COA account if it exists
+    if (customer?.accountId) {
+      await tx.account.delete({ where: { id: customer.accountId } });
+    }
   });
 
   const session = await getSession();

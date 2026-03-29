@@ -219,8 +219,8 @@ export async function createPurchaseInvoice(data: {
     const supplierAccountId = invoice.supplier?.accountId;
     if (!supplierAccountId) throw new Error("المورد غير مربوط بحساب محاسبي");
 
-    const purchasesAccount = await tx.account.findUnique({ where: { code: '5101' } });
-    if (!purchasesAccount) throw new Error("حساب المشتريات (5101) غير موجود");
+    const purchasesAccount = await tx.account.findUnique({ where: { code: '610401' } });
+    if (!purchasesAccount) throw new Error("حساب المشتريات (610401) غير موجود");
 
     const lastEntry = await tx.journalEntry.findFirst({
         orderBy: { entryNumber: 'desc' },
@@ -571,7 +571,7 @@ export async function updatePurchaseInvoice(
 
     const supplierAccountId = invoice.supplier?.accountId;
     if (supplierAccountId) {
-        const purchasesAccount = await tx.account.findUnique({ where: { code: '5101' } });
+        const purchasesAccount = await tx.account.findUnique({ where: { code: '610401' } });
         if (purchasesAccount) {
             const lastEntry = await tx.journalEntry.findFirst({
                 orderBy: { entryNumber: 'desc' },

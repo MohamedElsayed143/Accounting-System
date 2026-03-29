@@ -51,7 +51,7 @@ export async function createAdjustment(data: {
 
   await prisma.$transaction(async (tx) => {
     // تسجيل الحركة
-    await tx.stockMovement.create({
+    const movement = await tx.stockMovement.create({
       data: {
         productId: data.productId,
         movementType: MovementType.ADJUSTMENT,
@@ -68,6 +68,40 @@ export async function createAdjustment(data: {
       where: { id: data.productId },
       data: { currentStock: { increment: diff } }
     });
+
+    // إنشاء قيد محاسبي إذا كانت التسوية بالنقص (تالف أو عجز)
+    if (diff < 0) {
+      const amount = Math.abs(diff) * product.buyPrice;
+      if (amount > 0) {
+        const damageAccount = await tx.account.findUnique({ where: { code: '620401' } });
+        const inventoryAccount = await tx.account.findUnique({ where: { code: '120301' } });
+
+        if (damageAccount && inventoryAccount) {
+          const lastEntry = await tx.journalEntry.findFirst({
+            orderBy: { entryNumber: 'desc' },
+            select: { entryNumber: true },
+          });
+          const nextEntryNumber = (lastEntry?.entryNumber || 0) + 1;
+
+          await tx.journalEntry.create({
+            data: {
+              entryNumber: nextEntryNumber,
+              date: new Date(),
+              description: `تسوية مخزنية بالنقص للصنف: ${product.name}`,
+              reference: movement.reference,
+              sourceType: 'MANUAL',
+              createdById: session?.userId,
+              items: {
+                create: [
+                  { accountId: damageAccount.id, debit: amount, credit: 0, description: "عجز مخزني/تالف" },
+                  { accountId: inventoryAccount.id, debit: 0, credit: amount, description: "نقص في المخزون" }
+                ]
+              }
+            }
+          });
+        }
+      }
+    }
   });
 
   revalidatePath("/inventory/stock");

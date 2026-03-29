@@ -34,6 +34,8 @@ export default function LedgerExplorerPage() {
     code: string;
     customer?: { id: number } | null;
     supplier?: { id: number } | null;
+    treasurySafe?: { id: number } | null;
+    treasuryBank?: { id: number } | null;
   } | null>(null);
   const [fromDate, setFromDate] = useState<string>("");
   const [toDate, setToDate] = useState<string>("");
@@ -89,10 +91,13 @@ export default function LedgerExplorerPage() {
     ];
   }, [data]);
 
-  const isSpecializedAccount = selectedAccount?.code.startsWith('1101') || selectedAccount?.code.startsWith('1102');
-  const isEntityAccount = selectedAccount?.customer || selectedAccount?.supplier;
+  const isSpecializedAccount = !!(selectedAccount?.treasurySafe || selectedAccount?.treasuryBank);
+  const isEntityAccount = !!(selectedAccount?.customer || selectedAccount?.supplier);
 
-  const specializedUrl = selectedAccount?.code.startsWith('1101') ? '/reports/treasury' : '/reports/banks';
+  const specializedUrl = selectedAccount?.treasurySafe 
+    ? `/reports/treasury?safeId=${selectedAccount.treasurySafe.id}&accountId=${selectedAccount.id}&name=${encodeURIComponent(selectedAccount.name)}` 
+    : `/reports/banks?bankId=${selectedAccount?.treasuryBank?.id}&accountId=${selectedAccount?.id}&name=${selectedAccount ? encodeURIComponent(selectedAccount.name) : ''}`;
+
   const entityUrl = selectedAccount?.customer 
     ? `/reports?customerId=${selectedAccount.customer.id}` 
     : `/reports?supplierId=${selectedAccount?.supplier?.id}`;

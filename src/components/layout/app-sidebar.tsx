@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { getAuthSession, logoutAction } from "@/app/login/actions";
+import { generateDeviceId } from "@/lib/device";
 import {
   LayoutDashboard,
   Users,
@@ -201,7 +202,8 @@ export function AppSidebar() {
   }, [router]);
 
   const handleLogout = async () => {
-    await logoutAction();
+    const deviceId = await generateDeviceId();
+    await logoutAction(deviceId);
     router.push("/login");
   };
 

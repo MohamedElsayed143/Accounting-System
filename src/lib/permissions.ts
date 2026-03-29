@@ -40,7 +40,10 @@ export async function hasPermission(userId: number, key: PermissionKey): Promise
   });
 
   if (!user) return false;
-  if (user.role === "ADMIN") return true;
+  if (user.role === "ADMIN") {
+    if (key === "customers_retail_only") return false;
+    return true;
+  }
 
   // For WORKER, fetch system settings
   const settingsRecord = await prisma.systemSettings.findFirst({

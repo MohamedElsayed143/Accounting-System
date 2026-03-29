@@ -13,6 +13,7 @@ export async function getJournalSelectableAccounts() {
   const accounts = await prisma.account.findMany({
     where: { 
       isTerminal: true,
+      level: 4,
     },
     orderBy: { code: 'asc' },
     select: {
@@ -147,6 +148,15 @@ export async function saveJournalEntry(data: {
 
   if (hasRevenue && hasExpense) {
     throw new Error("لا يمكن عمل قيد مباشر بين المبيعات والمشتريات؛ يجب استخدام حساب وسيط مثل الخزينة أو العميل/المورد");
+  }
+
+  // 1.7. Enforce Level 4 only — reject any account not at Level 4
+  const levelCheck = await prisma.account.findMany({
+    where: { id: { in: accountIds }, NOT: { level: 4 } },
+    select: { name: true, level: true }
+  });
+  if (levelCheck.length > 0) {
+    return { success: false, error: "عذراً، لا يمكن إضافة قيود إلا على الحسابات الفرعية في المستوى الرابع فقط" };
   }
 
   // 2. Database Transaction

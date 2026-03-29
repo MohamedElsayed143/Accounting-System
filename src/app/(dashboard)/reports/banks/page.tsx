@@ -22,8 +22,10 @@ import { TransactionModal } from "../components/TransactionModal";
 import { getAccountLedger } from "../../ledger/actions";
 import { getCompanySettingsAction } from "../../settings/actions";
 import type { TransactionType } from "../actions";
+import { useSearchParams } from "next/navigation";
 
 export default function BankReportPage() {
+  const searchParams = useSearchParams();
   const [selectedBank, setSelectedBank] = useState<{ id: number; accountId: number; name: string; accountNumber?: string | null } | null>(null);
   const [fromDate, setFromDate] = useState<string>("");
   const [toDate, setToDate] = useState<string>("");
@@ -65,7 +67,19 @@ export default function BankReportPage() {
 
   useEffect(() => {
     getCompanySettingsAction().then(setCompanySettings);
-  }, []);
+
+    const bankId = searchParams.get("bankId");
+    const accountId = searchParams.get("accountId");
+    const name = searchParams.get("name");
+
+    if (bankId && accountId && name) {
+      setSelectedBank({
+        id: Number(bankId),
+        accountId: Number(accountId),
+        name: decodeURIComponent(name),
+      });
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (selectedBank) {
@@ -85,7 +99,7 @@ export default function BankReportPage() {
   }, [transactions, openingBalance]);
 
   return (
-    <div className="flex flex-col gap-6 p-2 md:p-6 max-w-[1600px] mx-auto min-h-screen">
+    <div className="flex flex-col gap-6 p-2 md:p-6 max-w-[1600px] mx-auto min-h-screen rtl lg:text-right" dir="rtl">
       {/* Header Section */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 print:hidden">
         <div>

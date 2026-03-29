@@ -71,8 +71,24 @@ export async function loginAction(formData: FormData, deviceId?: string) {
   }
 }
 
-export async function logoutAction() {
-  const { clearSessionCookie } = await import("@/lib/auth");
+export async function logoutAction(deviceId?: string) {
+  const { clearSessionCookie, getSession } = await import("@/lib/auth");
+  const session = await getSession();
+
+  if (deviceId && session?.user) {
+    const user = session.user;
+    if (user.role === "ADMIN" && user.authorizedDevices.includes(deviceId)) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          authorizedDevices: {
+            set: user.authorizedDevices.filter((d: string) => d !== deviceId),
+          },
+        },
+      });
+    }
+  }
+
   await clearSessionCookie();
 }
 

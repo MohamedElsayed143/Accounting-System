@@ -3,16 +3,10 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { loginAction } from "./actions";
+import { generateDeviceId } from "@/lib/device";
 import { Loader2, Zap, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 
-async function generateDeviceId() {
-  const data = `${navigator.userAgent}-${window.screen.width}x${window.screen.height}-${navigator.language}-${navigator.hardwareConcurrency || ''}`;
-  const buffer = new TextEncoder().encode(data);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-}
 
 export default function LoginPage() {
   const router = useRouter();

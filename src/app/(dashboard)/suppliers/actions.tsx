@@ -145,8 +145,15 @@ export async function saveSupplier(data: {
 export async function deleteSupplierAction(id: number) {
   const supplier = await prisma.supplier.findUnique({ where: { id } });
 
-  await prisma.supplier.delete({
-    where: { id },
+  await prisma.$transaction(async (tx) => {
+    await tx.supplier.delete({
+      where: { id },
+    });
+
+    // Delete the corresponding COA account if it exists
+    if (supplier?.accountId) {
+      await tx.account.delete({ where: { id: supplier.accountId } });
+    }
   });
 
   const session = await getSession();

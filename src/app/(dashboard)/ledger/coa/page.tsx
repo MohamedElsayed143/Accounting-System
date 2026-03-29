@@ -47,6 +47,7 @@ import {
   Sparkles,
   Eye,
   EyeOff,
+  Pencil,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -60,7 +61,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { getCOATree, createSubAccount, suggestNextAccountCode, deleteAccount } from "../actions";
+import { getCOATree, createSubAccount, suggestNextAccountCode, deleteAccount, updateAccount } from "../actions";
 import { useManagementMode } from "@/hooks/use-management-mode";
 import { PasswordProtectionGate } from "@/components/shared/PasswordProtectionGate";
 import Link from "next/link";
@@ -180,6 +181,7 @@ function TreeNode({
   node,
   depth = 0,
   onAddSub,
+  onEdit,
   onRefresh,
   onDelete,
   isManagementActive,
@@ -188,6 +190,7 @@ function TreeNode({
   node: AccountNode;
   depth?: number;
   onAddSub: (parent: AccountNode) => void;
+  onEdit: (node: AccountNode) => void;
   onRefresh: () => void;
   onDelete: (node: AccountNode) => void;
   isManagementActive: boolean;
@@ -199,7 +202,13 @@ function TreeNode({
     return check(node.children || []);
   }, [node]);
 
-  const [isOpen, setIsOpen] = useState(depth < 2 || hasMoneyChild);
+  const [isOpen, setIsOpen] = useState(false);
+
+  useEffect(() => {
+    if (searchQuery.trim() !== "") {
+      setIsOpen(true);
+    }
+  }, [searchQuery]);
   const hasChildren = node.children && node.children.length > 0;
 
   let config = TYPE_CONFIG[node.type] || { icon: FileText, color: "text-slate-600", bg: "bg-slate-50 dark:bg-slate-800", dot: "bg-slate-400", label: node.type };
@@ -333,6 +342,20 @@ function TreeNode({
             </button>
           )}
 
+          {/* Edit account */}
+          {isManagementActive && (
+            <button
+              onClick={() => onEdit(node)}
+              title="تعديل الحساب"
+              className={cn(
+                "flex items-center justify-center h-8 w-8 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 transition-all",
+                isL1 && "bg-white/10 text-white hover:bg-white hover:text-slate-900"
+              )}
+            >
+              <Pencil size={12} />
+            </button>
+          )}
+
           {/* View ledger */}
           {node.isTerminal && (
             <Link href={`/ledger?accountId=${node.id}`}>
@@ -377,6 +400,7 @@ function TreeNode({
               node={child}
               depth={depth + 1}
               onAddSub={onAddSub}
+              onEdit={onEdit}
               onRefresh={onRefresh}
               onDelete={onDelete}
               isManagementActive={isManagementActive}
@@ -395,9 +419,10 @@ const ListView: React.FC<{
   tree: AccountNode[];
   searchQuery: string;
   onAddSub: (n: AccountNode) => void;
+  onEdit: (n: AccountNode) => void;
   onDelete: (n: AccountNode) => void;
   isManagementActive: boolean;
-}> = ({ tree, searchQuery, onAddSub, onDelete, isManagementActive }) => {
+}> = ({ tree, searchQuery, onAddSub, onEdit, onDelete, isManagementActive }) => {
   const flat = flattenTree(tree);
   const filtered = searchQuery.trim()
     ? flat.filter((a) => a.name.includes(searchQuery) || a.code.includes(searchQuery))
@@ -466,6 +491,14 @@ const ListView: React.FC<{
                         className="flex items-center gap-1 h-7 px-2.5 rounded-lg text-[10px] font-black bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-800/40 border border-blue-100 dark:border-blue-800 transition-all"
                       >
                         <Plus size={11} /> فرعي
+                      </button>
+                    )}
+                    {isManagementActive && (
+                      <button
+                        onClick={() => onEdit(account)}
+                        className="h-7 w-7 flex items-center justify-center rounded-lg bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 transition-all"
+                      >
+                        <Pencil size={11} />
                       </button>
                     )}
                     {account.level > 1 && !account.children?.length && isManagementActive && (!account.journalItemsCount || account.journalItemsCount === 0) && (
@@ -657,6 +690,128 @@ function AddAccountModal({
   );
 }
 
+// ─── Edit Account Modal ───────────────────────────────────────────────────────
+
+function EditAccountModal({
+  open,
+  onOpenChange,
+  account,
+  onSuccess,
+  isAdminMode,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  account: AccountNode | null;
+  onSuccess: () => void;
+  isAdminMode: boolean;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [name, setName] = useState("");
+  const [nameEn, setNameEn] = useState("");
+
+  useEffect(() => {
+    if (open && account) {
+      setName(account.name);
+      setNameEn(account.nameEn || "");
+    }
+  }, [open, account]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!account) return;
+    setLoading(true);
+    try {
+      const result = await updateAccount({ accountId: account.id, name, nameEn, isAdminMode });
+      if (result.success) {
+        toast.success("تم تحديث الحساب بنجاح");
+        onSuccess();
+        onOpenChange(false);
+      } else {
+        toast.error(result.error);
+      }
+    } catch {
+      toast.error("حدث خطأ أثناء الاتصال بالخادم");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        className="sm:max-w-[480px] gap-0 p-0 border-0 shadow-2xl overflow-hidden rounded-3xl bg-white dark:bg-slate-900"
+        dir="rtl"
+      >
+        <div className="p-6 border-b border-slate-100 dark:border-slate-800 bg-gradient-to-bl from-amber-50/60 to-white dark:from-slate-800/40 dark:to-slate-900">
+          <div className="flex items-start gap-4">
+            <div className="p-3 rounded-2xl flex-shrink-0 bg-amber-50 dark:bg-amber-900/20 shadow-sm text-amber-600">
+              <Pencil className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-lg font-black tracking-tight text-slate-900 dark:text-white">تعديل حساب</h2>
+              {account && (
+                <div className="mt-1.5 flex items-center gap-2">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">كود الحساب</span>
+                  <span className="text-xs font-black text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-lg">
+                    {account.code}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+              اسم الحساب بالعربي <span className="text-rose-400">*</span>
+            </label>
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="مثلاً: صندوق المصروفات النثرية"
+              className="h-11 rounded-xl bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 font-bold focus-visible:ring-amber-500"
+              required
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+              Account Name (English)
+              <span className="mr-2 text-slate-300 normal-case font-bold">اختياري</span>
+            </label>
+            <Input
+              value={nameEn}
+              onChange={(e) => setNameEn(e.target.value)}
+              placeholder="e.g. Petty Cash"
+              className="h-11 rounded-xl bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 font-medium focus-visible:ring-amber-500"
+              dir="ltr"
+            />
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <button
+              type="button"
+              onClick={() => onOpenChange(false)}
+              className="flex-1 h-12 rounded-xl border border-slate-200 dark:border-slate-700 font-black text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all text-sm"
+            >
+              إلغاء
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex-[2] h-12 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-black shadow-lg shadow-amber-200 dark:shadow-none transition-all text-sm flex items-center justify-center gap-2 disabled:opacity-60"
+            >
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              حفظ التعديلات
+            </button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function AccountTreePage() {
@@ -664,6 +819,9 @@ export default function AccountTreePage() {
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedParent, setSelectedParent] = useState<AccountNode | null>(null);
+
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [accountToEdit, setAccountToEdit] = useState<AccountNode | null>(null);
 
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [accountToDelete, setAccountToDelete] = useState<AccountNode | null>(null);
@@ -689,6 +847,11 @@ export default function AccountTreePage() {
   const handleAddSub = (parent: any) => {
     setSelectedParent(parent);
     setIsModalOpen(true);
+  };
+
+  const handleEdit = (node: any) => {
+    setAccountToEdit(node);
+    setIsEditModalOpen(true);
   };
 
   const handleConfirmDelete = async () => {
@@ -863,6 +1026,7 @@ export default function AccountTreePage() {
               tree={tree}
               searchQuery={searchQuery}
               onAddSub={handleAddSub}
+              onEdit={handleEdit}
               onDelete={(n) => { setAccountToDelete(n); setIsDeleteDialogOpen(true); }}
               isManagementActive={isManagementActive}
             />
@@ -874,6 +1038,7 @@ export default function AccountTreePage() {
                   key={node.id}
                   node={node}
                   onAddSub={handleAddSub}
+                  onEdit={handleEdit}
                   onRefresh={refreshTree}
                   onDelete={(n) => { setAccountToDelete(n); setIsDeleteDialogOpen(true); }}
                   isManagementActive={isManagementActive}
@@ -903,6 +1068,14 @@ export default function AccountTreePage() {
         open={isModalOpen}
         onOpenChange={setIsModalOpen}
         parent={selectedParent}
+        onSuccess={refreshTree}
+        isAdminMode={isManagementActive}
+      />
+
+      <EditAccountModal
+        open={isEditModalOpen}
+        onOpenChange={setIsEditModalOpen}
+        account={accountToEdit}
         onSuccess={refreshTree}
         isAdminMode={isManagementActive}
       />

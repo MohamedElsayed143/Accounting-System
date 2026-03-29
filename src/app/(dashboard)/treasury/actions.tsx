@@ -49,8 +49,8 @@ async function ensureMainSafe() {
   
   if (!safe || !safe.accountId) {
     // 1. Ensure COA Parent exists
-    const parent = await prisma.account.findUnique({ where: { code: '1101' } });
-    if (!parent) throw new Error("Parent COA account 1101 missing");
+    const parent = await prisma.account.findUnique({ where: { code: '1201' } });
+    if (!parent) throw new Error("Parent COA account 1201 missing");
 
     const result = await prisma.$transaction(async (tx) => {
       let existingSafe = await tx.treasurySafe.findFirst({
@@ -59,13 +59,13 @@ async function ensureMainSafe() {
 
       // Find or create COA account
       let account = await tx.account.findFirst({
-        where: { code: '1101' }
+        where: { code: '1201' }
       });
 
       if (!account) {
         account = await tx.account.create({
           data: {
-            code: '1101',
+            code: '1201',
             name: "النقدية في الخزينة",
             type: parent.type,
             parentId: parent.id,
@@ -369,7 +369,7 @@ export async function createBank(data: { name: string; accountNumber: string; br
     const result = await prisma.$transaction(async (tx) => {
       // 1. Find Bank Parent Account
       const parent = await tx.account.findUnique({
-        where: { code: '1102' }
+        where: { code: '1205' }
       });
 
       if (!parent) throw new Error("حساب البنوك الرئيسي (1102) غير موجود في شجرة الحسابات");

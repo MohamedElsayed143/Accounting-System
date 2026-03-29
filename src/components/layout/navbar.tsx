@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getAuthSession, logoutAction } from "@/app/login/actions";
+import { generateDeviceId } from "@/lib/device";
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -100,7 +101,8 @@ export function Navbar({ title }: NavbarProps) {
   }, [searchQuery]);
 
   const handleLogout = async () => {
-    await logoutAction();
+    const deviceId = await generateDeviceId();
+    await logoutAction(deviceId);
     router.push("/login");
   };
 

@@ -99,10 +99,7 @@ async function main() {
     create: { code: '1201', name: 'النقدية بالخزينة', nameEn: 'Cash on Hand', type: 'ASSET', parentId: currentAssets.id, level: 3, isTerminal: false, isSelectable: false }
   })
 
-  // تنظيف الحساب القديم في حال وجوده بالخطأ تحت الأصول الثابتة
-  await prisma.account.deleteMany({
-    where: { code: '110101' }
-  })
+
 
   // Ensure we have at least one terminal account for the treasury
   const mainCashAccount = await prisma.account.upsert({
@@ -142,6 +139,12 @@ async function main() {
     where: { code: '1204' },
     update: { name: 'مصروفات مدفوعة مقدماً', nameEn: 'Prepaid Expenses', level: 3, isTerminal: false, isSelectable: false },
     create: { code: '1204', name: 'مصروفات مدفوعة مقدماً', nameEn: 'Prepaid Expenses', type: 'ASSET', parentId: currentAssets.id, level: 3, isTerminal: false, isSelectable: false }
+  })
+
+  await prisma.account.upsert({
+    where: { code: '1205' },
+    update: { name: 'النقدية بالبنوك', nameEn: 'Cash at Banks', level: 3, isTerminal: false, isSelectable: false },
+    create: { code: '1205', name: 'النقدية بالبنوك', nameEn: 'Cash at Banks', type: 'ASSET', parentId: currentAssets.id, level: 3, isTerminal: false, isSelectable: false }
   })
 
   // --- المستوى الثاني (L2) - الخصوم المتداولة (21) ---
@@ -223,45 +226,243 @@ async function main() {
     create: { code: '34', name: 'توزيعات الأرباح', nameEn: 'Dividends', type: 'EQUITY', parentId: equity.id, level: 2, isTerminal: false, isSelectable: false }
   })
 
-  // --- المستوى الثاني (L2) - إيرادات النشاط ---
+  // --- المستوى الثاني (L2) - الايرادات التشغيلية ---
   const operatingRevenue = await prisma.account.upsert({
     where: { code: '41' },
-    update: { level: 2, isTerminal: false, isSelectable: false },
-    create: { code: '41', name: 'إيرادات النشاط', nameEn: 'Operating Revenue', type: 'REVENUE', parentId: revenue.id, level: 2, isTerminal: false, isSelectable: false }
+    update: { name: 'الايرادات التشغيلية', nameEn: 'Operating Revenue', level: 2, isTerminal: false, isSelectable: false },
+    create: { code: '41', name: 'الايرادات التشغيلية', nameEn: 'Operating Revenue', type: 'REVENUE', parentId: revenue.id, level: 2, isTerminal: false, isSelectable: false }
   })
 
-  // --- المستوى الثالث (L3) - مبيعات البضائع ---
+  // --- المستوى الثالث (L3) - المبيعات ---
   await prisma.account.upsert({
     where: { code: '4101' },
-    update: { level: 3, isTerminal: false, isSelectable: false },
-    create: { code: '4101', name: 'مبيعات البضائع', nameEn: 'Sales of Goods', type: 'REVENUE', parentId: operatingRevenue.id, level: 3, isTerminal: false, isSelectable: false }
+    update: { name: 'المبيعات', nameEn: 'Sales', level: 3, isTerminal: false, isSelectable: false },
+    create: { code: '4101', name: 'المبيعات', nameEn: 'Sales', type: 'REVENUE', parentId: operatingRevenue.id, level: 3, isTerminal: false, isSelectable: false }
   })
 
-  // --- المستوى الثاني (L2) - مصروفات تشغيلية ---
+  // --- المستوى الثاني (L2) - الايرادات غير التشغيلية ---
+  const nonOperatingRevenue = await prisma.account.upsert({
+    where: { code: '42' },
+    update: { name: 'الايرادات غير التشغيلية', nameEn: 'Non-Operating Revenue', level: 2, isTerminal: false, isSelectable: false },
+    create: { code: '42', name: 'الايرادات غير التشغيلية', nameEn: 'Non-Operating Revenue', type: 'REVENUE', parentId: revenue.id, level: 2, isTerminal: false, isSelectable: false }
+  })
+
+  // --- المستوى الثالث (L3) - الفوائد المكتسبة ---
+  await prisma.account.upsert({
+    where: { code: '4201' },
+    update: { name: 'الفوائد المكتسبة', nameEn: 'Earned Interests', level: 3, isTerminal: false, isSelectable: false },
+    create: { code: '4201', name: 'الفوائد المكتسبة', nameEn: 'Earned Interests', type: 'REVENUE', parentId: nonOperatingRevenue.id, level: 3, isTerminal: false, isSelectable: false }
+  })
+
+  // --- المستوى الثالث (L3) - الدخل من الاستثمارات ---
+  await prisma.account.upsert({
+    where: { code: '4202' },
+    update: { name: 'الدخل من الاستثمارات', nameEn: 'Investment Income', level: 3, isTerminal: false, isSelectable: false },
+    create: { code: '4202', name: 'الدخل من الاستثمارات', nameEn: 'Investment Income', type: 'REVENUE', parentId: nonOperatingRevenue.id, level: 3, isTerminal: false, isSelectable: false }
+  })
+
+  // --- المستوى الثاني والثالث (L2 & L3) - المصروفات ---
+
+  // 51: مصروفات تشغيلية
   const operatingExpenses = await prisma.account.upsert({
     where: { code: '51' },
-    update: { level: 2, isTerminal: false, isSelectable: false },
+    update: { name: 'مصروفات تشغيلية', nameEn: 'Operating Expenses', level: 2, isTerminal: false, isSelectable: false },
     create: { code: '51', name: 'مصروفات تشغيلية', nameEn: 'Operating Expenses', type: 'EXPENSE', parentId: expenses.id, level: 2, isTerminal: false, isSelectable: false }
   })
 
-  // --- المستوى الثالث (L3) - الرواتب والأجور ---
   await prisma.account.upsert({
     where: { code: '5101' },
-    update: { level: 3, isTerminal: false, isSelectable: false },
-    create: { code: '5101', name: 'الرواتب والأجور', nameEn: 'Salaries & Wages', type: 'EXPENSE', parentId: operatingExpenses.id, level: 3, isTerminal: false, isSelectable: false }
+    update: { name: 'المرافق العامة', nameEn: 'Public Utilities', level: 3, isTerminal: false, isSelectable: false, parentId: operatingExpenses.id },
+    create: { code: '5101', name: 'المرافق العامة', nameEn: 'Public Utilities', type: 'EXPENSE', parentId: operatingExpenses.id, level: 3, isTerminal: false, isSelectable: false }
   })
 
-  // --- المستوى الرابع (L4) - الخزينة الرئيسية (Terminal User Leaf) ---
-  const mainSafeAccount = await prisma.account.upsert({
-    where: { code: '110101' },
-    update: { level: 4, isTerminal: true, isSelectable: true },
-    create: { code: '110101', name: 'الخزينة الرئيسية', nameEn: 'Main Safe', type: 'ASSET', parentId: cashGroup.id, level: 4, isTerminal: true, isSelectable: true }
+  await prisma.account.upsert({
+    where: { code: '5102' },
+    update: { name: 'الإيجارات', nameEn: 'Rents', level: 3, isTerminal: false, isSelectable: false, parentId: operatingExpenses.id },
+    create: { code: '5102', name: 'الإيجارات', nameEn: 'Rents', type: 'EXPENSE', parentId: operatingExpenses.id, level: 3, isTerminal: false, isSelectable: false }
   })
 
-  // ربط الخزنة الرئيسية بالحساب المحاسبي
+  await prisma.account.upsert({
+    where: { code: '5103' },
+    update: { name: 'الصيانة', nameEn: 'Maintenance', level: 3, isTerminal: false, isSelectable: false, parentId: operatingExpenses.id },
+    create: { code: '5103', name: 'الصيانة', nameEn: 'Maintenance', type: 'EXPENSE', parentId: operatingExpenses.id, level: 3, isTerminal: false, isSelectable: false }
+  })
+
+  // 52: مصروفات إدارية وعمومية
+  const adminExpenses = await prisma.account.upsert({
+    where: { code: '52' },
+    update: { name: 'مصروفات إدارية وعمومية', nameEn: 'General & Admin Expenses', level: 2, isTerminal: false, isSelectable: false },
+    create: { code: '52', name: 'مصروفات إدارية وعمومية', nameEn: 'General & Admin Expenses', type: 'EXPENSE', parentId: expenses.id, level: 2, isTerminal: false, isSelectable: false }
+  })
+
+  await prisma.account.upsert({
+    where: { code: '5201' },
+    update: { name: 'الأدوات المكتبية', nameEn: 'Office Supplies', level: 3, isTerminal: false, isSelectable: false, parentId: adminExpenses.id },
+    create: { code: '5201', name: 'الأدوات المكتبية', nameEn: 'Office Supplies', type: 'EXPENSE', parentId: adminExpenses.id, level: 3, isTerminal: false, isSelectable: false }
+  })
+
+  await prisma.account.upsert({
+    where: { code: '5202' },
+    update: { name: 'بوفيه وضيافة', nameEn: 'Buffet & Hospitality', level: 3, isTerminal: false, isSelectable: false, parentId: adminExpenses.id },
+    create: { code: '5202', name: 'بوفيه وضيافة', nameEn: 'Buffet & Hospitality', type: 'EXPENSE', parentId: adminExpenses.id, level: 3, isTerminal: false, isSelectable: false }
+  })
+
+  await prisma.account.upsert({
+    where: { code: '5203' },
+    update: { name: 'مصاريف بنكية', nameEn: 'Bank Charges', level: 3, isTerminal: false, isSelectable: false, parentId: adminExpenses.id },
+    create: { code: '5203', name: 'مصاريف بنكية', nameEn: 'Bank Charges', type: 'EXPENSE', parentId: adminExpenses.id, level: 3, isTerminal: false, isSelectable: false }
+  })
+
+  // 53: مصروفات بيع وتسويق
+  const sellingExpenses = await prisma.account.upsert({
+    where: { code: '53' },
+    update: { name: 'مصروفات بيع وتسويق', nameEn: 'Selling & Marketing Expenses', level: 2, isTerminal: false, isSelectable: false },
+    create: { code: '53', name: 'مصروفات بيع وتسويق', nameEn: 'Selling & Marketing Expenses', type: 'EXPENSE', parentId: expenses.id, level: 2, isTerminal: false, isSelectable: false }
+  })
+
+  await prisma.account.upsert({
+    where: { code: '5301' },
+    update: { name: 'الدعاية والإعلان', nameEn: 'Advertising', level: 3, isTerminal: false, isSelectable: false, parentId: sellingExpenses.id },
+    create: { code: '5301', name: 'الدعاية والإعلان', nameEn: 'Advertising', type: 'EXPENSE', parentId: sellingExpenses.id, level: 3, isTerminal: false, isSelectable: false }
+  })
+
+  await prisma.account.upsert({
+    where: { code: '5302' },
+    update: { name: 'عمولات المبيعات', nameEn: 'Sales Commissions', level: 3, isTerminal: false, isSelectable: false, parentId: sellingExpenses.id },
+    create: { code: '5302', name: 'عمولات المبيعات', nameEn: 'Sales Commissions', type: 'EXPENSE', parentId: sellingExpenses.id, level: 3, isTerminal: false, isSelectable: false }
+  })
+
+  // 54: أجور ورواتب
+  const wagesExpenses = await prisma.account.upsert({
+    where: { code: '54' },
+    update: { name: 'أجور ورواتب', nameEn: 'Wages & Salaries', level: 2, isTerminal: false, isSelectable: false },
+    create: { code: '54', name: 'أجور ورواتب', nameEn: 'Wages & Salaries', type: 'EXPENSE', parentId: expenses.id, level: 2, isTerminal: false, isSelectable: false }
+  })
+
+  await prisma.account.upsert({
+    where: { code: '5401' },
+    update: { name: 'رواتب أساسية', nameEn: 'Basic Salaries', level: 3, isTerminal: false, isSelectable: false, parentId: wagesExpenses.id },
+    create: { code: '5401', name: 'رواتب أساسية', nameEn: 'Basic Salaries', type: 'EXPENSE', parentId: wagesExpenses.id, level: 3, isTerminal: false, isSelectable: false }
+  })
+
+  await prisma.account.upsert({
+    where: { code: '5402' },
+    update: { name: 'بدلات وحوافز', nameEn: 'Allowances & Incentives', level: 3, isTerminal: false, isSelectable: false, parentId: wagesExpenses.id },
+    create: { code: '5402', name: 'بدلات وحوافز', nameEn: 'Allowances & Incentives', type: 'EXPENSE', parentId: wagesExpenses.id, level: 3, isTerminal: false, isSelectable: false }
+  })
+
+  // تنظيف حسابات المشتريات وتكلفة المبيعات التي تم إضافتها مسبقاً بناءً على الافتراض
+  await prisma.account.deleteMany({
+    where: { code: { in: ['5501', '55'] } }
+  })
+
+  // --- المستوى الأول (L1) - التكاليف (6) ---
+  const costs = await prisma.account.upsert({
+    where: { code: '6' },
+    update: { level: 1, isTerminal: false, isSelectable: false },
+    create: { code: '6', name: 'التكاليف', nameEn: 'Costs', type: 'EXPENSE', level: 1, isTerminal: false, isSelectable: false }
+  })
+
+  // --- المستوى الثاني والثالث والرابع - التكاليف ---
+  
+  // 61: تكاليف المشتريات المباشرة
+  const directPurchaseCosts = await prisma.account.upsert({
+    where: { code: '61' },
+    update: { name: 'تكاليف المشتريات المباشرة', nameEn: 'Direct Purchase Costs', level: 2, isTerminal: false, isSelectable: false, parentId: costs.id },
+    create: { code: '61', name: 'تكاليف المشتريات المباشرة', nameEn: 'Direct Purchase Costs', type: 'EXPENSE', parentId: costs.id, level: 2, isTerminal: false, isSelectable: false }
+  })
+
+  // 6101: تكلفة البضاعة المباعة
+  await prisma.account.upsert({
+    where: { code: '6101' },
+    update: { name: 'تكلفة البضاعة المباعة', nameEn: 'Cost of Goods Sold', level: 3, isTerminal: false, isSelectable: false, parentId: directPurchaseCosts.id },
+    create: { code: '6101', name: 'تكلفة البضاعة المباعة', nameEn: 'Cost of Goods Sold', type: 'EXPENSE', parentId: directPurchaseCosts.id, level: 3, isTerminal: false, isSelectable: false }
+  })
+
+  // 6102: خصومات مكتسبة
+  await prisma.account.upsert({
+    where: { code: '6102' },
+    update: { name: 'خصومات مكتسبة', nameEn: 'Earned Discounts', level: 3, isTerminal: false, isSelectable: false, parentId: directPurchaseCosts.id },
+    create: { code: '6102', name: 'خصومات مكتسبة', nameEn: 'Earned Discounts', type: 'EXPENSE', parentId: directPurchaseCosts.id, level: 3, isTerminal: false, isSelectable: false }
+  })
+
+  // 6103: مردودات مشتريات
+  await prisma.account.upsert({
+    where: { code: '6103' },
+    update: { name: 'مردودات مشتريات', nameEn: 'Purchase Returns', level: 3, isTerminal: false, isSelectable: false, parentId: directPurchaseCosts.id },
+    create: { code: '6103', name: 'مردودات مشتريات', nameEn: 'Purchase Returns', type: 'EXPENSE', parentId: directPurchaseCosts.id, level: 3, isTerminal: false, isSelectable: false }
+  })
+
+  // 6104: المشتريات
+  const purchasesGroup = await prisma.account.upsert({
+    where: { code: '6104' },
+    update: { name: 'المشتريات', nameEn: 'Purchases', level: 3, isTerminal: false, isSelectable: false, parentId: directPurchaseCosts.id },
+    create: { code: '6104', name: 'المشتريات', nameEn: 'Purchases', type: 'EXPENSE', parentId: directPurchaseCosts.id, level: 3, isTerminal: false, isSelectable: false }
+  })
+
+  // 610401: مشتريات المخزن الرئيسي (L4 Terminal)
+  await prisma.account.upsert({
+    where: { code: '610401' },
+    update: { name: 'مشتريات المخزن الرئيسي', nameEn: 'Main Store Purchases', level: 4, isTerminal: true, isSelectable: true, parentId: purchasesGroup.id },
+    create: { code: '610401', name: 'مشتريات المخزن الرئيسي', nameEn: 'Main Store Purchases', type: 'EXPENSE', parentId: purchasesGroup.id, level: 4, isTerminal: true, isSelectable: true }
+  })
+
+  // 62: تكاليف تشغيلية مرتبطة بالمنتج
+  const operationalProductCosts = await prisma.account.upsert({
+    where: { code: '62' },
+    update: { name: 'تكاليف تشغيلية مرتبطة بالمنتج', nameEn: 'Product Operating Costs', level: 2, isTerminal: false, isSelectable: false, parentId: costs.id },
+    create: { code: '62', name: 'تكاليف تشغيلية مرتبطة بالمنتج', nameEn: 'Product Operating Costs', type: 'EXPENSE', parentId: costs.id, level: 2, isTerminal: false, isSelectable: false }
+  })
+
+  // 6201: تكاليف الشحن والنقل
+  await prisma.account.upsert({
+    where: { code: '6201' },
+    update: { name: 'تكاليف الشحن والنقل', nameEn: 'Shipping & Transit', level: 3, isTerminal: false, isSelectable: false, parentId: operationalProductCosts.id },
+    create: { code: '6201', name: 'تكاليف الشحن والنقل', nameEn: 'Shipping & Transit', type: 'EXPENSE', parentId: operationalProductCosts.id, level: 3, isTerminal: false, isSelectable: false }
+  })
+
+  // 6202: رسوم جمركية
+  await prisma.account.upsert({
+    where: { code: '6202' },
+    update: { name: 'رسوم جمركية', nameEn: 'Customs Duties', level: 3, isTerminal: false, isSelectable: false, parentId: operationalProductCosts.id },
+    create: { code: '6202', name: 'رسوم جمركية', nameEn: 'Customs Duties', type: 'EXPENSE', parentId: operationalProductCosts.id, level: 3, isTerminal: false, isSelectable: false }
+  })
+
+  // 6203: تكاليف تغليف وتعبئة
+  await prisma.account.upsert({
+    where: { code: '6203' },
+    update: { name: 'تكاليف تغليف وتعبئة', nameEn: 'Packaging Costs', level: 3, isTerminal: false, isSelectable: false, parentId: operationalProductCosts.id },
+    create: { code: '6203', name: 'تكاليف تغليف وتعبئة', nameEn: 'Packaging Costs', type: 'EXPENSE', parentId: operationalProductCosts.id, level: 3, isTerminal: false, isSelectable: false }
+  })
+
+  // 6204: تكاليف بضاعة تالفة
+  const damagedGoodsGroup = await prisma.account.upsert({
+    where: { code: '6204' },
+    update: { name: 'تكاليف بضاعة تالفة', nameEn: 'Damaged Goods Costs', level: 3, isTerminal: false, isSelectable: false, parentId: operationalProductCosts.id },
+    create: { code: '6204', name: 'تكاليف بضاعة تالفة', nameEn: 'Damaged Goods Costs', type: 'EXPENSE', parentId: operationalProductCosts.id, level: 3, isTerminal: false, isSelectable: false }
+  })
+
+  // 620401: عجز مخزني وتالف (L4 Terminal)
+  await prisma.account.upsert({
+    where: { code: '620401' },
+    update: { name: 'عجز مخزني وتالف', nameEn: 'Inventory Deficit & Damage', level: 4, isTerminal: true, isSelectable: true, parentId: damagedGoodsGroup.id },
+    create: { code: '620401', name: 'عجز مخزني وتالف', nameEn: 'Inventory Deficit & Damage', type: 'EXPENSE', parentId: damagedGoodsGroup.id, level: 4, isTerminal: true, isSelectable: true }
+  })
+
+  // --- حساب المخزون (L4 Terminal) ---
+  const inventoryAccount = await prisma.account.findUnique({ where: { code: '1203' } });
+  if (inventoryAccount) {
+    await prisma.account.upsert({
+      where: { code: '120301' },
+      update: { name: 'مخزون البضاعة', nameEn: 'Goods Inventory', level: 4, isTerminal: true, isSelectable: true, parentId: inventoryAccount.id },
+      create: { code: '120301', name: 'مخزون البضاعة', nameEn: 'Goods Inventory', type: 'ASSET', parentId: inventoryAccount.id, level: 4, isTerminal: true, isSelectable: true }
+    })
+  }
+
+  // ربط الخزنة الرئيسية بالحساب المحاسبي (120101)
   await prisma.treasurySafe.update({
     where: { id: safe.id },
-    data: { accountId: mainSafeAccount.id }
+    data: { accountId: mainCashAccount.id }
   })
 
   console.log('✅ تم إنشاء شجرة الحسابات وربط الخزن')
