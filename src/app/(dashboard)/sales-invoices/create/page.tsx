@@ -5,9 +5,20 @@ import { useState, useEffect, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
-  ArrowRight, Plus, Trash2, Save, Calculator,
-  Search, User, ChevronLeft, CreditCard, Hash, Printer,
-  History as HistoryIcon, Loader2, AlertTriangle
+  ArrowRight,
+  Plus,
+  Trash2,
+  Save,
+  Calculator,
+  Search,
+  User,
+  ChevronLeft,
+  CreditCard,
+  Hash,
+  Printer,
+  History as HistoryIcon,
+  Loader2,
+  AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -17,8 +28,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Table, TableBody, TableCell,
-  TableHead, TableHeader, TableRow,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from "@/components/ui/table";
 import {
   Dialog,
@@ -60,7 +75,11 @@ import {
   updateSalesInvoice,
 } from "../actions";
 import { getTreasuryData } from "@/app/(dashboard)/treasury/actions";
-import { getSystemSettings, getCompanySettingsAction, getGeneralSettingsAction } from "@/app/(dashboard)/settings/actions";
+import {
+  getSystemSettings,
+  getCompanySettingsAction,
+  getGeneralSettingsAction,
+} from "@/app/(dashboard)/settings/actions";
 
 // ─── الأنواع ──────────────────────────────────────────────────────────────────
 interface Customer {
@@ -80,9 +99,14 @@ interface InvoiceItem {
   total: number;
   productId?: number | null;
   stockBalance?: number;
+  buyPrice?: number;
 }
 
-import { getProducts, getProductPricingHistory, ProductData } from "@/app/(dashboard)/inventory/products/actions";
+import {
+  getProducts,
+  getProductPricingHistory,
+  ProductData,
+} from "@/app/(dashboard)/inventory/products/actions";
 
 // ============================================================
 // Step 1 — البحث الفوري عن العميل
@@ -114,20 +138,28 @@ function InvoiceFormStep({
 
   const [showNegativeWarning, setShowNegativeWarning] = useState(false);
   const [pendingSaveData, setPendingSaveData] = useState<any>(null);
-  const [itemsExceedingStock, setItemsExceedingStock] = useState<{name: string, requested: number, available: number}[]>([]);
+  const [itemsExceedingStock, setItemsExceedingStock] = useState<
+    { name: string; requested: number; available: number }[]
+  >([]);
 
   const [customer, setCustomer] = useState<Customer | null>(initialCustomer);
-  const [paymentType, setPaymentType] = useState<"cash" | "credit" | "pending">("cash");
+  const [paymentType, setPaymentType] = useState<"cash" | "credit" | "pending">(
+    "cash",
+  );
   const [invoiceDate, setInvoiceDate] = useState<string>(
-    new Date().toISOString().split("T")[0]
+    new Date().toISOString().split("T")[0],
   );
   const [dueDate, setDueDate] = useState<string>("");
   const [items, setItems] = useState<InvoiceItem[]>([]);
   const [topNotes, setTopNotes] = useState<string[]>([]);
   const [discount, setDiscount] = useState<number>(0); // Global discount
   const [notes, setNotes] = useState<string[]>([]);
-  const [safes, setSafes] = useState<{ id: number; name: string; balance: number }[]>([]);
-  const [banks, setBanks] = useState<{ id: number; name: string; balance: number }[]>([]);
+  const [safes, setSafes] = useState<
+    { id: number; name: string; balance: number }[]
+  >([]);
+  const [banks, setBanks] = useState<
+    { id: number; name: string; balance: number }[]
+  >([]);
   const [selectedSafeId, setSelectedSafeId] = useState<string>("");
   const [selectedBankId, setSelectedBankId] = useState<string>("");
   const [treasuryType, setTreasuryType] = useState<"safe" | "bank">("safe");
@@ -154,8 +186,12 @@ function InvoiceFormStep({
     getSystemSettings().then(setSystemSettings);
     getGeneralSettingsAction().then(setNotifSettings);
     getTreasuryData().then((data) => {
-      const allSafes = data.accounts.filter(acc => acc.type === "safe") as any[];
-      const allBanks = data.accounts.filter(acc => acc.type === "bank") as any[];
+      const allSafes = data.accounts.filter(
+        (acc) => acc.type === "safe",
+      ) as any[];
+      const allBanks = data.accounts.filter(
+        (acc) => acc.type === "bank",
+      ) as any[];
       setSafes(allSafes);
       setBanks(allBanks);
       // التحديد الافتراضي لأول خزنة
@@ -175,12 +211,14 @@ function InvoiceFormStep({
           if (invoice) {
             setInvoiceNumber(invoice.invoiceNumber);
             setPaymentType(invoice.status as "cash" | "credit" | "pending");
-            setInvoiceDate(new Date(invoice.invoiceDate).toISOString().split("T")[0]);
+            setInvoiceDate(
+              new Date(invoice.invoiceDate).toISOString().split("T")[0],
+            );
             if (invoice.dueDate) {
               setDueDate(new Date(invoice.dueDate).toISOString().split("T")[0]);
             }
             setDiscount(invoice.discount || 0);
-            
+
             if (invoice.customer) {
               setCustomer({
                 id: invoice.customer.id,
@@ -188,29 +226,40 @@ function InvoiceFormStep({
               });
             }
 
-            const totalReturns = invoice.salesReturns?.reduce((sum: number, ret: any) => sum + ret.total, 0) || 0;
+            const totalReturns =
+              invoice.salesReturns?.reduce(
+                (sum: number, ret: any) => sum + ret.total,
+                0,
+              ) || 0;
             setReturnsTotal(totalReturns);
             setReturnsCount(invoice.salesReturns?.length || 0);
             setReturns(invoice.salesReturns || []);
 
             if (invoice.items && invoice.items.length > 0) {
-              const formattedItems = invoice.items.map((item: any, index: number) => ({
-                id: String(item.id || index + 1),
-                description: item.description,
-                quantity: item.quantity,
-                unitPrice: item.unitPrice,
-                profitMargin: item.profitMargin || 0,
-                taxRate: item.taxRate,
-                discount: item.discount || 0,
-                total: item.total,
-                productId: item.productId || null,
-                stockBalance: item.product?.currentStock || 0,
-              }));
-                setItems(formattedItems);
-              
+              const formattedItems = invoice.items.map(
+                (item: any, index: number) => ({
+                  id: String(item.id || index + 1),
+                  description: item.description,
+                  quantity: item.quantity,
+                  unitPrice: item.unitPrice,
+                  profitMargin: item.profitMargin || item.product?.profitMargin || 0,
+                  taxRate: item.taxRate,
+                  discount: item.discount || 0,
+                  total: item.total,
+                  productId: item.productId || null,
+                  stockBalance: item.product?.currentStock || 0,
+                  buyPrice: item.product?.buyPrice || 0,
+                }),
+              );
+              setItems(formattedItems);
+
               // Handle topNotes (could be string[] or {title, items})
               const rawTopNotes = (invoice as any).topNotes;
-              if (rawTopNotes && typeof rawTopNotes === 'object' && 'items' in rawTopNotes) {
+              if (
+                rawTopNotes &&
+                typeof rawTopNotes === "object" &&
+                "items" in rawTopNotes
+              ) {
                 setTopNotesTitle(rawTopNotes.title || "ملاحظات هامة");
                 setTopNotes(rawTopNotes.items || []);
               } else {
@@ -219,7 +268,11 @@ function InvoiceFormStep({
 
               // Handle bottom notes
               const rawNotes = (invoice as any).notes;
-              if (rawNotes && typeof rawNotes === 'object' && 'items' in rawNotes) {
+              if (
+                rawNotes &&
+                typeof rawNotes === "object" &&
+                "items" in rawNotes
+              ) {
                 setNotesTitle(rawNotes.title || "ملاحظات إضافية");
                 setNotes(rawNotes.items || []);
               } else {
@@ -255,12 +308,16 @@ function InvoiceFormStep({
           setInvoiceNumberError("");
         } else {
           setInvoiceNumberError(
-            taken ? `رقم الفاتورة #${invoiceNumber} مستخدم مسبقاً، يرجى اختيار رقم آخر` : ""
+            taken
+              ? `رقم الفاتورة #${invoiceNumber} مستخدم مسبقاً، يرجى اختيار رقم آخر`
+              : "",
           );
         }
       } else {
         setInvoiceNumberError(
-          taken ? `رقم الفاتورة #${invoiceNumber} مستخدم مسبقاً، يرجى اختيار رقم آخر` : ""
+          taken
+            ? `رقم الفاتورة #${invoiceNumber} مستخدم مسبقاً، يرجى اختيار رقم آخر`
+            : "",
         );
       }
       setCheckingNumber(false);
@@ -270,13 +327,15 @@ function InvoiceFormStep({
 
   const addItem = async (product: ProductData) => {
     if (isViewMode) return;
-    
+
     let appliedUnitPrice = product.sellPrice;
     let appliedProfitMargin = product.profitMargin || 0;
 
     if (product.currentStock <= 0) {
-      toast.warning(`تنبيه: سيتم بيع الصنف "${product.name}" بدون رصيد كافٍ. جاري استرجاع آخر سعر بيع...`);
-      
+      toast.warning(
+        `تنبيه: سيتم بيع الصنف "${product.name}" بدون رصيد كافٍ. جاري استرجاع آخر سعر بيع...`,
+      );
+
       const history = await getProductPricingHistory(product.id);
       if (history) {
         appliedUnitPrice = history.lastSellingPrice;
@@ -297,19 +356,21 @@ function InvoiceFormStep({
         total: appliedUnitPrice * (1 + (product.taxRate || 0) / 100),
         productId: product.id,
         stockBalance: product.currentStock,
+        buyPrice: product.buyPrice,
       },
     ]);
   };
 
   const removeItem = (id: string) => {
     if (isViewMode) return;
-    if (items.length > 1) setItems((prev) => prev.filter((item) => item.id !== id));
+    if (items.length > 1)
+      setItems((prev) => prev.filter((item) => item.id !== id));
   };
 
   const updateItem = (
     id: string,
     field: keyof InvoiceItem,
-    value: string | number | null
+    value: string | number | null,
   ) => {
     if (isViewMode) return;
     setItems((prev) =>
@@ -317,42 +378,71 @@ function InvoiceFormStep({
         if (item.id !== id) return item;
         let finalValue = value;
 
-        if (field === "quantity" || field === "unitPrice" || field === "taxRate" || field === "discount") {
+        if (
+          field === "quantity" ||
+          field === "unitPrice" ||
+          field === "taxRate" ||
+          field === "discount"
+        ) {
           finalValue = Math.max(0, Number(value));
         }
 
         const updated = { ...item, [field]: finalValue };
 
+        if (field === "unitPrice") {
+          const newUnitPrice = Number(updated.unitPrice);
+          const buyPrice = updated.buyPrice || 0;
+          if (buyPrice > 0) {
+            if (newUnitPrice > 0) {
+              updated.profitMargin = Number(((1 - buyPrice / newUnitPrice) * 100).toFixed(2));
+            } else {
+              updated.profitMargin = -100;
+            }
+          }
+        }
+
         const basePrice = Number(updated.quantity) * Number(updated.unitPrice);
         // Discount as percentage
-        const discountAmount = basePrice * (Number(updated.discount || 0) / 100);
+        const discountAmount =
+          basePrice * (Number(updated.discount || 0) / 100);
         const priceAfterDiscount = basePrice - discountAmount;
-        updated.total = priceAfterDiscount + priceAfterDiscount * (Number(updated.taxRate) / 100);
+        updated.total =
+          priceAfterDiscount +
+          priceAfterDiscount * (Number(updated.taxRate) / 100);
         return updated;
-      })
+      }),
     );
   };
 
   const subtotal = useMemo(
-    () => items.reduce((sum, i) => sum + Number(i.quantity) * Number(i.unitPrice), 0),
-    [items]
+    () =>
+      items.reduce(
+        (sum, i) => sum + Number(i.quantity) * Number(i.unitPrice),
+        0,
+      ),
+    [items],
   );
   const itemsDiscount = useMemo(
-    () => items.reduce((sum, i) => sum + (Number(i.quantity) * Number(i.unitPrice)) * (Number(i.discount || 0) / 100), 0),
-    [items]
+    () =>
+      items.reduce(
+        (sum, i) =>
+          sum +
+          Number(i.quantity) *
+            Number(i.unitPrice) *
+            (Number(i.discount || 0) / 100),
+        0,
+      ),
+    [items],
   );
   const totalTax = useMemo(
     () =>
-      items.reduce(
-        (sum, i) => {
-          const itemBase = Number(i.quantity) * Number(i.unitPrice);
-          const discountAmount = itemBase * (Number(i.discount || 0) / 100);
-          const itemAfterDiscount = itemBase - discountAmount;
-          return sum + itemAfterDiscount * (Number(i.taxRate) / 100);
-        },
-        0
-      ),
-    [items]
+      items.reduce((sum, i) => {
+        const itemBase = Number(i.quantity) * Number(i.unitPrice);
+        const discountAmount = itemBase * (Number(i.discount || 0) / 100);
+        const itemAfterDiscount = itemBase - discountAmount;
+        return sum + itemAfterDiscount * (Number(i.taxRate) / 100);
+      }, 0),
+    [items],
   );
   const grandTotal = subtotal - itemsDiscount - discount + totalTax;
   const netTotal = grandTotal - returnsTotal;
@@ -365,7 +455,9 @@ function InvoiceFormStep({
         toast.success(`تم تحديث الفاتورة #${invoiceNumber} بنجاح`);
         if (result.stockWarnings && result.stockWarnings.length > 0) {
           result.stockWarnings.forEach((w) => {
-            toast.warning(`تنبيه: لا يوجد مخزون كافٍ للصنف "${w}"`, { duration: 6000 });
+            toast.warning(`تنبيه: لا يوجد مخزون كافٍ للصنف "${w}"`, {
+              duration: 6000,
+            });
           });
         }
       } else {
@@ -373,13 +465,16 @@ function InvoiceFormStep({
         toast.success(`تم حفظ الفاتورة #${invoiceNumber} بنجاح`);
         if (result.stockWarnings && result.stockWarnings.length > 0) {
           result.stockWarnings.forEach((w) => {
-            toast.warning(`تنبيه: لا يوجد مخزون كافٍ للصنف "${w}"`, { duration: 6000 });
+            toast.warning(`تنبيه: لا يوجد مخزون كافٍ للصنف "${w}"`, {
+              duration: 6000,
+            });
           });
         }
       }
       router.push("/sales-invoices");
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "حدث خطأ أثناء الحفظ";
+      const message =
+        err instanceof Error ? err.message : "حدث خطأ أثناء الحفظ";
       toast.error(message);
     } finally {
       setSaving(false);
@@ -418,34 +513,59 @@ function InvoiceFormStep({
       discount: itemsDiscount + discount,
       total: grandTotal,
       status: paymentType,
-      dueDate: (paymentType === "credit" || notifSettings?.showDueDateOnInvoices) ? dueDate : undefined,
-      safeId: (paymentType === "cash" && treasuryType === "safe" && selectedSafeId) ? Number(selectedSafeId) : undefined,
-      bankId: (paymentType === "cash" && treasuryType === "bank" && selectedBankId) ? Number(selectedBankId) : undefined,
+      dueDate:
+        paymentType === "credit" || notifSettings?.showDueDateOnInvoices
+          ? dueDate
+          : undefined,
+      safeId:
+        paymentType === "cash" && treasuryType === "safe" && selectedSafeId
+          ? Number(selectedSafeId)
+          : undefined,
+      bankId:
+        paymentType === "cash" && treasuryType === "bank" && selectedBankId
+          ? Number(selectedBankId)
+          : undefined,
       topNotes: { title: topNotesTitle, items: topNotes } as any,
       notes: { title: notesTitle, items: notes } as any,
       printableTitle,
-      items: items.map(({ description, quantity, unitPrice, taxRate, discount, total, productId }) => {
-        if (!productId) throw new Error("يجب اختيار منتج لكل صنف");
-        return {
+      items: items.map(
+        ({
           description,
           quantity,
           unitPrice,
+          profitMargin,
           taxRate,
           discount,
           total,
           productId,
-        };
-      }),
+        }) => {
+          if (!productId) throw new Error("يجب اختيار منتج لكل صنف");
+          return {
+            description,
+            quantity,
+            unitPrice,
+            profitMargin,
+            taxRate,
+            discount,
+            total,
+            productId,
+          };
+        },
+      ),
     };
 
     if (systemSettings?.inventory?.allowNegativeStock) {
-      const exceedingItems = items.filter(i => i.quantity > (i.stockBalance || 0));
+      const exceedingItems = items.filter(
+        (i) => i.quantity > (i.stockBalance || 0),
+      );
       if (exceedingItems.length > 0) {
-        setItemsExceedingStock(exceedingItems.map(i => ({
-          name: i.description,
-          requested: i.quantity,
-          available: i.stockBalance || 0
-        })));
+        setItemsExceedingStock(
+          exceedingItems.map((i) => ({
+            name: i.description,
+            requested: i.quantity,
+            available: i.stockBalance || 0,
+          })),
+        );
         setPendingSaveData(invoiceData);
         setShowNegativeWarning(true);
         return; // Pause save process
@@ -455,14 +575,21 @@ function InvoiceFormStep({
     await executeSave(invoiceData);
   };
 
-  const canSave = !invoiceNumberError && !checkingNumber && !saving && !loading && !isViewMode;
+  const canSave =
+    !invoiceNumberError &&
+    !checkingNumber &&
+    !saving &&
+    !loading &&
+    !isViewMode;
 
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center p-6 bg-slate-50/50 min-h-[calc(100vh-64px)]">
         <div className="flex flex-col items-center gap-3">
           <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-          <p className="text-sm text-muted-foreground font-medium">جاري تحميل بيانات الفاتورة...</p>
+          <p className="text-sm text-muted-foreground font-medium">
+            جاري تحميل بيانات الفاتورة...
+          </p>
         </div>
       </div>
     );
@@ -478,7 +605,10 @@ function InvoiceFormStep({
   };
 
   return (
-    <div className="flex-1 space-y-6 p-6 print:p-0 print:space-y-0 print:bg-white bg-slate-50/50 min-h-screen print:min-h-0" dir="rtl">
+    <div
+      className="flex-1 space-y-6 p-6 print:p-0 print:space-y-0 print:bg-white bg-slate-50/50 min-h-screen print:min-h-0"
+      dir="rtl"
+    >
       <div className="print:hidden flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <Button
@@ -491,7 +621,11 @@ function InvoiceFormStep({
           </Button>
           <div>
             <h2 className="text-3xl font-black text-slate-800 tracking-tight">
-              {isViewMode ? "عرض فاتورة مبيعات" : isEditMode ? "تعديل فاتورة مبيعات" : "إنشاء فاتورة مبيعات"}
+              {isViewMode
+                ? "عرض فاتورة مبيعات"
+                : isEditMode
+                  ? "تعديل فاتورة مبيعات"
+                  : "إنشاء فاتورة مبيعات"}
             </h2>
             <p className="text-muted-foreground font-medium">
               نظام إدارة مبيعات مصنع الطوب
@@ -542,7 +676,8 @@ function InvoiceFormStep({
             <Card className="border-none shadow-sm overflow-hidden">
               <CardHeader className="bg-white border-b py-4">
                 <CardTitle className="text-base font-bold flex items-center gap-2">
-                  <div className="w-2 h-6 bg-primary rounded-full" /> بيانات العميل والطلب
+                  <div className="w-2 h-6 bg-primary rounded-full" /> بيانات
+                  العميل والطلب
                 </CardTitle>
               </CardHeader>
               <CardContent className="bg-white pt-5 pb-5">
@@ -568,7 +703,9 @@ function InvoiceFormStep({
                           type="number"
                           min={1}
                           value={invoiceNumber}
-                          onChange={(e) => setInvoiceNumber(Number(e.target.value))}
+                          onChange={(e) =>
+                            setInvoiceNumber(Number(e.target.value))
+                          }
                           disabled={isViewMode}
                           className={`w-32 bg-slate-50 border-slate-200 text-center font-bold text-lg ${
                             invoiceNumberError
@@ -578,13 +715,17 @@ function InvoiceFormStep({
                           required={!isViewMode}
                         />
                         {checkingNumber && !isViewMode && (
-                          <p className="text-xs text-slate-400 font-medium">جاري التحقق...</p>
-                        )}
-                        {invoiceNumberError && !checkingNumber && !isViewMode && (
-                          <p className="text-xs text-red-500 font-medium max-w-[220px] leading-tight">
-                            {invoiceNumberError}
+                          <p className="text-xs text-slate-400 font-medium">
+                            جاري التحقق...
                           </p>
                         )}
+                        {invoiceNumberError &&
+                          !checkingNumber &&
+                          !isViewMode && (
+                            <p className="text-xs text-red-500 font-medium max-w-[220px] leading-tight">
+                              {invoiceNumberError}
+                            </p>
+                          )}
                       </div>
                     </div>
 
@@ -594,7 +735,9 @@ function InvoiceFormStep({
                       </Label>
                       <Select
                         value={paymentType}
-                        onValueChange={(v) => setPaymentType(v as "cash" | "credit" | "pending")}
+                        onValueChange={(v) =>
+                          setPaymentType(v as "cash" | "credit" | "pending")
+                        }
                         disabled={isViewMode || isEditMode}
                       >
                         <SelectTrigger className="w-36 bg-slate-50 border-slate-200">
@@ -635,10 +778,13 @@ function InvoiceFormStep({
                       />
                     </div>
 
-                    {(paymentType === "credit" || notifSettings?.showDueDateOnInvoices) && (
+                    {(paymentType === "credit" ||
+                      notifSettings?.showDueDateOnInvoices) && (
                       <div className="space-y-1.5">
                         <Label className="text-slate-600 text-sm font-bold flex items-center gap-1">
-                          {paymentType === "credit" ? "تاريخ الاستحقاق" : "تاريخ التحصيل المتوقع"}
+                          {paymentType === "credit"
+                            ? "تاريخ الاستحقاق"
+                            : "تاريخ التحصيل المتوقع"}
                         </Label>
                         <Input
                           type="date"
@@ -655,10 +801,14 @@ function InvoiceFormStep({
                 {paymentType === "cash" && (
                   <div className="mt-4 pt-4 border-t flex flex-wrap items-end gap-4">
                     <div className="space-y-1.5">
-                      <Label className="text-slate-600 text-sm font-bold">جهة الدفع (نقدي)</Label>
+                      <Label className="text-slate-600 text-sm font-bold">
+                        جهة الدفع (نقدي)
+                      </Label>
                       <Select
                         value={treasuryType}
-                        onValueChange={(v) => setTreasuryType(v as "safe" | "bank")}
+                        onValueChange={(v) =>
+                          setTreasuryType(v as "safe" | "bank")
+                        }
                         disabled={isViewMode || isEditMode}
                       >
                         <SelectTrigger className="w-32 bg-slate-50 border-slate-200">
@@ -673,19 +823,30 @@ function InvoiceFormStep({
 
                     {treasuryType === "safe" ? (
                       <div className="space-y-1.5 flex-1 max-w-[200px]">
-                        <Label className="text-slate-600 text-sm font-bold">اختر الخزنة</Label>
+                        <Label className="text-slate-600 text-sm font-bold">
+                          اختر الخزنة
+                        </Label>
                         <Select
                           value={selectedSafeId}
                           onValueChange={setSelectedSafeId}
-                          disabled={isViewMode || isEditMode || safes.length === 0}
+                          disabled={
+                            isViewMode || isEditMode || safes.length === 0
+                          }
                         >
                           <SelectTrigger className="bg-slate-50 border-slate-200">
-                            <SelectValue placeholder={safes.length === 0 ? "لا يوجد خزن" : "اختر الخزنة"} />
+                            <SelectValue
+                              placeholder={
+                                safes.length === 0
+                                  ? "لا يوجد خزن"
+                                  : "اختر الخزنة"
+                              }
+                            />
                           </SelectTrigger>
                           <SelectContent>
                             {safes.map((s) => (
                               <SelectItem key={s.id} value={String(s.id)}>
-                                {s.name} ({s.balance.toLocaleString()} {settings?.currencyCode || "ج.م"})
+                                {s.name} ({s.balance.toLocaleString()}{" "}
+                                {settings?.currencyCode || "ج.م"})
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -693,31 +854,50 @@ function InvoiceFormStep({
                       </div>
                     ) : (
                       <div className="space-y-1.5 flex-1 max-w-[200px]">
-                        <Label className="text-slate-600 text-sm font-bold">اختر البنك</Label>
+                        <Label className="text-slate-600 text-sm font-bold">
+                          اختر البنك
+                        </Label>
                         <Select
                           value={selectedBankId}
                           onValueChange={setSelectedBankId}
-                          disabled={isViewMode || isEditMode || banks.length === 0}
+                          disabled={
+                            isViewMode || isEditMode || banks.length === 0
+                          }
                         >
                           <SelectTrigger className="bg-slate-50 border-slate-200">
-                            <SelectValue placeholder={banks.length === 0 ? "لا يوجد بنوك" : "اختر البنك"} />
+                            <SelectValue
+                              placeholder={
+                                banks.length === 0
+                                  ? "لا يوجد بنوك"
+                                  : "اختر البنك"
+                              }
+                            />
                           </SelectTrigger>
                           <SelectContent>
                             {banks.map((b) => (
                               <SelectItem key={b.id} value={String(b.id)}>
-                                {b.name} ({b.balance.toLocaleString()} {settings?.currencyCode || "ج.م"})
+                                {b.name} ({b.balance.toLocaleString()}{" "}
+                                {settings?.currencyCode || "ج.م"})
                               </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
                       </div>
                     )}
-                    {paymentType === "cash" && treasuryType === "safe" && safes.length === 0 && (
-                      <p className="text-xs text-red-500 font-bold mb-2">يرجى إضافة خزنة أولاً</p>
-                    )}
-                    {paymentType === "cash" && treasuryType === "bank" && banks.length === 0 && (
-                      <p className="text-xs text-red-500 font-bold mb-2">يرجى إضافة بنك أولاً</p>
-                    )}
+                    {paymentType === "cash" &&
+                      treasuryType === "safe" &&
+                      safes.length === 0 && (
+                        <p className="text-xs text-red-500 font-bold mb-2">
+                          يرجى إضافة خزنة أولاً
+                        </p>
+                      )}
+                    {paymentType === "cash" &&
+                      treasuryType === "bank" &&
+                      banks.length === 0 && (
+                        <p className="text-xs text-red-500 font-bold mb-2">
+                          يرجى إضافة بنك أولاً
+                        </p>
+                      )}
                   </div>
                 )}
               </CardContent>
@@ -726,7 +906,8 @@ function InvoiceFormStep({
             <Card className="border-none shadow-sm overflow-hidden">
               <CardHeader className="flex flex-row items-center justify-between bg-white border-b py-4">
                 <CardTitle className="text-base font-bold flex items-center gap-2">
-                  <div className="w-2 h-6 bg-orange-500 rounded-full" /> تفاصيل الأصناف
+                  <div className="w-2 h-6 bg-orange-500 rounded-full" /> تفاصيل
+                  الأصناف
                 </CardTitle>
                 {!isViewMode && (
                   <div className="flex items-center gap-4">
@@ -742,10 +923,15 @@ function InvoiceFormStep({
                       </label>
                     )}
                     <div className="w-72">
-                      <ProductSelect 
-                        onSelect={addItem} 
-                        disabled={loading} 
-                        onlyInStock={!(systemSettings?.inventory?.allowNegativeStock && showZeroStock)} 
+                      <ProductSelect
+                        onSelect={addItem}
+                        disabled={loading}
+                        onlyInStock={
+                          !(
+                            systemSettings?.inventory?.allowNegativeStock &&
+                            showZeroStock
+                          )
+                        }
                       />
                     </div>
                   </div>
@@ -756,14 +942,30 @@ function InvoiceFormStep({
                   <Table>
                     <TableHeader className="bg-slate-50">
                       <TableRow>
-                        <TableHead className="text-right font-bold">الصنف</TableHead>
-                        <TableHead className="text-right font-bold w-24 text-blue-600 outline-none">الرصيد</TableHead>
-                        <TableHead className="text-right font-bold w-24">الكمية *</TableHead>
-                        <TableHead className="text-right font-bold w-24">السعر *</TableHead>
-                        <TableHead className="text-right font-bold w-24 text-green-600">الربح (%)</TableHead>
-                        <TableHead className="text-right font-bold w-24">الخصم (%)</TableHead>
-                        <TableHead className="text-right font-bold w-20">الضريبة %</TableHead>
-                        <TableHead className="text-right font-bold w-32">الإجمالي</TableHead>
+                        <TableHead className="text-right font-bold">
+                          الصنف
+                        </TableHead>
+                        <TableHead className="text-right font-bold w-24 text-blue-600 outline-none">
+                          الرصيد
+                        </TableHead>
+                        <TableHead className="text-right font-bold w-24">
+                          الكمية *
+                        </TableHead>
+                        <TableHead className="text-right font-bold w-24">
+                          السعر *
+                        </TableHead>
+                        <TableHead className="text-right font-bold w-24 text-green-600">
+                          الربح (%)
+                        </TableHead>
+                        <TableHead className="text-right font-bold w-24">
+                          الخصم (%)
+                        </TableHead>
+                        <TableHead className="text-right font-bold w-20">
+                          الضريبة %
+                        </TableHead>
+                        <TableHead className="text-right font-bold w-32">
+                          الإجمالي
+                        </TableHead>
                         <TableHead className="w-10"></TableHead>
                       </TableRow>
                     </TableHeader>
@@ -772,18 +974,27 @@ function InvoiceFormStep({
                         <TableRow key={item.id}>
                           <TableCell className="p-3">
                             <div className="flex flex-col gap-0.5">
-                              <span className="font-bold text-slate-800">{item.description}</span>
+                              <span className="font-bold text-slate-800">
+                                {item.description}
+                              </span>
                               <span className="text-[10px] text-muted-foreground font-mono">
                                 PID: {item.productId}
                               </span>
                             </div>
                           </TableCell>
                           <TableCell className="text-right">
-                            <span className={cn(
-                              "font-bold px-2 py-1 rounded text-sm",
-                              (item.stockBalance || 0) <= 0 ? "bg-red-50 text-red-600" : "bg-blue-50 text-blue-600"
-                            )}>
-                              {Math.max(0, item.stockBalance || 0).toLocaleString()}
+                            <span
+                              className={cn(
+                                "font-bold px-2 py-1 rounded text-sm",
+                                (item.stockBalance || 0) <= 0
+                                  ? "bg-red-50 text-red-600"
+                                  : "bg-blue-50 text-blue-600",
+                              )}
+                            >
+                              {Math.max(
+                                0,
+                                item.stockBalance || 0,
+                              ).toLocaleString()}
                             </span>
                           </TableCell>
                           <TableCell>
@@ -791,7 +1002,9 @@ function InvoiceFormStep({
                               type="number"
                               step="any"
                               value={item.quantity || ""}
-                              onChange={(e) => updateItem(item.id, "quantity", e.target.value)}
+                              onChange={(e) =>
+                                updateItem(item.id, "quantity", e.target.value)
+                              }
                               disabled={isViewMode}
                               className="bg-slate-50 h-9 font-bold text-center"
                               required={!isViewMode}
@@ -802,7 +1015,9 @@ function InvoiceFormStep({
                               type="number"
                               step="any"
                               value={item.unitPrice || ""}
-                              onChange={(e) => updateItem(item.id, "unitPrice", e.target.value)}
+                              onChange={(e) =>
+                                updateItem(item.id, "unitPrice", e.target.value)
+                              }
                               disabled={isViewMode}
                               className="bg-slate-50 h-9 font-bold text-center"
                               required={!isViewMode}
@@ -822,7 +1037,9 @@ function InvoiceFormStep({
                               type="number"
                               step="any"
                               value={item.discount || ""}
-                              onChange={(e) => updateItem(item.id, "discount", e.target.value)}
+                              onChange={(e) =>
+                                updateItem(item.id, "discount", e.target.value)
+                              }
                               disabled={isViewMode}
                               placeholder="%"
                               className="bg-red-50 border-red-100 h-9 font-bold text-center"
@@ -833,13 +1050,16 @@ function InvoiceFormStep({
                               type="number"
                               step="any"
                               value={item.taxRate}
-                              onChange={(e) => updateItem(item.id, "taxRate", e.target.value)}
+                              onChange={(e) =>
+                                updateItem(item.id, "taxRate", e.target.value)
+                              }
                               disabled={isViewMode}
                               className="bg-orange-50 border-orange-200 h-9 font-bold text-center"
                             />
                           </TableCell>
                           <TableCell className="font-bold text-primary text-sm whitespace-nowrap">
-                            {item.total.toLocaleString("ar-EG")} {settings?.currencyCode || "ج.م"}
+                            {item.total.toLocaleString("ar-EG")}{" "}
+                            {settings?.currencyCode || "ج.م"}
                           </TableCell>
                           <TableCell>
                             {!isViewMode && (
@@ -863,12 +1083,12 @@ function InvoiceFormStep({
               </CardContent>
             </Card>
 
-            <DynamicNotes 
-              title={notesTitle} 
-              onTitleChange={setNotesTitle} 
-              notes={notes} 
-              onChange={setNotes} 
-              disabled={isViewMode} 
+            <DynamicNotes
+              title={notesTitle}
+              onTitleChange={setNotesTitle}
+              notes={notes}
+              onChange={setNotes}
+              disabled={isViewMode}
             />
           </div>
 
@@ -888,26 +1108,31 @@ function InvoiceFormStep({
                 <div className="flex justify-between text-slate-400 text-sm">
                   <span>الإجمالي قبل الضريبة:</span>
                   <span className="text-white font-mono">
-                    {subtotal.toLocaleString("ar-EG")} {settings?.currencyCode || "ج.م"}
+                    {subtotal.toLocaleString("ar-EG")}{" "}
+                    {settings?.currencyCode || "ج.م"}
                   </span>
                 </div>
                 <div className="flex justify-between text-slate-400 text-sm">
                   <span>إجمالي الضرائب:</span>
                   <span className="text-orange-400 font-mono">
-                    +{totalTax.toLocaleString("ar-EG")} {settings?.currencyCode || "ج.م"}
+                    +{totalTax.toLocaleString("ar-EG")}{" "}
+                    {settings?.currencyCode || "ج.م"}
                   </span>
                 </div>
                 <div className="space-y-1.5 pt-2">
                   <div className="flex justify-between text-slate-400 text-sm mb-1">
                     <span>خصم إضافي:</span>
                     <span className="text-red-400 font-mono">
-                      -{discount.toLocaleString("ar-EG")} {settings?.currencyCode || "ج.م"}
+                      -{discount.toLocaleString("ar-EG")}{" "}
+                      {settings?.currencyCode || "ج.م"}
                     </span>
                   </div>
                   <Input
                     type="number"
                     value={discount || ""}
-                    onChange={(e) => setDiscount(Math.max(0, Number(e.target.value)))}
+                    onChange={(e) =>
+                      setDiscount(Math.max(0, Number(e.target.value)))
+                    }
                     disabled={isViewMode}
                     className="bg-white/5 border-white/10 h-8 text-center font-bold"
                     placeholder="قيمة الخصم..."
@@ -919,7 +1144,8 @@ function InvoiceFormStep({
                     <div className="flex justify-between text-slate-400 text-sm">
                       <span>إجمالي المرتجعات:</span>
                       <span className="text-red-400 font-mono">
-                        -{returnsTotal.toLocaleString("ar-EG")} {settings?.currencyCode || "ج.م"}
+                        -{returnsTotal.toLocaleString("ar-EG")}{" "}
+                        {settings?.currencyCode || "ج.م"}
                       </span>
                     </div>
                     <div className="flex justify-between text-slate-400 text-sm">
@@ -935,7 +1161,8 @@ function InvoiceFormStep({
                 <div className="pt-2">
                   <p className="text-xs text-slate-400 mb-1">الصافي النهائي:</p>
                   <p className="text-3xl font-black text-green-400">
-                    {netTotal.toLocaleString("ar-EG")} {settings?.currencyCode || "ج.م"}
+                    {netTotal.toLocaleString("ar-EG")}{" "}
+                    {settings?.currencyCode || "ج.م"}
                   </p>
                 </div>
               </div>
@@ -953,7 +1180,8 @@ function InvoiceFormStep({
                     </>
                   ) : (
                     <>
-                      <Save className="h-5 w-5" /> {isEditMode ? "تحديث الفاتورة" : "حفظ الفاتورة"}
+                      <Save className="h-5 w-5" />{" "}
+                      {isEditMode ? "تحديث الفاتورة" : "حفظ الفاتورة"}
                     </>
                   )}
                 </Button>
@@ -973,12 +1201,12 @@ function InvoiceFormStep({
         title={printableTitle}
         paymentStatus={paymentType}
         returns={returns}
-        items={items.map(i => ({
+        items={items.map((i) => ({
           description: i.description,
           quantity: i.quantity,
           unitPrice: i.unitPrice,
           discount: i.discount || 0,
-          total: i.total
+          total: i.total,
         }))}
         subtotal={subtotal}
         discount={itemsDiscount + discount}
@@ -998,7 +1226,10 @@ function InvoiceFormStep({
         termsAndConditions={settings?.termsAndConditions}
       />
 
-      <AlertDialog open={showNegativeWarning} onOpenChange={setShowNegativeWarning}>
+      <AlertDialog
+        open={showNegativeWarning}
+        onOpenChange={setShowNegativeWarning}
+      >
         <AlertDialogContent dir="rtl" className="sm:max-w-[425px]">
           <AlertDialogHeader>
             <div className="flex items-center gap-3 mb-2">
@@ -1014,26 +1245,39 @@ function InvoiceFormStep({
               <ul className="mt-2 space-y-1 list-disc list-inside text-sm">
                 {itemsExceedingStock.map((item, index) => (
                   <li key={index}>
-                    <span className="font-bold text-slate-800">{item.name}</span>: مطلوب <span className="text-red-500 font-bold">{item.requested}</span>، متاح <span className="text-green-600 font-bold">{item.available}</span>
+                    <span className="font-bold text-slate-800">
+                      {item.name}
+                    </span>
+                    : مطلوب{" "}
+                    <span className="text-red-500 font-bold">
+                      {item.requested}
+                    </span>
+                    ، متاح{" "}
+                    <span className="text-green-600 font-bold">
+                      {item.available}
+                    </span>
                   </li>
                 ))}
               </ul>
-              <br/>
+              <br />
               هل أنت متأكد من رغبتك في إتمام هذه الفاتورة بدون رصيد كافٍ؟
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="gap-2 sm:gap-0 mt-4">
-            <AlertDialogCancel disabled={saving} onClick={() => {
-               setShowNegativeWarning(false);
-               setPendingSaveData(null);
-            }}>
+            <AlertDialogCancel
+              disabled={saving}
+              onClick={() => {
+                setShowNegativeWarning(false);
+                setPendingSaveData(null);
+              }}
+            >
               إلغاء التعديل
             </AlertDialogCancel>
-            <AlertDialogAction 
+            <AlertDialogAction
               onClick={() => {
                 if (pendingSaveData) executeSave(pendingSaveData);
-              }} 
-              disabled={saving} 
+              }}
+              disabled={saving}
               className="bg-orange-600 hover:bg-orange-700 text-white"
             >
               {saving ? (
@@ -1041,7 +1285,9 @@ function InvoiceFormStep({
                   <Loader2 className="h-4 w-4 ml-2 animate-spin" />
                   جاري الحفظ...
                 </>
-              ) : "نعم، متأكد"}
+              ) : (
+                "نعم، متأكد"
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1070,7 +1316,9 @@ export default function CreateSalesInvoicePage() {
         .then((invoice) => {
           if (invoice) {
             getCustomers().then((customers) => {
-              const fullCustomer = (customers as Customer[]).find(c => c.id === invoice.customerId);
+              const fullCustomer = (customers as Customer[]).find(
+                (c) => c.id === invoice.customerId,
+              );
               if (fullCustomer) {
                 setInitialCustomer(fullCustomer);
               } else {
@@ -1093,7 +1341,9 @@ export default function CreateSalesInvoicePage() {
         <div className="flex-1 flex items-center justify-center p-6 bg-slate-50/50 min-h-[calc(100vh-64px)]">
           <div className="flex flex-col items-center gap-3">
             <Loader2 className="h-12 w-12 animate-spin text-primary" />
-            <p className="text-sm text-muted-foreground font-medium">جاري تحميل بيانات الفاتورة...</p>
+            <p className="text-sm text-muted-foreground font-medium">
+              جاري تحميل بيانات الفاتورة...
+            </p>
           </div>
         </div>
       </>
@@ -1102,7 +1352,15 @@ export default function CreateSalesInvoicePage() {
 
   return (
     <>
-      <Navbar title={isViewMode ? "عرض فاتورة مبيعات" : (invoiceId && invoiceId !== "create" ? "تعديل فاتورة مبيعات" : "فاتورة مبيعات جديدة")} />
+      <Navbar
+        title={
+          isViewMode
+            ? "عرض فاتورة مبيعات"
+            : invoiceId && invoiceId !== "create"
+              ? "تعديل فاتورة مبيعات"
+              : "فاتورة مبيعات جديدة"
+        }
+      />
       <div className="min-h-screen bg-slate-50/50 pb-12">
         <InvoiceFormStep
           customer={initialCustomer}

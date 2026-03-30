@@ -20,11 +20,14 @@ export async function getPendingInvoices() {
   return { sales, purchases };
 }
 
-export async function finalizeSalesInvoice(id: number, paymentData: {
-  status: "cash" | "credit";
-  safeId?: number;
-  bankId?: number;
-}) {
+export async function finalizeSalesInvoice(
+  id: number,
+  paymentData: {
+    status: "cash" | "credit";
+    safeId?: number;
+    bankId?: number;
+  },
+) {
   const result = await prisma.$transaction(async (tx) => {
     const invoice = await tx.salesInvoice.findUnique({
       where: { id },
@@ -60,17 +63,31 @@ export async function finalizeSalesInvoice(id: number, paymentData: {
     }
 
     // 3. إنشاء حركات المخزون وتحديث الرصيد
+    const inventoryAccount = await tx.account.findUnique({
+      where: { code: "120301" },
+    });
+    const cogsAccount = await tx.account.findUnique({
+      where: { code: "6101" },
+    });
+
+    if (!inventoryAccount) throw new Error("حساب المخزون 120301 غير موجود");
+    if (!cogsAccount)
+      throw new Error("حساب تكلفة البضاعة المباعة 6101 غير موجود");
+
+    let salesCogsValue = 0;
+
     for (const item of invoice.items) {
       if (!item.productId) continue;
 
-      // فحص الرصيد الحالي قبل التخصيم
       const product = await tx.product.findUnique({
         where: { id: item.productId },
-        select: { currentStock: true }
+        select: { currentStock: true, buyPrice: true },
       });
       const currentVal = product?.currentStock ?? 0;
       const actualDeduct = Math.min(currentVal, item.quantity);
       const shortage = item.quantity - actualDeduct;
+      const unitCost = product?.buyPrice ?? 0;
+      salesCogsValue += item.quantity * unitCost;
 
       await tx.stockMovement.create({
         data: {
@@ -105,19 +122,76 @@ export async function finalizeSalesInvoice(id: number, paymentData: {
       }
     }
 
-    return { 
+    if (salesCogsValue > 0) {
+      const lastEntry = await tx.journalEntry.findFirst({
+        orderBy: { entryNumber: "desc" },
+        select: { entryNumber: true },
+      });
+      const nextEntryNumber = (lastEntry?.entryNumber || 0) + 1;
+      await tx.journalEntry.create({
+        data: {
+          entryNumber: nextEntryNumber,
+          date: new Date(),
+          description: `قيد تكلفة البضاعة المباعة لفاتورة بيع رقم ${invoice.invoiceNumber}`,
+          reference: `فاتورة بيع #${invoice.invoiceNumber}`,
+          sourceType: "SALES_INVOICE",
+          sourceId: invoice.id,
+          items: {
+            create: [
+              {
+                accountId: cogsAccount.id,
+                debit: salesCogsValue,
+                credit: 0,
+                description: "تكلفة البضاعة المباعة",
+              },
+              {
+                accountId: inventoryAccount.id,
+                debit: 0,
+                credit: salesCogsValue,
+                description: "إخراج من مخزون البضاعة",
+              },
+            ],
+          },
+        },
+      });
+    }
+
+    return {
       success: true,
-      updatedAccount: (paymentData.status === "cash" ? (paymentData.safeId ? await tx.treasurySafe.findUnique({ where: { id: paymentData.safeId }, select: { name: true, balance: true } }) : (paymentData.bankId ? await tx.treasuryBank.findUnique({ where: { id: paymentData.bankId }, select: { name: true, balance: true } }) : null)) : null),
-      updatedProducts: await Promise.all(invoice.items.filter(i => i.productId).map(async i => {
-        const p = await tx.product.findUnique({ where: { id: i.productId! }, select: { name: true, currentStock: true, minStock: true } });
-        return p;
-      }))
+      updatedAccount:
+        paymentData.status === "cash"
+          ? paymentData.safeId
+            ? await tx.treasurySafe.findUnique({
+                where: { id: paymentData.safeId },
+                select: { name: true, balance: true },
+              })
+            : paymentData.bankId
+              ? await tx.treasuryBank.findUnique({
+                  where: { id: paymentData.bankId },
+                  select: { name: true, balance: true },
+                })
+              : null
+          : null,
+      updatedProducts: await Promise.all(
+        invoice.items
+          .filter((i) => i.productId)
+          .map(async (i) => {
+            const p = await tx.product.findUnique({
+              where: { id: i.productId! },
+              select: { name: true, currentStock: true, minStock: true },
+            });
+            return p;
+          }),
+      ),
     };
   });
 
   // Fire alerts outside transaction
   if (result.updatedAccount) {
-    await triggerTreasuryAlert(result.updatedAccount.name, result.updatedAccount.balance);
+    await triggerTreasuryAlert(
+      result.updatedAccount.name,
+      result.updatedAccount.balance,
+    );
   }
   if (result.updatedProducts) {
     for (const p of result.updatedProducts) {
@@ -128,15 +202,23 @@ export async function finalizeSalesInvoice(id: number, paymentData: {
   revalidatePath("/pending-invoices");
 }
 
-export async function finalizePurchaseInvoice(id: number, paymentData: {
-  status: "cash" | "credit";
-  safeId?: number;
-  bankId?: number;
-}) {
+export async function finalizePurchaseInvoice(
+  id: number,
+  paymentData: {
+    status: "cash" | "credit";
+    safeId?: number;
+    bankId?: number;
+  },
+) {
   const result = await prisma.$transaction(async (tx) => {
     const invoice = await tx.purchaseInvoice.findUnique({
       where: { id },
-      include: { items: true },
+      include: {
+        items: true,
+        supplier: {
+          select: { accountId: true },
+        },
+      },
     });
 
     if (!invoice) throw new Error("الفاتورة غير موجودة");
@@ -155,16 +237,22 @@ export async function finalizePurchaseInvoice(id: number, paymentData: {
     // 2. تحديث الخزنة/البنك إذا كان الدفع نقدي
     if (paymentData.status === "cash") {
       if (paymentData.safeId) {
-        const safe = await tx.treasurySafe.findUnique({ where: { id: paymentData.safeId } });
-        if (!safe || safe.balance < invoice.total) throw new Error("رصيد الخزنة غير كافٍ");
-        
+        const safe = await tx.treasurySafe.findUnique({
+          where: { id: paymentData.safeId },
+        });
+        if (!safe || safe.balance < invoice.total)
+          throw new Error("رصيد الخزنة غير كافٍ");
+
         await tx.treasurySafe.update({
           where: { id: paymentData.safeId },
           data: { balance: { decrement: invoice.total } },
         });
       } else if (paymentData.bankId) {
-        const bank = await tx.treasuryBank.findUnique({ where: { id: paymentData.bankId } });
-        if (!bank || bank.balance < invoice.total) throw new Error("رصيد البنك غير كافٍ");
+        const bank = await tx.treasuryBank.findUnique({
+          where: { id: paymentData.bankId },
+        });
+        if (!bank || bank.balance < invoice.total)
+          throw new Error("رصيد البنك غير كافٍ");
 
         await tx.treasuryBank.update({
           where: { id: paymentData.bankId },
@@ -174,8 +262,45 @@ export async function finalizePurchaseInvoice(id: number, paymentData: {
     }
 
     // 3. إنشاء حركات المخزون وتحديث الرصيد والأسعار
+    const inventoryAccount = await tx.account.findUnique({
+      where: { code: "120301" },
+    });
+    if (!inventoryAccount) throw new Error("حساب المخزون 120301 غير موجود");
+
+    let goodsReceivedValue = 0;
+    let paymentAccountId: number | null = null;
+
+    if (paymentData.status === "credit") {
+      paymentAccountId = invoice.supplier?.accountId ?? null;
+      if (!paymentAccountId) {
+        throw new Error(
+          "لا يمكن إكمال القيد المحاسبي لفاتورة الشراء الائتمانية بدون حساب المورد المرتبط.",
+        );
+      }
+    }
+
     for (const item of invoice.items) {
       if (!item.productId) continue;
+
+      const product = await tx.product.findUnique({
+        where: { id: item.productId },
+        select: { currentStock: true, buyPrice: true },
+      });
+
+      const currentStock = product?.currentStock ?? 0;
+      const currentBuyPrice = product?.buyPrice ?? 0;
+      const incomingQty = item.quantity;
+      const incomingCost = item.unitPrice;
+      const existingQty = Math.max(currentStock, 0);
+      const totalQty = existingQty + incomingQty;
+      const weightedCost =
+        totalQty > 0
+          ? (existingQty * currentBuyPrice + incomingQty * incomingCost) /
+            totalQty
+          : incomingCost;
+
+      const lineValue = item.quantity * item.unitPrice;
+      goodsReceivedValue += lineValue;
 
       await tx.stockMovement.create({
         data: {
@@ -190,28 +315,111 @@ export async function finalizePurchaseInvoice(id: number, paymentData: {
 
       await tx.product.update({
         where: { id: item.productId },
-        data: { 
+        data: {
           currentStock: { increment: item.quantity },
-          buyPrice: item.unitPrice,
+          buyPrice: weightedCost,
           sellPrice: item.sellingPrice,
-          profitMargin: item.profitMargin
+          profitMargin: item.profitMargin,
         },
       });
     }
 
-    return { 
+    if (goodsReceivedValue > 0) {
+      if (paymentData.status === "cash") {
+        if (paymentData.safeId) {
+          const safe = await tx.treasurySafe.findUnique({
+            where: { id: paymentData.safeId },
+            select: { accountId: true },
+          });
+          if (!safe?.accountId)
+            throw new Error("الخزنة المحددة غير مرتبطة بحساب مالي.");
+          paymentAccountId = safe.accountId;
+        } else if (paymentData.bankId) {
+          const bank = await tx.treasuryBank.findUnique({
+            where: { id: paymentData.bankId },
+            select: { accountId: true },
+          });
+          if (!bank?.accountId)
+            throw new Error("البنك المحدد غير مرتبط بحساب مالي.");
+          paymentAccountId = bank.accountId;
+        } else {
+          throw new Error(
+            "يجب اختيار خزنة أو بنك لتسجيل القيد المحاسبي لفاتورة الشراء النقدية.",
+          );
+        }
+      }
+
+      if (paymentAccountId) {
+        const lastEntry = await tx.journalEntry.findFirst({
+          orderBy: { entryNumber: "desc" },
+          select: { entryNumber: true },
+        });
+        const nextEntryNumber = (lastEntry?.entryNumber || 0) + 1;
+        await tx.journalEntry.create({
+          data: {
+            entryNumber: nextEntryNumber,
+            date: new Date(),
+            description: `قيد مخزون مشتريات فاتورة شراء رقم ${invoice.invoiceNumber}`,
+            reference: `فاتورة شراء #${invoice.invoiceNumber}`,
+            sourceType: "PURCHASE_INVOICE",
+            sourceId: invoice.id,
+            items: {
+              create: [
+                {
+                  accountId: inventoryAccount.id,
+                  debit: goodsReceivedValue,
+                  credit: 0,
+                  description: "إضافة مخزون مشتريات",
+                },
+                {
+                  accountId: paymentAccountId,
+                  debit: 0,
+                  credit: goodsReceivedValue,
+                  description: "دائن مقابل فاتورة شراء",
+                },
+              ],
+            },
+          },
+        });
+      }
+    }
+
+    return {
       success: true,
-      updatedAccount: (paymentData.status === "cash" ? (paymentData.safeId ? await tx.treasurySafe.findUnique({ where: { id: paymentData.safeId }, select: { name: true, balance: true } }) : (paymentData.bankId ? await tx.treasuryBank.findUnique({ where: { id: paymentData.bankId }, select: { name: true, balance: true } }) : null)) : null),
-      updatedProducts: await Promise.all(invoice.items.filter(i => i.productId).map(async i => {
-        const p = await tx.product.findUnique({ where: { id: i.productId! }, select: { name: true, currentStock: true, minStock: true } });
-        return p;
-      }))
+      updatedAccount:
+        paymentData.status === "cash"
+          ? paymentData.safeId
+            ? await tx.treasurySafe.findUnique({
+                where: { id: paymentData.safeId },
+                select: { name: true, balance: true },
+              })
+            : paymentData.bankId
+              ? await tx.treasuryBank.findUnique({
+                  where: { id: paymentData.bankId },
+                  select: { name: true, balance: true },
+                })
+              : null
+          : null,
+      updatedProducts: await Promise.all(
+        invoice.items
+          .filter((i) => i.productId)
+          .map(async (i) => {
+            const p = await tx.product.findUnique({
+              where: { id: i.productId! },
+              select: { name: true, currentStock: true, minStock: true },
+            });
+            return p;
+          }),
+      ),
     };
   });
 
   // Fire alerts outside transaction
   if (result.updatedAccount) {
-    await triggerTreasuryAlert(result.updatedAccount.name, result.updatedAccount.balance);
+    await triggerTreasuryAlert(
+      result.updatedAccount.name,
+      result.updatedAccount.balance,
+    );
   }
   if (result.updatedProducts) {
     for (const p of result.updatedProducts) {

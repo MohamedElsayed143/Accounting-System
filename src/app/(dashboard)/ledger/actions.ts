@@ -11,40 +11,49 @@ import { getSession } from "@/lib/auth";
 export async function getCOATree() {
   try {
     const accounts = await prisma.account.findMany({
-      orderBy: { code: 'asc' },
+      orderBy: { code: "asc" },
       include: {
         treasurySafe: { select: { id: true } },
         treasuryBank: { select: { id: true } },
         customer: { select: { id: true } },
-        supplier: { select: { id: true } }
-      }
+        supplier: { select: { id: true } },
+      },
     });
 
     // 1. Get aggregated balances and counts from JournalItems
     const summary = await prisma.journalItem.groupBy({
-      by: ['accountId'],
+      by: ["accountId"],
       _sum: {
         debit: true,
-        credit: true
+        credit: true,
       },
       _count: {
-        id: true
-      }
+        id: true,
+      },
     });
 
     // Create a map for quick lookup
-    const summaryMap = new Map(summary.map(s => [s.accountId, {
-      debit: Number(s._sum.debit) || 0,
-      credit: Number(s._sum.credit) || 0,
-      count: s._count.id || 0
-    }]));
+    const summaryMap = new Map(
+      summary.map((s) => [
+        s.accountId,
+        {
+          debit: Number(s._sum.debit) || 0,
+          credit: Number(s._sum.credit) || 0,
+          count: s._count.id || 0,
+        },
+      ]),
+    );
 
     // 2. Map accounts with their individual balances and sanitize for JSON
-    const accountsWithBalance = accounts.map(acc => {
-      const totals = summaryMap.get(acc.id) || { debit: 0, credit: 0, count: 0 };
-      
+    const accountsWithBalance = accounts.map((acc) => {
+      const totals = summaryMap.get(acc.id) || {
+        debit: 0,
+        credit: 0,
+        count: 0,
+      };
+
       let balance = 0;
-      if (acc.type === 'ASSET' || acc.type === 'EXPENSE') {
+      if (acc.type === "ASSET" || acc.type === "EXPENSE") {
         balance = totals.debit - totals.credit;
       } else {
         balance = totals.credit - totals.debit;
@@ -52,7 +61,7 @@ export async function getCOATree() {
 
       // Convert to plain object and handle potential non-serializable fields
       const anyAcc = acc as any;
-      return { 
+      return {
         id: acc.id,
         code: acc.code,
         name: acc.name,
@@ -67,27 +76,30 @@ export async function getCOATree() {
         customerId: anyAcc.customer?.id || null,
         supplierId: anyAcc.supplier?.id || null,
         balance,
-        journalItemsCount: totals.count
+        journalItemsCount: totals.count,
       };
     });
 
     // 3. Simple recursive tree building with balance aggregation
     const buildTree = (parentId: number | null = null): any[] => {
-      const layer = accountsWithBalance.filter(a => a.parentId === parentId);
-      
-      return layer.map(a => {
+      const layer = accountsWithBalance.filter((a) => a.parentId === parentId);
+
+      return layer.map((a) => {
         const children = buildTree(a.id);
-        
+
         // If it's a parent, its balance is the sum of its children's balances
         let aggregatedBalance = a.balance;
         if (children.length > 0) {
-          aggregatedBalance += children.reduce((sum, child) => sum + (child.balance || 0), 0);
+          aggregatedBalance += children.reduce(
+            (sum, child) => sum + (child.balance || 0),
+            0,
+          );
         }
 
         return {
           ...a,
           balance: aggregatedBalance,
-          children
+          children,
         };
       });
     };
@@ -107,13 +119,13 @@ export async function getSelectableAccounts() {
     where: {
       isTerminal: true,
     },
-    orderBy: { code: 'asc' },
+    orderBy: { code: "asc" },
     include: {
       customer: { select: { id: true } },
       supplier: { select: { id: true } },
       treasurySafe: { select: { id: true } },
-      treasuryBank: { select: { id: true } }
-    }
+      treasuryBank: { select: { id: true } },
+    },
   });
 }
 
@@ -124,7 +136,8 @@ export async function getSelectableAccounts() {
 export async function getAccountLedger(
   accountId: number,
   startDate?: Date,
-  endDate?: Date
+  endDate?: Date,
+  newestFirst: boolean = false,
 ) {
   const sDate = startDate ? startOfDay(startDate) : undefined;
   const eDate = endDate ? endOfDay(endDate) : undefined;
@@ -158,11 +171,10 @@ export async function getAccountLedger(
     include: {
       journalEntry: true,
     },
-    orderBy: {
-      journalEntry: {
-        date: 'asc',
-      },
-    },
+    orderBy: [
+      { journalEntry: { date: "asc" } },
+      { journalEntry: { createdAt: "asc" } },
+    ],
   });
 
   // 3. Process Transactions and Calculate Running Balance
@@ -173,14 +185,16 @@ export async function getAccountLedger(
   const transactions = items.map((item) => {
     const debit = (item.debit as number) || 0;
     const credit = (item.credit as number) || 0;
-    
+
     runningBalance += debit - credit;
     totalDebits += debit;
     totalCredits += credit;
 
     return {
       id: item.id,
+      journalEntryId: item.journalEntry.id,
       date: item.journalEntry.date,
+      createdAt: item.journalEntry.createdAt,
       entryNumber: item.journalEntry.entryNumber,
       description: item.description || item.journalEntry.description,
       debit: debit,
@@ -193,12 +207,18 @@ export async function getAccountLedger(
 
   const closingBalance = runningBalance;
 
+  // 4. Reverse if newestFirst is requested
+  let finalTransactions = transactions;
+  if (newestFirst) {
+    finalTransactions = [...transactions].reverse();
+  }
+
   return {
     openingBalance,
     closingBalance,
     totalDebits,
     totalCredits,
-    transactions,
+    transactions: finalTransactions,
   };
 }
 
@@ -208,15 +228,15 @@ export async function getAccountLedger(
 export async function suggestNextAccountCode(parentId: number) {
   const parent = await prisma.account.findUnique({
     where: { id: parentId },
-    select: { code: true }
+    select: { code: true },
   });
 
   if (!parent) throw new Error("Parent account not found");
 
   const lastChild = await prisma.account.findFirst({
     where: { parentId },
-    orderBy: { code: 'desc' },
-    select: { code: true }
+    orderBy: { code: "desc" },
+    select: { code: true },
   });
 
   if (lastChild) {
@@ -255,9 +275,18 @@ export async function createSubAccount(data: {
 
   if (!parent) throw new Error("الحساب الأب غير موجود");
 
+  // Prevent any sub-accounts under inventory assets account 120301, even if data is inconsistent.
+  if (parent.code === "120301") {
+    throw new Error(
+      "لا يمكن إنشاء حسابات فرعية تحت حساب مخزون البضاعة 120301؛ هذا حساب طرفي نهائي.",
+    );
+  }
+
   // Enforce 4-level hierarchy
   if (parent.level >= 4 || parent.isTerminal) {
-    throw new Error("لا يمكن إضافة حسابات فرعية تحت حساب من المستوى الرابع (حساب طرفي)");
+    throw new Error(
+      "لا يمكن إضافة حسابات فرعية تحت حساب من المستوى الرابع (حساب طرفي)",
+    );
   }
 
   const newLevel = parent.level + 1;
@@ -267,7 +296,7 @@ export async function createSubAccount(data: {
     const result = await prisma.$transaction(async (tx) => {
       // 1. Check if code already exists
       const existing = await tx.account.findUnique({
-        where: { code: data.code }
+        where: { code: data.code },
       });
       if (existing) throw new Error("كود الحساب موجود بالفعل");
 
@@ -283,49 +312,55 @@ export async function createSubAccount(data: {
           isSelectable: isTerminal,
           isTerminal: isTerminal,
           lastModifiedById: session.userId,
-        }
+        },
       });
 
       // 3. Create linked entities if necessary (Sync with other modules)
       if (isTerminal) {
         const parentCode = parent.code.trim();
-        if (parentCode === '1202') { // Customers
-          const numericCode = parseInt(newAccount.code.replace(parentCode, '')) || 0;
+        if (parentCode === "1202") {
+          // Customers
+          const numericCode =
+            parseInt(newAccount.code.replace(parentCode, "")) || 0;
           await tx.customer.create({
             data: {
               name: newAccount.name,
               code: numericCode,
               accountId: newAccount.id,
-              category: "قطاعي"
-            }
+              category: "قطاعي",
+            },
           });
-        } else if (parentCode === '2101') { // Suppliers
-          const numericCode = parseInt(newAccount.code.replace(parentCode, '')) || 0;
+        } else if (parentCode === "2101") {
+          // Suppliers
+          const numericCode =
+            parseInt(newAccount.code.replace(parentCode, "")) || 0;
           await tx.supplier.create({
             data: {
               name: newAccount.name,
               code: numericCode,
-              accountId: newAccount.id
-            }
+              accountId: newAccount.id,
+            },
           });
-        } else if (parentCode === '1201') { // Safes
+        } else if (parentCode === "1201") {
+          // Safes
           await tx.treasurySafe.create({
             data: {
               name: newAccount.name,
               accountId: newAccount.id,
               balance: 0,
               isActive: true,
-              isPrimary: false
-            }
+              isPrimary: false,
+            },
           });
-        } else if (parentCode === '1205') { // Banks
+        } else if (parentCode === "1205") {
+          // Banks
           await tx.treasuryBank.create({
             data: {
               name: newAccount.name,
               accountId: newAccount.id,
               balance: 0,
-              isActive: true
-            }
+              isActive: true,
+            },
           });
         }
       }
@@ -334,7 +369,7 @@ export async function createSubAccount(data: {
       if (parent.isSelectable) {
         await tx.account.update({
           where: { id: data.parentId },
-          data: { isSelectable: false, isTerminal: false }
+          data: { isSelectable: false, isTerminal: false },
         });
       }
 
@@ -352,7 +387,10 @@ export async function createSubAccount(data: {
     return { success: true, account: result };
   } catch (error: any) {
     console.error("Error creating sub-account:", error);
-    return { success: false, error: error.message || "حدث خطأ أثناء إضافة الحساب" };
+    return {
+      success: false,
+      error: error.message || "حدث خطأ أثناء إضافة الحساب",
+    };
   }
 }
 /**
@@ -373,13 +411,63 @@ export async function deleteAccount(accountId: number, isAdminMode: boolean) {
           select: {
             children: true,
             journalItems: true,
-          }
+          },
         },
-        treasurySafe: { include: { _count: { select: { paymentVouchers: true, purchaseInvoices: true, purchaseReturns: true, receiptVouchers: true, salesInvoices: true, salesReturns: true, transfersFrom: true, transfersTo: true } } } },
-        treasuryBank: { include: { _count: { select: { paymentVouchers: true, purchaseInvoices: true, purchaseReturns: true, receiptVouchers: true, salesInvoices: true, salesReturns: true, transfersFrom: true, transfersTo: true } } } },
-        customer: { include: { _count: { select: { invoices: true, receiptVouchers: true, salesReturns: true } } } },
-        supplier: { include: { _count: { select: { invoices: true, paymentVouchers: true, purchaseReturns: true } } } },
-      }
+        treasurySafe: {
+          include: {
+            _count: {
+              select: {
+                paymentVouchers: true,
+                purchaseInvoices: true,
+                purchaseReturns: true,
+                receiptVouchers: true,
+                salesInvoices: true,
+                salesReturns: true,
+                transfersFrom: true,
+                transfersTo: true,
+              },
+            },
+          },
+        },
+        treasuryBank: {
+          include: {
+            _count: {
+              select: {
+                paymentVouchers: true,
+                purchaseInvoices: true,
+                purchaseReturns: true,
+                receiptVouchers: true,
+                salesInvoices: true,
+                salesReturns: true,
+                transfersFrom: true,
+                transfersTo: true,
+              },
+            },
+          },
+        },
+        customer: {
+          include: {
+            _count: {
+              select: {
+                invoices: true,
+                receiptVouchers: true,
+                salesReturns: true,
+              },
+            },
+          },
+        },
+        supplier: {
+          include: {
+            _count: {
+              select: {
+                invoices: true,
+                paymentVouchers: true,
+                purchaseReturns: true,
+              },
+            },
+          },
+        },
+      },
     });
 
     if (!account) throw new Error("الحساب غير موجود");
@@ -387,7 +475,9 @@ export async function deleteAccount(accountId: number, isAdminMode: boolean) {
     // Hierarchy Protection: Only Level 4 accounts can be deleted
     // Levels 1, 2, and 3 are system-defined "Main" accounts and are protected
     if (account.level < 4) {
-      throw new Error("لا يمكن حذف الحسابات الرئيسية (المستوى 1 و 2 و 3). فقط الحسابات الفرعية من المستوى الرابع هي القابلة للحذف.");
+      throw new Error(
+        "لا يمكن حذف الحسابات الرئيسية (المستوى 1 و 2 و 3). فقط الحسابات الفرعية من المستوى الرابع هي القابلة للحذف.",
+      );
     }
 
     // Check for children (redundant for L4 but safe)
@@ -397,21 +487,35 @@ export async function deleteAccount(accountId: number, isAdminMode: boolean) {
 
     // Check for transactions
     if (account._count.journalItems > 0) {
-      throw new Error("لا يمكن حذف الحساب لأنه يحتوي على عمليات مالية مسجلة. يجب حذف العمليات المرتبطة به أولاً.");
+      throw new Error(
+        "لا يمكن حذف الحساب لأنه يحتوي على عمليات مالية مسجلة. يجب حذف العمليات المرتبطة به أولاً.",
+      );
     }
 
     await prisma.$transaction(async (tx) => {
       // Cascading checks and deletions for Sub-entities (Customers, Suppliers, Banks, Safes)
       if (account.customer) {
-        if (account.customer._count.invoices > 0 || account.customer._count.receiptVouchers > 0 || account.customer._count.salesReturns > 0) {
-          throw new Error("لا يمكن حذف الحساب لارتباطه بعميل لديه تعاملات مالية مسبقة");
+        if (
+          account.customer._count.invoices > 0 ||
+          account.customer._count.receiptVouchers > 0 ||
+          account.customer._count.salesReturns > 0
+        ) {
+          throw new Error(
+            "لا يمكن حذف الحساب لارتباطه بعميل لديه تعاملات مالية مسبقة",
+          );
         }
         await tx.customer.delete({ where: { id: account.customer.id } });
       }
-      
+
       if (account.supplier) {
-        if (account.supplier._count.invoices > 0 || account.supplier._count.paymentVouchers > 0 || account.supplier._count.purchaseReturns > 0) {
-          throw new Error("لا يمكن حذف الحساب لارتباطه بمورد لديه تعاملات مالية مسبقة");
+        if (
+          account.supplier._count.invoices > 0 ||
+          account.supplier._count.paymentVouchers > 0 ||
+          account.supplier._count.purchaseReturns > 0
+        ) {
+          throw new Error(
+            "لا يمكن حذف الحساب لارتباطه بمورد لديه تعاملات مالية مسبقة",
+          );
         }
         await tx.supplier.delete({ where: { id: account.supplier.id } });
       }
@@ -420,17 +524,43 @@ export async function deleteAccount(accountId: number, isAdminMode: boolean) {
         if (account.treasurySafe.isPrimary) {
           throw new Error("لا يمكن حذف حساب الخزينة الرئيسية المربوطة بالنظام");
         }
-        if (account.treasurySafe._count.paymentVouchers > 0 || account.treasurySafe._count.purchaseInvoices > 0 || account.treasurySafe._count.purchaseReturns > 0 || account.treasurySafe._count.receiptVouchers > 0 || account.treasurySafe._count.salesInvoices > 0 || account.treasurySafe._count.salesReturns > 0 || account.treasurySafe._count.transfersFrom > 0 || account.treasurySafe._count.transfersTo > 0) {
-          throw new Error("لا يمكن حذف الحساب لارتباطه بخزينة لديها تعاملات مسجلة");
+        if (
+          account.treasurySafe._count.paymentVouchers > 0 ||
+          account.treasurySafe._count.purchaseInvoices > 0 ||
+          account.treasurySafe._count.purchaseReturns > 0 ||
+          account.treasurySafe._count.receiptVouchers > 0 ||
+          account.treasurySafe._count.salesInvoices > 0 ||
+          account.treasurySafe._count.salesReturns > 0 ||
+          account.treasurySafe._count.transfersFrom > 0 ||
+          account.treasurySafe._count.transfersTo > 0
+        ) {
+          throw new Error(
+            "لا يمكن حذف الحساب لارتباطه بخزينة لديها تعاملات مسجلة",
+          );
         }
-        await tx.treasurySafe.delete({ where: { id: account.treasurySafe.id } });
+        await tx.treasurySafe.delete({
+          where: { id: account.treasurySafe.id },
+        });
       }
 
       if (account.treasuryBank) {
-        if (account.treasuryBank._count.paymentVouchers > 0 || account.treasuryBank._count.purchaseInvoices > 0 || account.treasuryBank._count.purchaseReturns > 0 || account.treasuryBank._count.receiptVouchers > 0 || account.treasuryBank._count.salesInvoices > 0 || account.treasuryBank._count.salesReturns > 0 || account.treasuryBank._count.transfersFrom > 0 || account.treasuryBank._count.transfersTo > 0) {
-          throw new Error("لا يمكن حذف الحساب لارتباطه ببنك لديه تعاملات مسجلة");
+        if (
+          account.treasuryBank._count.paymentVouchers > 0 ||
+          account.treasuryBank._count.purchaseInvoices > 0 ||
+          account.treasuryBank._count.purchaseReturns > 0 ||
+          account.treasuryBank._count.receiptVouchers > 0 ||
+          account.treasuryBank._count.salesInvoices > 0 ||
+          account.treasuryBank._count.salesReturns > 0 ||
+          account.treasuryBank._count.transfersFrom > 0 ||
+          account.treasuryBank._count.transfersTo > 0
+        ) {
+          throw new Error(
+            "لا يمكن حذف الحساب لارتباطه ببنك لديه تعاملات مسجلة",
+          );
         }
-        await tx.treasuryBank.delete({ where: { id: account.treasuryBank.id } });
+        await tx.treasuryBank.delete({
+          where: { id: account.treasuryBank.id },
+        });
       }
 
       // Finally delete the account itself once all linked entities are safely cleared
@@ -444,7 +574,10 @@ export async function deleteAccount(accountId: number, isAdminMode: boolean) {
     return { success: true };
   } catch (error: any) {
     console.error("Error deleting account:", error);
-    return { success: false, error: error.message || "حدث خطأ أثناء حذف الحساب" };
+    return {
+      success: false,
+      error: error.message || "حدث خطأ أثناء حذف الحساب",
+    };
   }
 }
 
@@ -466,7 +599,7 @@ export async function updateAccount(data: {
 
   try {
     const account = await prisma.account.findUnique({
-      where: { id: data.accountId }
+      where: { id: data.accountId },
     });
 
     if (!account) throw new Error("الحساب غير موجود");
@@ -482,15 +615,31 @@ export async function updateAccount(data: {
         customer: true,
         supplier: true,
         treasurySafe: true,
-        treasuryBank: true
-      }
+        treasuryBank: true,
+      },
     });
 
     // Mirror name update to the linked sub-entity to keep pages fully synchronized
-    if (result.customer) await prisma.customer.update({ where: { id: result.customer.id }, data: { name: data.name } });
-    if (result.supplier) await prisma.supplier.update({ where: { id: result.supplier.id }, data: { name: data.name } });
-    if (result.treasurySafe) await prisma.treasurySafe.update({ where: { id: result.treasurySafe.id }, data: { name: data.name } });
-    if (result.treasuryBank) await prisma.treasuryBank.update({ where: { id: result.treasuryBank.id }, data: { name: data.name } });
+    if (result.customer)
+      await prisma.customer.update({
+        where: { id: result.customer.id },
+        data: { name: data.name },
+      });
+    if (result.supplier)
+      await prisma.supplier.update({
+        where: { id: result.supplier.id },
+        data: { name: data.name },
+      });
+    if (result.treasurySafe)
+      await prisma.treasurySafe.update({
+        where: { id: result.treasurySafe.id },
+        data: { name: data.name },
+      });
+    if (result.treasuryBank)
+      await prisma.treasuryBank.update({
+        where: { id: result.treasuryBank.id },
+        data: { name: data.name },
+      });
 
     revalidatePath("/ledger/coa");
     revalidatePath("/journal/new");
@@ -499,6 +648,38 @@ export async function updateAccount(data: {
     return { success: true, account: result };
   } catch (error: any) {
     console.error("Error updating account:", error);
-    return { success: false, error: error.message || "حدث خطأ أثناء تحديث الحساب" };
+    return {
+      success: false,
+      error: error.message || "حدث خطأ أثناء تحديث الحساب",
+    };
+  }
+}
+
+/**
+ * Fetches the full details of a specific journal entry by its ID,
+ * including all associated debit and credit items.
+ */
+export async function getJournalEntryDetails(journalEntryId: number) {
+  try {
+    const entry = await prisma.journalEntry.findUnique({
+      where: { id: journalEntryId },
+      include: {
+        items: {
+          include: {
+            account: {
+              select: { code: true, name: true },
+            },
+          },
+        },
+        createdBy: {
+          select: { username: true },
+        },
+      },
+    });
+
+    return entry;
+  } catch (error) {
+    console.error("Error fetching journal entry details:", error);
+    return null;
   }
 }

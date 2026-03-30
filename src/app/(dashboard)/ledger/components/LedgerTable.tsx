@@ -11,9 +11,11 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
+import { JournalEntryDetailsModal } from "./JournalEntryDetailsModal";
 
 interface Transaction {
   id: number;
+  journalEntryId: number;
   date: Date | string;
   entryNumber: number;
   description: string | null;
@@ -30,17 +32,18 @@ interface LedgerTableProps {
   isLoading: boolean;
 }
 
-const sourceLinks: Record<string, string> = {
-  SALES_INVOICE: "/sales-invoices",
-  PURCHASE_INVOICE: "/purchase-invoices",
-  RECEIPT_VOUCHER: "/treasury/vouchers/receipt", // Adjust paths as per project
-  PAYMENT_VOUCHER: "/treasury/vouchers/payment",
-  SALES_RETURN: "/sales-returns",
-  PURCHASE_RETURN: "/purchase-returns",
-  TRANSFER: "/treasury/transfers",
+const externalSourceTypes = ["SALES_INVOICE", "PURCHASE_INVOICE", "SALES_RETURN", "PURCHASE_RETURN"];
+
+const sourceLinks: Record<string, (id: number) => string> = {
+  SALES_INVOICE: (id) => `/sales-invoices/create?id=${id}&mode=view`,
+  PURCHASE_INVOICE: (id) => `/purchase-invoices/create?id=${id}&mode=view`,
+  SALES_RETURN: (id) => `/sales-returns/${id}`,
+  PURCHASE_RETURN: (id) => `/purchase-returns/${id}`,
 };
 
 export function LedgerTable({ transactions, openingBalance, isLoading }: LedgerTableProps) {
+  const [selectedJournalEntryId, setSelectedJournalEntryId] = React.useState<number | null>(null);
+
   if (isLoading) {
     return (
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-12 transition-all">
@@ -113,12 +116,21 @@ export function LedgerTable({ transactions, openingBalance, isLoading }: LedgerT
                     {t.balance.toLocaleString('ar-EG', { minimumFractionDigits: 2 })}
                   </td>
                   <td className="px-6 py-4 text-sm text-center print:hidden">
-                    {t.sourceId && (
-                      <Link href={`${sourceLinks[t.sourceType]}/${t.sourceId}`} target="_blank">
+                    {t.sourceId && externalSourceTypes.includes(t.sourceType) ? (
+                      <Link href={sourceLinks[t.sourceType]?.(t.sourceId) || "#"} target="_blank">
                         <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-primary/10 transition-all">
                           <Eye className="w-4 h-4 text-primary" />
                         </Button>
                       </Link>
+                    ) : (
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-8 w-8 hover:bg-primary/10 transition-all"
+                        onClick={() => setSelectedJournalEntryId(t.journalEntryId)}
+                      >
+                        <Eye className="w-4 h-4 text-primary" />
+                      </Button>
                     )}
                   </td>
                 </tr>
@@ -127,6 +139,11 @@ export function LedgerTable({ transactions, openingBalance, isLoading }: LedgerT
           </tbody>
         </table>
       </div>
+
+      <JournalEntryDetailsModal 
+        journalEntryId={selectedJournalEntryId} 
+        onClose={() => setSelectedJournalEntryId(null)} 
+      />
     </div>
   );
 }

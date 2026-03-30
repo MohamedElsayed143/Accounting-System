@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { startOfDay, endOfDay } from "date-fns";
 import { revalidatePath } from "next/cache";
 import { getSession } from "@/lib/auth";
+import { hasPermission } from "@/lib/permissions";
 import { AccountType } from "@prisma/client";
 
 /**
@@ -11,42 +12,48 @@ import { AccountType } from "@prisma/client";
  */
 export async function getJournalSelectableAccounts() {
   const accounts = await prisma.account.findMany({
-    where: { 
+    where: {
       isTerminal: true,
       level: 4,
     },
-    orderBy: { code: 'asc' },
+    orderBy: { code: "asc" },
     select: {
       id: true,
       code: true,
       name: true,
       type: true,
       treasurySafe: {
-        select: { name: true }
+        select: { name: true },
       },
       treasuryBank: {
-        select: { name: true }
+        select: { name: true },
       },
       journalItems: {
         select: {
           debit: true,
-          credit: true
-        }
-      }
-    }
+          credit: true,
+        },
+      },
+    },
   });
 
-  return accounts.map(acc => {
+  return accounts.map((acc) => {
     // Basic balance calculation
-    const totalDebit = (acc as any).journalItems.reduce((sum: number, item: any) => sum + (Number(item.debit) || 0), 0);
-    const totalCredit = (acc as any).journalItems.reduce((sum: number, item: any) => sum + (Number(item.credit) || 0), 0);
-    
+    const totalDebit = (acc as any).journalItems.reduce(
+      (sum: number, item: any) => sum + (Number(item.debit) || 0),
+      0,
+    );
+    const totalCredit = (acc as any).journalItems.reduce(
+      (sum: number, item: any) => sum + (Number(item.credit) || 0),
+      0,
+    );
+
     // For Assets and Expenses: Balance = Debit - Credit
     // For Liabilities, Equity, and Revenue: Balance = Credit - Debit (Standard accounting representation)
     // However, for "money determining", a simple Debit - Credit is often what users mean for Cash/Bank.
     // Let's stick to standard nature-based balance for correctness in a professional system.
     let balance = 0;
-    if (acc.type === 'ASSET' || acc.type === 'EXPENSE') {
+    if (acc.type === "ASSET" || acc.type === "EXPENSE") {
       balance = totalDebit - totalCredit;
     } else {
       balance = totalCredit - totalDebit;
@@ -78,8 +85,8 @@ export async function getJournalSelectableAccounts() {
  */
 export async function getNextEntryNumber() {
   const lastEntry = await prisma.journalEntry.findFirst({
-    orderBy: { entryNumber: 'desc' },
-    select: { entryNumber: true }
+    orderBy: { entryNumber: "desc" },
+    select: { entryNumber: true },
   });
   return (lastEntry?.entryNumber || 0) + 1;
 }
@@ -106,7 +113,9 @@ export async function saveJournalEntry(data: {
 
   // 0. Admin Mode Enforcement
   if (!data.isAdminMode) {
-    throw new Error("يجب تفعيل وضع الإدارة (Admin Mode) للقيام بالعمليات الحسابية اليدوية.");
+    throw new Error(
+      "يجب تفعيل وضع الإدارة (Admin Mode) للقيام بالعمليات الحسابية اليدوية.",
+    );
   }
   // 1. Validation: Total Debit must equal Total Credit
   const totalDebit = data.items.reduce((sum, item) => sum + item.debit, 0);
@@ -121,42 +130,68 @@ export async function saveJournalEntry(data: {
   }
 
   // 1.5. Prevent manual entries on Customer/Supplier accounts
-  const accountIds = data.items.map(item => item.accountId);
+  const accountIds = data.items.map((item) => item.accountId);
   const linkedAccounts = await prisma.account.findMany({
     where: {
       id: { in: accountIds },
-      OR: [
-        { customer: { isNot: null } },
-        { supplier: { isNot: null } }
-      ]
+      OR: [{ customer: { isNot: null } }, { supplier: { isNot: null } }],
     } as any,
-    select: { name: true }
+    select: { name: true },
   });
 
   if (linkedAccounts.length > 0) {
-    throw new Error(`لا يمكن إضافة قيد يدوي على حسابات العملاء أو الموردين (${linkedAccounts.map(a => a.name).join(', ')}). فضلاً استخدم الفواتير أو السندات.`);
+    throw new Error(
+      `لا يمكن إضافة قيد يدوي على حسابات العملاء أو الموردين (${linkedAccounts.map((a) => a.name).join(", ")}). فضلاً استخدم الفواتير أو السندات.`,
+    );
+  }
+
+  // 1.5.1 Prevent manual journal entries on inventory asset account 120301 unless the user has inventory_manage permission.
+  const inventoryAccount = await prisma.account.findFirst({
+    where: {
+      id: { in: accountIds },
+      code: "120301",
+    },
+    select: { id: true, name: true },
+  });
+
+  if (inventoryAccount) {
+    const canManageInventory = await hasPermission(
+      session.userId,
+      "inventory_manage",
+    );
+    if (!canManageInventory) {
+      throw new Error(
+        "لا يمكن إضافة أو تعديل قيود يدوية على حساب مخزون البضاعة 120301 إلا لمستخدمي مخزون مع صلاحية Inventory Manager.",
+      );
+    }
   }
 
   // 1.6. Prohibit direct Revenue vs Expense offset
   const accountDetails = await prisma.account.findMany({
     where: { id: { in: accountIds } },
-    select: { id: true, type: true }
+    select: { id: true, type: true },
   });
 
-  const hasRevenue = accountDetails.some(a => a.type === AccountType.REVENUE);
-  const hasExpense = accountDetails.some(a => a.type === AccountType.EXPENSE);
+  const hasRevenue = accountDetails.some((a) => a.type === AccountType.REVENUE);
+  const hasExpense = accountDetails.some((a) => a.type === AccountType.EXPENSE);
 
   if (hasRevenue && hasExpense) {
-    throw new Error("لا يمكن عمل قيد مباشر بين المبيعات والمشتريات؛ يجب استخدام حساب وسيط مثل الخزينة أو العميل/المورد");
+    throw new Error(
+      "لا يمكن عمل قيد مباشر بين المبيعات والمشتريات؛ يجب استخدام حساب وسيط مثل الخزينة أو العميل/المورد",
+    );
   }
 
   // 1.7. Enforce Level 4 only — reject any account not at Level 4
   const levelCheck = await prisma.account.findMany({
     where: { id: { in: accountIds }, NOT: { level: 4 } },
-    select: { name: true, level: true }
+    select: { name: true, level: true },
   });
   if (levelCheck.length > 0) {
-    return { success: false, error: "عذراً، لا يمكن إضافة قيود إلا على الحسابات الفرعية في المستوى الرابع فقط" };
+    return {
+      success: false,
+      error:
+        "عذراً، لا يمكن إضافة قيود إلا على الحسابات الفرعية في المستوى الرابع فقط",
+    };
   }
 
   // 2. Database Transaction
@@ -170,20 +205,20 @@ export async function saveJournalEntry(data: {
           date: data.date,
           description: data.description,
           reference: data.reference,
-          sourceType: 'MANUAL',
+          sourceType: "MANUAL",
           createdById: session.userId,
           items: {
-            create: data.items.map(item => ({
+            create: data.items.map((item) => ({
               accountId: item.accountId,
               description: item.description,
               debit: item.debit,
               credit: item.credit,
-            }))
-          }
+            })),
+          },
         } as any,
         include: {
-          items: true
-        }
+          items: true,
+        },
       });
 
       return entry;
@@ -192,11 +227,14 @@ export async function saveJournalEntry(data: {
     revalidatePath("/journal");
     revalidatePath("/ledger");
     revalidatePath("/reports/trial-balance");
-    
+
     return { success: true, entry: result };
   } catch (error: any) {
     console.error("Error saving journal entry:", error);
-    return { success: false, error: error.message || "حدث خطأ أثناء حفظ القيد" };
+    return {
+      success: false,
+      error: error.message || "حدث خطأ أثناء حفظ القيد",
+    };
   }
 }
 
@@ -205,14 +243,14 @@ export async function saveJournalEntry(data: {
  */
 export async function getJournalEntries() {
   return await prisma.journalEntry.findMany({
-    where: { sourceType: 'MANUAL' },
+    where: { sourceType: "MANUAL" },
     include: {
       items: {
         include: {
-          account: true
-        }
-      }
+          account: true,
+        },
+      },
     },
-    orderBy: { entryNumber: 'desc' }
+    orderBy: { entryNumber: "desc" },
   });
 }

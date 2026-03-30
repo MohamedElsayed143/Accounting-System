@@ -106,7 +106,18 @@ export async function getTreasuryData() {
   const canView = await hasPermission(session.userId, "treasury_view");
   if (!canView) return { accounts: [], stats: { totalAccounts: 0, totalBanksBalance: 0, totalSafeBalance: 0, grandTotal: 0 }, recentTransactions: [] };
   
-  const [safes, banks, recentReceipts, recentPayments, recentSalesInvoices, recentPurchaseInvoices, recentSalesReturns, recentPurchaseReturns, recentTransfers] = await Promise.all([
+  const [
+    safes,
+    banks,
+    recentReceipts,
+    recentPayments,
+    recentSalesInvoices,
+    recentPurchaseInvoices,
+    recentSalesReturns,
+    recentPurchaseReturns,
+    recentTransfers,
+    recentManualEntries,
+  ] = await Promise.all([
     prisma.treasurySafe.findMany({ 
       where: { isActive: true },
       orderBy: { createdAt: 'desc' },
@@ -191,13 +202,42 @@ export async function getTreasuryData() {
     }),
     prisma.treasuryTransfer.findMany({
       take: 20,
-      orderBy: { date: 'desc' },
+      orderBy: { date: "desc" },
       include: {
         fromSafe: { select: { name: true } },
         fromBank: { select: { name: true } },
         toSafe: { select: { name: true } },
         toBank: { select: { name: true } },
-      }
+      },
+    }),
+    prisma.journalEntry.findMany({
+      where: {
+        sourceType: "MANUAL",
+        items: {
+          some: {
+            account: {
+              OR: [
+                { treasurySafe: { isNot: null } },
+                { treasuryBank: { isNot: null } },
+              ],
+            },
+          },
+        },
+      },
+      take: 20,
+      orderBy: { date: "desc" },
+      include: {
+        items: {
+          include: {
+            account: {
+              include: {
+                treasurySafe: true,
+                treasuryBank: true,
+              },
+            },
+          },
+        },
+      },
     }),
   ]);
 
@@ -330,6 +370,28 @@ export async function getTreasuryData() {
       description: tr.description || 'تحويل رصيد',
       createdAt: tr.createdAt,
     })),
+    ...recentManualEntries.flatMap((entry) => {
+      // Find items that involve a treasury account
+      return entry.items
+        .filter((item) => item.account.treasurySafe || item.account.treasuryBank)
+        .map((item) => {
+          const isDebit = (item.debit || 0) > 0;
+          return {
+            id: `manual-${entry.id}-${item.id}`,
+            type: (isDebit ? "receipt" : "payment") as any,
+            voucherNumber: `JV-${entry.entryNumber}`,
+            amount: isDebit ? item.debit : item.credit,
+            date: entry.date,
+            partyName: "قيد يدوي",
+            accountName:
+              item.account.treasurySafe?.name ||
+              item.account.treasuryBank?.name ||
+              "",
+            description: item.description || entry.description,
+            createdAt: entry.createdAt,
+          };
+        });
+    }),
   ]
   .sort((a, b) => {
     const dateCompare = new Date(b.date).getTime() - new Date(a.date).getTime();
@@ -761,71 +823,104 @@ export async function getAccountDetails(id: number, type: 'safe' | 'bank') {
           date: v.date,
           partyName: v.customer.name,
           description: v.description,
+          createdAt: v.createdAt,
         })),
-        ...safe.paymentVouchers.map(v => ({
+        ...safe.paymentVouchers.map((v) => ({
           id: `p-${v.id}`,
-          type: 'payment' as const,
+          type: "payment" as const,
           voucherNumber: v.voucherNumber,
           amount: v.amount,
           date: v.date,
           partyName: v.supplier.name,
           description: v.description,
+          createdAt: v.createdAt,
         })),
-        ...safe.salesInvoices.map(v => ({
+        ...safe.salesInvoices.map((v) => ({
           id: `si-${v.id}`,
-          type: 'sales-invoice' as const,
+          type: "sales-invoice" as const,
           voucherNumber: `INV-${v.invoiceNumber}`,
           amount: v.total,
           date: v.invoiceDate,
           partyName: v.customerName,
           description: v.description,
+          createdAt: v.createdAt,
         })),
-        ...safe.purchaseInvoices.map(v => ({
+        ...safe.purchaseInvoices.map((v) => ({
           id: `pi-${v.id}`,
-          type: 'purchase-invoice' as const,
+          type: "purchase-invoice" as const,
           voucherNumber: `PUR-${v.invoiceNumber}`,
           amount: v.total,
           date: v.invoiceDate,
           partyName: v.supplierName,
           description: v.description,
+          createdAt: v.createdAt,
         })),
-        ...safe.salesReturns.map(v => ({
+        ...safe.salesReturns.map((v) => ({
           id: `sr-${v.id}`,
-          type: 'sales-return' as const,
+          type: "sales-return" as const,
           voucherNumber: `SR-${v.returnNumber}`,
           amount: v.total,
           date: v.returnDate,
           partyName: v.customer.name,
           description: v.reason || v.description,
+          createdAt: v.createdAt,
         })),
-        ...safe.purchaseReturns.map(v => ({
+        ...safe.purchaseReturns.map((v) => ({
           id: `pr-${v.id}`,
-          type: 'purchase-return' as const,
+          type: "purchase-return" as const,
           voucherNumber: `PR-${v.returnNumber}`,
           amount: v.total,
           date: v.returnDate,
           partyName: v.supplier.name,
           description: v.reason || v.description,
+          createdAt: v.createdAt,
         })),
-        ...safe.transfersFrom.map(v => ({
+        ...safe.transfersFrom.map((v) => ({
           id: `tr-out-${v.id}`,
-          type: 'payment' as const, // Use payment for outflow
+          type: "payment" as const, // Use payment for outflow
           voucherNumber: v.transferNumber,
           amount: v.amount,
           date: v.date,
-          partyName: v.toSafe?.name || v.toBank?.name || 'حساب آخر',
-          description: v.description || 'تحويل صادر',
+          partyName: v.toSafe?.name || v.toBank?.name || "حساب آخر",
+          description: v.description || "تحويل صادر",
+          createdAt: v.createdAt,
         })),
-        ...safe.transfersTo.map(v => ({
+        ...safe.transfersTo.map((v) => ({
           id: `tr-in-${v.id}`,
-          type: 'receipt' as const, // Use receipt for inflow
+          type: "receipt" as const, // Use receipt for inflow
           voucherNumber: v.transferNumber,
           amount: v.amount,
           date: v.date,
-          partyName: v.fromSafe?.name || v.fromBank?.name || 'حساب آخر',
-          description: v.description || 'تحويل وارد',
+          partyName: v.fromSafe?.name || v.fromBank?.name || "حساب آخر",
+          description: v.description || "تحويل وارد",
+          createdAt: v.createdAt,
         })),
-      ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        ...(await prisma.journalEntry.findMany({
+          where: {
+            sourceType: "MANUAL",
+            items: { some: { accountId: safe.accountId || 0 } },
+          },
+          include: { items: { where: { accountId: safe.accountId || 0 } } },
+        })).flatMap((entry) =>
+          entry.items.map((item) => ({
+            id: `manual-${entry.id}-${item.id}`,
+            type: ((item.debit || 0) > 0 ? "receipt" : "payment") as any,
+            voucherNumber: `JV-${entry.entryNumber}`,
+            amount: (item.debit || 0) > 0 ? item.debit : item.credit,
+            date: entry.date,
+            partyName: "قيد يدوي",
+            description: item.description || entry.description,
+            createdAt: entry.createdAt,
+          }))
+        ),
+      ].sort((a, b) => {
+        const dateCompare =
+          new Date(b.date).getTime() - new Date(a.date).getTime();
+        if (dateCompare !== 0) return dateCompare;
+        return (
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+      });
 
       return {
         id: safe.id,
@@ -888,71 +983,104 @@ export async function getAccountDetails(id: number, type: 'safe' | 'bank') {
           date: v.date,
           partyName: v.customer.name,
           description: v.description,
+          createdAt: v.createdAt,
         })),
-        ...bank.paymentVouchers.map(v => ({
+        ...bank.paymentVouchers.map((v) => ({
           id: `p-${v.id}`,
-          type: 'payment' as const,
+          type: "payment" as const,
           voucherNumber: v.voucherNumber,
           amount: v.amount,
           date: v.date,
           partyName: v.supplier.name,
           description: v.description,
+          createdAt: v.createdAt,
         })),
-        ...bank.salesInvoices.map(v => ({
+        ...bank.salesInvoices.map((v) => ({
           id: `si-${v.id}`,
-          type: 'sales-invoice' as const,
+          type: "sales-invoice" as const,
           voucherNumber: `INV-${v.invoiceNumber}`,
           amount: v.total,
           date: v.invoiceDate,
           partyName: v.customerName,
           description: v.description,
+          createdAt: v.createdAt,
         })),
-        ...bank.purchaseInvoices.map(v => ({
+        ...bank.purchaseInvoices.map((v) => ({
           id: `pi-${v.id}`,
-          type: 'purchase-invoice' as const,
+          type: "purchase-invoice" as const,
           voucherNumber: `PUR-${v.invoiceNumber}`,
           amount: v.total,
           date: v.invoiceDate,
           partyName: v.supplierName,
           description: v.description,
+          createdAt: v.createdAt,
         })),
-        ...bank.salesReturns.map(v => ({
+        ...bank.salesReturns.map((v) => ({
           id: `sr-${v.id}`,
-          type: 'sales-return' as const,
+          type: "sales-return" as const,
           voucherNumber: `SR-${v.returnNumber}`,
           amount: v.total,
           date: v.returnDate,
           partyName: v.customer.name,
           description: v.reason || v.description,
+          createdAt: v.createdAt,
         })),
-        ...bank.purchaseReturns.map(v => ({
+        ...bank.purchaseReturns.map((v) => ({
           id: `pr-${v.id}`,
-          type: 'purchase-return' as const,
+          type: "purchase-return" as const,
           voucherNumber: `PR-${v.returnNumber}`,
           amount: v.total,
           date: v.returnDate,
           partyName: v.supplier.name,
           description: v.reason || v.description,
+          createdAt: v.createdAt,
         })),
-        ...bank.transfersFrom.map(v => ({
+        ...bank.transfersFrom.map((v) => ({
           id: `tr-out-${v.id}`,
-          type: 'payment' as const,
+          type: "payment" as const,
           voucherNumber: v.transferNumber,
           amount: v.amount,
           date: v.date,
-          partyName: v.toSafe?.name || v.toBank?.name || 'حساب آخر',
-          description: v.description || 'تحويل صادر',
+          partyName: v.toSafe?.name || v.toBank?.name || "حساب آخر",
+          description: v.description || "تحويل صادر",
+          createdAt: v.createdAt,
         })),
-        ...bank.transfersTo.map(v => ({
+        ...bank.transfersTo.map((v) => ({
           id: `tr-in-${v.id}`,
-          type: 'receipt' as const,
+          type: "receipt" as const,
           voucherNumber: v.transferNumber,
           amount: v.amount,
           date: v.date,
-          partyName: v.fromSafe?.name || v.fromBank?.name || 'حساب آخر',
-          description: v.description || 'تحويل وارد',
+          partyName: v.fromSafe?.name || v.fromBank?.name || "حساب آخر",
+          description: v.description || "تحويل وارد",
+          createdAt: v.createdAt,
         })),
-      ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        ...(await prisma.journalEntry.findMany({
+          where: {
+            sourceType: "MANUAL",
+            items: { some: { accountId: bank.accountId || 0 } },
+          },
+          include: { items: { where: { accountId: bank.accountId || 0 } } },
+        })).flatMap((entry) =>
+          entry.items.map((item) => ({
+            id: `manual-${entry.id}-${item.id}`,
+            type: ((item.debit || 0) > 0 ? "receipt" : "payment") as any,
+            voucherNumber: `JV-${entry.entryNumber}`,
+            amount: (item.debit || 0) > 0 ? item.debit : item.credit,
+            date: entry.date,
+            partyName: "قيد يدوي",
+            description: item.description || entry.description,
+            createdAt: entry.createdAt,
+          }))
+        ),
+      ].sort((a, b) => {
+        const dateCompare =
+          new Date(b.date).getTime() - new Date(a.date).getTime();
+        if (dateCompare !== 0) return dateCompare;
+        return (
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+      });
 
       return {
         id: bank.id,

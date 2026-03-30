@@ -43,12 +43,13 @@ export default function TreasuryReportPage() {
       const data = await getAccountLedger(
         selectedSafe.accountId,
         fromDate ? new Date(fromDate) : undefined,
-        toDate ? new Date(toDate) : undefined
+        toDate ? new Date(toDate) : undefined,
+        true
       );
       setTransactions(data.transactions.map(t => ({
         id: String(t.id),
         date: t.date,
-        createdAt: t.date, 
+        createdAt: t.createdAt || t.date, 
         type: t.sourceType === 'MANUAL' ? 'قيد يدوي' : (t.sourceType || 'قيد'),
         documentId: t.entryNumber ? `JE-${String(t.entryNumber).padStart(4, "0")}` : '',
         description: t.description || '',

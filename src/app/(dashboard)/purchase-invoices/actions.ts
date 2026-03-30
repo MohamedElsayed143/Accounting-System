@@ -5,7 +5,11 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { getSession } from "@/lib/auth";
 import { hasPermission } from "@/lib/permissions";
-import { triggerStaffActivityAlert, triggerStockAlert, triggerTreasuryAlert } from "@/lib/notifications";
+import {
+  triggerStaffActivityAlert,
+  triggerStockAlert,
+  triggerTreasuryAlert,
+} from "@/lib/notifications";
 
 // ─── أنواع البيانات ─────────────────────────────────────────────────────────
 export interface PurchaseInvoiceItem {
@@ -16,7 +20,7 @@ export interface PurchaseInvoiceItem {
   sellingPrice: number;
   profitMargin: number;
   taxRate: number;
-  
+
   discount: number;
   total: number;
   productId?: number | null;
@@ -58,19 +62,22 @@ export async function getPurchaseInvoices() {
     include: {
       items: true,
       purchaseReturns: {
-        select: { total: true }
-      }
+        select: { total: true },
+      },
     },
   });
-  
-  return invoices.map(inv => {
-    const returnsTotal = inv.purchaseReturns.reduce((sum, ret) => sum + ret.total, 0);
+
+  return invoices.map((inv) => {
+    const returnsTotal = inv.purchaseReturns.reduce(
+      (sum, ret) => sum + ret.total,
+      0,
+    );
     return {
       ...inv,
       status: inv.status as "cash" | "credit" | "pending",
       returnsCount: inv.purchaseReturns.length,
       returnsTotal,
-      netTotal: inv.total - returnsTotal
+      netTotal: inv.total - returnsTotal,
     };
   });
 }
@@ -83,20 +90,23 @@ export async function getPurchaseInvoiceById(id: number) {
       items: true,
       supplier: true,
       purchaseReturns: {
-        select: { total: true }
+        select: { total: true },
       },
     },
   });
 
   if (!invoice) return null;
 
-  const returnsTotal = invoice.purchaseReturns.reduce((sum, ret) => sum + ret.total, 0);
+  const returnsTotal = invoice.purchaseReturns.reduce(
+    (sum, ret) => sum + ret.total,
+    0,
+  );
   return {
     ...invoice,
     status: invoice.status as "cash" | "credit" | "pending",
     returnsCount: invoice.purchaseReturns.length,
     returnsTotal,
-    netTotal: invoice.total - returnsTotal
+    netTotal: invoice.total - returnsTotal,
   };
 }
 
@@ -110,7 +120,9 @@ export async function getNextPurchaseInvoiceNumber(): Promise<number> {
 }
 
 // ─── التحقق من وجود رقم الفاتورة ───────────────────────────────────────────
-export async function checkPurchaseInvoiceNumberExists(invoiceNumber: number): Promise<boolean> {
+export async function checkPurchaseInvoiceNumberExists(
+  invoiceNumber: number,
+): Promise<boolean> {
   const found = await prisma.purchaseInvoice.findUnique({
     where: { invoiceNumber },
     select: { id: true },
@@ -159,7 +171,12 @@ export async function createPurchaseInvoice(data: {
     throw new Error("يجب تحديد جهة الصرف (الخزنة أو البنك) للفواتير النقدية");
   }
 
-  const pendingAlerts: { type: 'treasury' | 'stock', name: string, value: number, limit?: number }[] = [];
+  const pendingAlerts: {
+    type: "treasury" | "stock";
+    name: string;
+    value: number;
+    limit?: number;
+  }[] = [];
 
   const result = await (prisma as any).$transaction(async (tx: any) => {
     // 1. التحقق من رقم الفاتورة
@@ -167,15 +184,19 @@ export async function createPurchaseInvoice(data: {
       where: { invoiceNumber: data.invoiceNumber },
       select: { id: true },
     });
-    if (taken) throw new Error(`رقم الفاتورة #${data.invoiceNumber} مستخدم مسبقاً`);
+    if (taken)
+      throw new Error(`رقم الفاتورة #${data.invoiceNumber} مستخدم مسبقاً`);
 
     // 2. التحقق من الأصناف (يجب أن تكون نشطة)
     for (const item of data.items) {
       const exists = await tx.product.findUnique({
         where: { id: item.productId, isActive: true },
-        select: { name: true }
+        select: { name: true },
       });
-      if (!exists) throw new Error(`أحد الأصناف المختارة غير متوفر أو تم إيقاف التعامل معه`);
+      if (!exists)
+        throw new Error(
+          `أحد الأصناف المختارة غير متوفر أو تم إيقاف التعامل معه`,
+        );
     }
 
     // 3. إنشاء الفاتورة
@@ -191,8 +212,8 @@ export async function createPurchaseInvoice(data: {
         discount: data.discount,
         total: data.total,
         status: data.status,
-        safeId: (data.status === "cash" && data.safeId) ? data.safeId : null,
-        bankId: (data.status === "cash" && data.bankId) ? data.bankId : null,
+        safeId: data.status === "cash" && data.safeId ? data.safeId : null,
+        bankId: data.status === "cash" && data.bankId ? data.bankId : null,
         printableTitle: data.printableTitle,
         topNotes: data.topNotes || [],
         notes: data.notes || [],
@@ -211,119 +232,188 @@ export async function createPurchaseInvoice(data: {
         },
       },
       include: {
-        supplier: { select: { accountId: true, name: true } }
-      }
+        supplier: { select: { accountId: true, name: true } },
+        items: true,
+      },
     });
 
-    // 3.1. إنشاء قيد المحاسبة (Auto-Posting)
+    // 3.1. إنشاء حركات المخزون وتحديث الأسعار إذا كانت الفاتورة نهائية
+    const inventoryAccount = await tx.account.findUnique({
+      where: { code: "120301" },
+    });
+    if (!inventoryAccount)
+      throw new Error("حساب مخزون البضاعة 120301 غير موجود");
+
+    if (data.status !== "pending") {
+      const invoiceItems = invoice.items ?? [];
+      for (const item of invoiceItems) {
+        if (!item.productId) continue;
+
+        const product = await tx.product.findUnique({
+          where: { id: item.productId },
+          select: { currentStock: true, buyPrice: true },
+        });
+        const currentStock = product?.currentStock ?? 0;
+        const currentBuyPrice = product?.buyPrice ?? 0;
+        const incomingQty = item.quantity;
+        const incomingCost = item.unitPrice;
+        const existingQty = Math.max(currentStock, 0);
+        const totalQty = existingQty + incomingQty;
+        const weightedCost =
+          totalQty > 0
+            ? (existingQty * currentBuyPrice + incomingQty * incomingCost) /
+              totalQty
+            : incomingCost;
+
+        await tx.stockMovement.create({
+          data: {
+            productId: item.productId,
+            movementType: "PURCHASE",
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            reference: `فاتورة شراء مؤكدة #${invoice.invoiceNumber}`,
+            purchaseInvoiceId: invoice.id,
+          },
+        });
+
+        await tx.product.update({
+          where: { id: item.productId },
+          data: {
+            currentStock: { increment: item.quantity },
+            buyPrice: weightedCost,
+            sellPrice: item.sellingPrice,
+            profitMargin: item.profitMargin,
+          },
+        });
+      }
+    }
+
+    // 3.2. إنشاء قيد المحاسبي لفاتورة الشراء
     const supplierAccountId = invoice.supplier?.accountId;
     if (!supplierAccountId) throw new Error("المورد غير مربوط بحساب محاسبي");
 
-    const purchasesAccount = await tx.account.findUnique({ where: { code: '610401' } });
-    if (!purchasesAccount) throw new Error("حساب المشتريات (610401) غير موجود");
-
     const lastEntry = await tx.journalEntry.findFirst({
-        orderBy: { entryNumber: 'desc' },
-        select: { entryNumber: true }
+      orderBy: { entryNumber: "desc" },
+      select: { entryNumber: true },
     });
     const entryNumber = (lastEntry?.entryNumber || 0) + 1;
 
     await tx.journalEntry.create({
-        data: {
-            entryNumber,
-            date: invoice.invoiceDate,
-            description: `فاتورة مشتريات #${invoice.invoiceNumber} - ${invoice.supplierName}`,
-            sourceType: 'PURCHASE_INVOICE',
-            sourceId: invoice.id,
-            items: {
-                create: [
-                    {
-                        accountId: purchasesAccount.id,
-                        debit: invoice.total,
-                        credit: 0,
-                        description: `قيمة فاتورة مشتريات #${invoice.invoiceNumber}`
-                    },
-                    {
-                        accountId: supplierAccountId,
-                        debit: 0,
-                        credit: invoice.total,
-                        description: `استحقاق مورد فاتورة #${invoice.invoiceNumber}`
-                    }
-                ]
-            }
-        }
+      data: {
+        entryNumber,
+        date: invoice.invoiceDate,
+        description: `فاتورة مشتريات #${invoice.invoiceNumber} - ${invoice.supplierName}`,
+        sourceType: "PURCHASE_INVOICE",
+        sourceId: invoice.id,
+        items: {
+          create: [
+            {
+              accountId: inventoryAccount.id,
+              debit: invoice.total,
+              credit: 0,
+              description: `قيمة فاتورة مشتريات #${invoice.invoiceNumber}`,
+            },
+            {
+              accountId: supplierAccountId,
+              debit: 0,
+              credit: invoice.total,
+              description: `استحقاق مورد فاتورة #${invoice.invoiceNumber}`,
+            },
+          ],
+        },
+      },
     });
 
     // 3.2. إذا كانت الفاتورة كاش، نسجل سند الصرف آلياً
     if (data.status === "cash") {
-        let treasuryAccountId: number | null = null;
-        if (data.safeId) {
-            const safe = await tx.treasurySafe.findUnique({ where: { id: data.safeId }, select: { accountId: true } });
-            treasuryAccountId = safe?.accountId || null;
-        } else if (data.bankId) {
-            const bank = await tx.treasuryBank.findUnique({ where: { id: data.bankId }, select: { accountId: true } });
-            treasuryAccountId = bank?.accountId || null;
-        }
+      let treasuryAccountId: number | null = null;
+      if (data.safeId) {
+        const safe = await tx.treasurySafe.findUnique({
+          where: { id: data.safeId },
+          select: { accountId: true },
+        });
+        treasuryAccountId = safe?.accountId || null;
+      } else if (data.bankId) {
+        const bank = await tx.treasuryBank.findUnique({
+          where: { id: data.bankId },
+          select: { accountId: true },
+        });
+        treasuryAccountId = bank?.accountId || null;
+      }
 
-        if (treasuryAccountId) {
-            const lastEntryCash = await tx.journalEntry.findFirst({
-                orderBy: { entryNumber: 'desc' },
-                select: { entryNumber: true }
-            });
-            const entryNumberCash = (lastEntryCash?.entryNumber || 0) + 1;
+      if (treasuryAccountId) {
+        const lastEntryCash = await tx.journalEntry.findFirst({
+          orderBy: { entryNumber: "desc" },
+          select: { entryNumber: true },
+        });
+        const entryNumberCash = (lastEntryCash?.entryNumber || 0) + 1;
 
-            await tx.journalEntry.create({
-                data: {
-                    entryNumber: entryNumberCash,
-                    date: invoice.invoiceDate,
-                    description: `سداد نقدي فاتورة مشتريات #${invoice.invoiceNumber} - ${invoice.supplierName}`,
-                    sourceType: 'PAYMENT_VOUCHER',
-                    sourceId: invoice.id,
-                    items: {
-                        create: [
-                            {
-                                accountId: supplierAccountId,
-                                debit: invoice.total,
-                                credit: 0,
-                                description: `تسوية سداد فاتورة مشتريات #${invoice.invoiceNumber}`
-                            },
-                            {
-                                accountId: treasuryAccountId,
-                                debit: 0,
-                                credit: invoice.total,
-                                description: `صرف نقدي فاتورة مشتريات #${invoice.invoiceNumber}`
-                            }
-                        ]
-                    }
-                }
-            });
-        }
+        await tx.journalEntry.create({
+          data: {
+            entryNumber: entryNumberCash,
+            date: invoice.invoiceDate,
+            description: `سداد نقدي فاتورة مشتريات #${invoice.invoiceNumber} - ${invoice.supplierName}`,
+            sourceType: "PAYMENT_VOUCHER",
+            sourceId: invoice.id,
+            items: {
+              create: [
+                {
+                  accountId: supplierAccountId,
+                  debit: invoice.total,
+                  credit: 0,
+                  description: `تسوية سداد فاتورة مشتريات #${invoice.invoiceNumber}`,
+                },
+                {
+                  accountId: treasuryAccountId,
+                  debit: 0,
+                  credit: invoice.total,
+                  description: `صرف نقدي فاتورة مشتريات #${invoice.invoiceNumber}`,
+                },
+              ],
+            },
+          },
+        });
+      }
     }
 
     // 3.5 تحديث الخزنة أو البنك إذا كانت الفاتورة كاش (خصم للمشتريات) (فقط إذا لم تكن معلقة)
     if (data.status === "cash" && (data.safeId || data.bankId)) {
       if (data.safeId) {
         // التحقق من الرصيد
-        const safe = await tx.treasurySafe.findUnique({ where: { id: data.safeId } });
+        const safe = await tx.treasurySafe.findUnique({
+          where: { id: data.safeId },
+        });
         if (!safe) throw new Error("الخزنة المختارة غير موجودة");
-        if (safe.balance < data.total) throw new Error(`رصيد الخزنة غير كافٍ (المتاح: ${safe.balance})`);
+        if (safe.balance < data.total)
+          throw new Error(`رصيد الخزنة غير كافٍ (المتاح: ${safe.balance})`);
 
         const updatedSafe = await tx.treasurySafe.update({
           where: { id: data.safeId },
           data: { balance: { decrement: data.total } },
         });
-        pendingAlerts.push({ type: 'treasury', name: updatedSafe.name, value: updatedSafe.balance });
+        pendingAlerts.push({
+          type: "treasury",
+          name: updatedSafe.name,
+          value: updatedSafe.balance,
+        });
       } else if (data.bankId) {
         // التحقق من الرصيد
-        const bank = await tx.treasuryBank.findUnique({ where: { id: data.bankId } });
+        const bank = await tx.treasuryBank.findUnique({
+          where: { id: data.bankId },
+        });
         if (!bank) throw new Error("البنك المختار غير موجود");
-        if (bank.balance < data.total) throw new Error(`رصيد البنك غير كافٍ (المتاح: ${bank.balance})`);
+        if (bank.balance < data.total)
+          throw new Error(`رصيد البنك غير كافٍ (المتاح: ${bank.balance})`);
 
         const updatedBank = await tx.treasuryBank.update({
           where: { id: data.bankId },
           data: { balance: { decrement: data.total } },
         });
-        pendingAlerts.push({ type: 'treasury', name: updatedBank.name, value: updatedBank.balance });
+        pendingAlerts.push({
+          type: "treasury",
+          name: updatedBank.name,
+          value: updatedBank.balance,
+        });
       }
     }
 
@@ -344,20 +434,28 @@ export async function createPurchaseInvoice(data: {
         // تحديث الرصيد في بطاقة الصنف وتحديث الأسعار
         const updatedProduct = await tx.product.update({
           where: { id: item.productId },
-          data: { 
+          data: {
             currentStock: { increment: item.quantity },
             buyPrice: item.unitPrice,
             sellPrice: item.sellingPrice,
             profitMargin: item.profitMargin,
-            taxRate: item.taxRate
+            taxRate: item.taxRate,
           },
         });
-        pendingAlerts.push({ type: 'stock', name: updatedProduct.name, value: updatedProduct.currentStock, limit: updatedProduct.minStock });
+        pendingAlerts.push({
+          type: "stock",
+          name: updatedProduct.name,
+          value: updatedProduct.currentStock,
+          limit: updatedProduct.minStock,
+        });
       }
     }
 
     revalidatePath("/purchase-invoices");
     revalidatePath("/inventory/stock");
+    revalidatePath("/suppliers");
+    revalidatePath("/ledger");
+    revalidatePath("/ledger/coa");
 
     return invoice;
   });
@@ -366,14 +464,14 @@ export async function createPurchaseInvoice(data: {
     await triggerStaffActivityAlert(
       user_session.user,
       "فاتورة مشتريات جديدة",
-      `تم إنشاء فاتورة مشتريات #${result.invoiceNumber} من المورد ${result.supplierName} بقيمة ${result.total}`
+      `تم إنشاء فاتورة مشتريات #${result.invoiceNumber} من المورد ${result.supplierName} بقيمة ${result.total}`,
     );
   }
 
   for (const alert of pendingAlerts) {
-    if (alert.type === 'treasury') {
+    if (alert.type === "treasury") {
       await triggerTreasuryAlert(alert.name, alert.value);
-    } else if (alert.type === 'stock') {
+    } else if (alert.type === "stock") {
       await triggerStockAlert(alert.name, alert.value, alert.limit || 0);
     }
   }
@@ -411,12 +509,17 @@ export async function updatePurchaseInvoice(
     notes?: string[];
     dueDate?: string;
     printableTitle?: string;
-  }
+  },
 ) {
   const session = await getSession();
   if (!session) throw new Error("يجب تسجيل الدخول أولاً");
 
-  const pendingAlerts: { type: 'treasury' | 'stock', name: string, value: number, limit?: number }[] = [];
+  const pendingAlerts: {
+    type: "treasury" | "stock";
+    name: string;
+    value: number;
+    limit?: number;
+  }[] = [];
 
   const canEdit = await hasPermission(session.userId, "purchase_edit");
   if (!canEdit) throw new Error("ليس لديك صلاحية تعديل فواتير مشتريات");
@@ -429,18 +532,31 @@ export async function updatePurchaseInvoice(
   const result = await (prisma as any).$transaction(async (tx: any) => {
     const existingInvoice = await tx.purchaseInvoice.findUnique({
       where: { id },
-      select: { status: true, total: true, safeId: true, bankId: true, invoiceNumber: true }
+      select: {
+        status: true,
+        total: true,
+        safeId: true,
+        bankId: true,
+        invoiceNumber: true,
+      },
     });
 
     if (!existingInvoice) throw new Error("الفاتورة غير موجودة");
 
     if (existingInvoice.status !== data.status) {
-      throw new Error("لا يمكن تغيير نوع الفاتورة بعد الحفظ لحماية حركات الخزنة والبنك");
+      throw new Error(
+        "لا يمكن تغيير نوع الفاتورة بعد الحفظ لحماية حركات الخزنة والبنك",
+      );
     }
 
     if (existingInvoice.status === "cash") {
-      if (existingInvoice.safeId !== data.safeId || existingInvoice.bankId !== data.bankId) {
-        throw new Error("لا يمكن تغيير جهة الدفع (الخزنة/البنك) بعد الحفظ لضمان سلامة العمليات المالية");
+      if (
+        existingInvoice.safeId !== data.safeId ||
+        existingInvoice.bankId !== data.bankId
+      ) {
+        throw new Error(
+          "لا يمكن تغيير جهة الدفع (الخزنة/البنك) بعد الحفظ لضمان سلامة العمليات المالية",
+        );
       }
     }
 
@@ -449,7 +565,8 @@ export async function updatePurchaseInvoice(
         where: { invoiceNumber: data.invoiceNumber },
         select: { id: true },
       });
-      if (numberTaken) throw new Error(`رقم الفاتورة #${data.invoiceNumber} مستخدم مسبقاً`);
+      if (numberTaken)
+        throw new Error(`رقم الفاتورة #${data.invoiceNumber} مستخدم مسبقاً`);
     }
 
     // 0. عكس أثر الخزنة القديم إذا كانت كاش
@@ -457,29 +574,37 @@ export async function updatePurchaseInvoice(
       if (existingInvoice.safeId) {
         const updatedSafe = await tx.treasurySafe.update({
           where: { id: existingInvoice.safeId },
-          data: { balance: { increment: existingInvoice.total } }
+          data: { balance: { increment: existingInvoice.total } },
         });
-        pendingAlerts.push({ type: 'treasury', name: updatedSafe.name, value: updatedSafe.balance });
+        pendingAlerts.push({
+          type: "treasury",
+          name: updatedSafe.name,
+          value: updatedSafe.balance,
+        });
       } else if (existingInvoice.bankId) {
         const updatedBank = await tx.treasuryBank.update({
           where: { id: existingInvoice.bankId },
-          data: { balance: { increment: existingInvoice.total } }
+          data: { balance: { increment: existingInvoice.total } },
         });
-        pendingAlerts.push({ type: 'treasury', name: updatedBank.name, value: updatedBank.balance });
+        pendingAlerts.push({
+          type: "treasury",
+          name: updatedBank.name,
+          value: updatedBank.balance,
+        });
       }
     }
 
     // 1. استرجاع الكميات القديمة لتعديل الرصيد (مع منع الرصيد السالب)
     const oldItems = await tx.purchaseInvoiceItem.findMany({
       where: { invoiceId: id },
-      select: { productId: true, quantity: true }
+      select: { productId: true, quantity: true },
     });
 
     for (const oldItem of oldItems) {
       if (oldItem.productId) {
         const product = await tx.product.findUnique({
           where: { id: oldItem.productId },
-          select: { currentStock: true }
+          select: { currentStock: true },
         });
         const currentVal = product?.currentStock ?? 0;
         const actualDeduct = Math.min(currentVal, oldItem.quantity);
@@ -503,9 +628,14 @@ export async function updatePurchaseInvoice(
         if (actualDeduct > 0) {
           const updatedProduct = await tx.product.update({
             where: { id: oldItem.productId },
-            data: { currentStock: { decrement: actualDeduct } }
+            data: { currentStock: { decrement: actualDeduct } },
           });
-          pendingAlerts.push({ type: 'stock', name: updatedProduct.name, value: updatedProduct.currentStock, limit: updatedProduct.minStock });
+          pendingAlerts.push({
+            type: "stock",
+            name: updatedProduct.name,
+            value: updatedProduct.currentStock,
+            limit: updatedProduct.minStock,
+          });
         }
       }
     }
@@ -518,7 +648,7 @@ export async function updatePurchaseInvoice(
     for (const item of data.items) {
       const exists = await tx.product.findUnique({
         where: { id: item.productId, isActive: true },
-        select: { id: true }
+        select: { id: true },
       });
       if (!exists) throw new Error(`أحد الأصناف المختارة تم إيقاف التعامل معه`);
     }
@@ -536,8 +666,8 @@ export async function updatePurchaseInvoice(
         discount: data.discount,
         total: data.total,
         status: data.status,
-        safeId: (data.status === "cash" && data.safeId) ? data.safeId : null,
-        bankId: (data.status === "cash" && data.bankId) ? data.bankId : null,
+        safeId: data.status === "cash" && data.safeId ? data.safeId : null,
+        bankId: data.status === "cash" && data.bankId ? data.bankId : null,
         printableTitle: data.printableTitle,
         topNotes: data.topNotes || [],
         notes: data.notes || [],
@@ -556,126 +686,154 @@ export async function updatePurchaseInvoice(
         },
       },
       include: {
-        supplier: { select: { accountId: true } }
-      }
+        supplier: { select: { accountId: true } },
+      },
     });
 
     // 3.6. تحديث قيد المحاسبة (حذف القديم وإنشاء جديد)
     await tx.journalEntry.deleteMany({
-        where: { sourceType: 'PURCHASE_INVOICE', sourceId: id }
+      where: { sourceType: "PURCHASE_INVOICE", sourceId: id },
     });
     // أيضاً حذف أي سند صرف نظامي مرتبط بهذه الفاتورة
     await tx.journalEntry.deleteMany({
-        where: { sourceType: 'PAYMENT_VOUCHER', sourceId: id, description: { contains: `سداد نقدي فاتورة مشتريات #${invoice.invoiceNumber}` } }
+      where: {
+        sourceType: "PAYMENT_VOUCHER",
+        sourceId: id,
+        description: {
+          contains: `سداد نقدي فاتورة مشتريات #${invoice.invoiceNumber}`,
+        },
+      },
     });
 
     const supplierAccountId = invoice.supplier?.accountId;
     if (supplierAccountId) {
-        const purchasesAccount = await tx.account.findUnique({ where: { code: '610401' } });
-        if (purchasesAccount) {
-            const lastEntry = await tx.journalEntry.findFirst({
-                orderBy: { entryNumber: 'desc' },
-                select: { entryNumber: true }
+      const purchasesAccount = await tx.account.findUnique({
+        where: { code: "610401" },
+      });
+      if (purchasesAccount) {
+        const lastEntry = await tx.journalEntry.findFirst({
+          orderBy: { entryNumber: "desc" },
+          select: { entryNumber: true },
+        });
+        const entryNumber = (lastEntry?.entryNumber || 0) + 1;
+
+        await tx.journalEntry.create({
+          data: {
+            entryNumber,
+            date: invoice.invoiceDate,
+            description: `تعديل فاتورة مشتريات #${invoice.invoiceNumber} - ${invoice.supplierName}`,
+            sourceType: "PURCHASE_INVOICE",
+            sourceId: invoice.id,
+            items: {
+              create: [
+                {
+                  accountId: purchasesAccount.id,
+                  debit: invoice.total,
+                  credit: 0,
+                  description: `تعديل قيمة فاتورة مشتريات #${invoice.invoiceNumber}`,
+                },
+                {
+                  accountId: supplierAccountId,
+                  debit: 0,
+                  credit: invoice.total,
+                  description: `تعديل استحقاق مورد فاتورة #${invoice.invoiceNumber}`,
+                },
+              ],
+            },
+          },
+        });
+
+        if (data.status === "cash") {
+          let treasuryAccountId: number | null = null;
+          if (data.safeId) {
+            const safe = await tx.treasurySafe.findUnique({
+              where: { id: data.safeId },
+              select: { accountId: true },
             });
-            const entryNumber = (lastEntry?.entryNumber || 0) + 1;
+            treasuryAccountId = safe?.accountId || null;
+          } else if (data.bankId) {
+            const bank = await tx.treasuryBank.findUnique({
+              where: { id: data.bankId },
+              select: { accountId: true },
+            });
+            treasuryAccountId = bank?.accountId || null;
+          }
+
+          if (treasuryAccountId) {
+            const lastEntryCash = await tx.journalEntry.findFirst({
+              orderBy: { entryNumber: "desc" },
+              select: { entryNumber: true },
+            });
+            const entryNumberCash = (lastEntryCash?.entryNumber || 0) + 1;
 
             await tx.journalEntry.create({
-                data: {
-                    entryNumber,
-                    date: invoice.invoiceDate,
-                    description: `تعديل فاتورة مشتريات #${invoice.invoiceNumber} - ${invoice.supplierName}`,
-                    sourceType: 'PURCHASE_INVOICE',
-                    sourceId: invoice.id,
-                    items: {
-                        create: [
-                            {
-                                accountId: purchasesAccount.id,
-                                debit: invoice.total,
-                                credit: 0,
-                                description: `تعديل قيمة فاتورة مشتريات #${invoice.invoiceNumber}`
-                            },
-                            {
-                                accountId: supplierAccountId,
-                                debit: 0,
-                                credit: invoice.total,
-                                description: `تعديل استحقاق مورد فاتورة #${invoice.invoiceNumber}`
-                            }
-                        ]
-                    }
-                }
+              data: {
+                entryNumber: entryNumberCash,
+                date: invoice.invoiceDate,
+                description: `سداد نقدي فاتورة مشتريات #${invoice.invoiceNumber} - ${invoice.supplierName}`,
+                sourceType: "PAYMENT_VOUCHER",
+                sourceId: invoice.id,
+                items: {
+                  create: [
+                    {
+                      accountId: supplierAccountId,
+                      debit: invoice.total,
+                      credit: 0,
+                      description: `تسوية سداد فاتورة مشتريات #${invoice.invoiceNumber}`,
+                    },
+                    {
+                      accountId: treasuryAccountId,
+                      debit: 0,
+                      credit: invoice.total,
+                      description: `صرف نقدي فاتورة مشتريات #${invoice.invoiceNumber}`,
+                    },
+                  ],
+                },
+              },
             });
-
-            if (data.status === "cash") {
-                let treasuryAccountId: number | null = null;
-                if (data.safeId) {
-                    const safe = await tx.treasurySafe.findUnique({ where: { id: data.safeId }, select: { accountId: true } });
-                    treasuryAccountId = safe?.accountId || null;
-                } else if (data.bankId) {
-                    const bank = await tx.treasuryBank.findUnique({ where: { id: data.bankId }, select: { accountId: true } });
-                    treasuryAccountId = bank?.accountId || null;
-                }
-
-                if (treasuryAccountId) {
-                    const lastEntryCash = await tx.journalEntry.findFirst({
-                        orderBy: { entryNumber: 'desc' },
-                        select: { entryNumber: true }
-                    });
-                    const entryNumberCash = (lastEntryCash?.entryNumber || 0) + 1;
-
-                    await tx.journalEntry.create({
-                        data: {
-                            entryNumber: entryNumberCash,
-                            date: invoice.invoiceDate,
-                            description: `سداد نقدي فاتورة مشتريات #${invoice.invoiceNumber} - ${invoice.supplierName}`,
-                            sourceType: 'PAYMENT_VOUCHER',
-                            sourceId: invoice.id,
-                            items: {
-                                create: [
-                                    {
-                                        accountId: supplierAccountId,
-                                        debit: invoice.total,
-                                        credit: 0,
-                                        description: `تسوية سداد فاتورة مشتريات #${invoice.invoiceNumber}`
-                                    },
-                                    {
-                                        accountId: treasuryAccountId,
-                                        debit: 0,
-                                        credit: invoice.total,
-                                        description: `صرف نقدي فاتورة مشتريات #${invoice.invoiceNumber}`
-                                    }
-                                ]
-                            }
-                        }
-                    });
-                }
-            }
+          }
         }
+      }
     }
 
     // 4. تطبيق أثر الخزنة الجديد إذا كانت كاش
     if (data.status === "cash" && (data.safeId || data.bankId)) {
       if (data.safeId) {
         // التحقق من الرصيد
-        const safe = await tx.treasurySafe.findUnique({ where: { id: data.safeId } });
+        const safe = await tx.treasurySafe.findUnique({
+          where: { id: data.safeId },
+        });
         if (!safe) throw new Error("الخزنة المختارة غير موجودة");
-        if (safe.balance < data.total) throw new Error(`رصيد الخزنة غير كافٍ (المتاح: ${safe.balance})`);
+        if (safe.balance < data.total)
+          throw new Error(`رصيد الخزنة غير كافٍ (المتاح: ${safe.balance})`);
 
         const updatedSafe = await tx.treasurySafe.update({
           where: { id: data.safeId },
           data: { balance: { decrement: data.total } },
         });
-        pendingAlerts.push({ type: 'treasury', name: updatedSafe.name, value: updatedSafe.balance });
+        pendingAlerts.push({
+          type: "treasury",
+          name: updatedSafe.name,
+          value: updatedSafe.balance,
+        });
       } else if (data.bankId) {
         // التحقق من الرصيد
-        const bank = await tx.treasuryBank.findUnique({ where: { id: data.bankId } });
+        const bank = await tx.treasuryBank.findUnique({
+          where: { id: data.bankId },
+        });
         if (!bank) throw new Error("البنك المختار غير موجود");
-        if (bank.balance < data.total) throw new Error(`رصيد البنك غير كافٍ (المتاح: ${bank.balance})`);
+        if (bank.balance < data.total)
+          throw new Error(`رصيد البنك غير كافٍ (المتاح: ${bank.balance})`);
 
         const updatedBank = await tx.treasuryBank.update({
           where: { id: data.bankId },
           data: { balance: { decrement: data.total } },
         });
-        pendingAlerts.push({ type: 'treasury', name: updatedBank.name, value: updatedBank.balance });
+        pendingAlerts.push({
+          type: "treasury",
+          name: updatedBank.name,
+          value: updatedBank.balance,
+        });
       }
     }
 
@@ -684,7 +842,7 @@ export async function updatePurchaseInvoice(
         data: {
           productId: item.productId,
           movementType: "PURCHASE",
-          quantity: item.quantity, 
+          quantity: item.quantity,
           unitPrice: item.unitPrice,
           reference: `فاتورة شراء #${data.invoiceNumber}`,
           purchaseInvoiceId: invoice.id,
@@ -694,15 +852,20 @@ export async function updatePurchaseInvoice(
       // تحديث الرصيد الجديد والأسعار
       const updatedProduct = await tx.product.update({
         where: { id: item.productId },
-        data: { 
+        data: {
           currentStock: { increment: item.quantity },
           buyPrice: item.unitPrice,
           sellPrice: item.sellingPrice,
           profitMargin: item.profitMargin,
-          taxRate: item.taxRate
-        }
+          taxRate: item.taxRate,
+        },
       });
-      pendingAlerts.push({ type: 'stock', name: updatedProduct.name, value: updatedProduct.currentStock, limit: updatedProduct.minStock });
+      pendingAlerts.push({
+        type: "stock",
+        name: updatedProduct.name,
+        value: updatedProduct.currentStock,
+        limit: updatedProduct.minStock,
+      });
     }
 
     return invoice;
@@ -712,23 +875,26 @@ export async function updatePurchaseInvoice(
     await triggerStaffActivityAlert(
       session.user,
       "تعديل فاتورة مشتريات",
-      `تم تعديل فاتورة مشتريات #${data.invoiceNumber} للمورد ${data.supplierName} بقيمة ${data.total}`
+      `تم تعديل فاتورة مشتريات #${data.invoiceNumber} للمورد ${data.supplierName} بقيمة ${data.total}`,
     );
   }
 
   for (const alert of pendingAlerts) {
-    if (alert.type === 'treasury') {
+    if (alert.type === "treasury") {
       await triggerTreasuryAlert(alert.name, alert.value);
-    } else if (alert.type === 'stock') {
+    } else if (alert.type === "stock") {
       await triggerStockAlert(alert.name, alert.value, alert.limit || 0);
     }
   }
 
-    revalidatePath("/purchase-invoices");
-    revalidatePath("/inventory/stock");
+  revalidatePath("/purchase-invoices");
+  revalidatePath("/inventory/stock");
+  revalidatePath("/suppliers");
+  revalidatePath("/ledger");
+  revalidatePath("/ledger/coa");
 
-    return { invoice: result };
-  }
+  return { invoice: result };
+}
 
 // ─── حذف فاتورة (مع حذف حركات المخزون المرتبطة) ─────────────────────────
 export async function deletePurchaseInvoice(id: number) {
@@ -738,50 +904,58 @@ export async function deletePurchaseInvoice(id: number) {
   const canDelete = await hasPermission(user_session.userId, "purchase_delete");
   if (!canDelete) throw new Error("ليس لديك صلاحية حذف فواتير مشتريات");
 
-  const pendingAlerts: { type: 'treasury', name: string, value: number }[] = [];
+  const pendingAlerts: { type: "treasury"; name: string; value: number }[] = [];
 
   await prisma.$transaction(async (tx) => {
     // 0. جلب بيانات الفاتورة لمعرفة حالتها וחساباتها
     const invoice = await tx.purchaseInvoice.findUnique({
       where: { id },
-      select: { status: true, total: true, safeId: true, bankId: true }
+      select: { status: true, total: true, safeId: true, bankId: true },
     });
 
     if (invoice && invoice.status === "cash") {
       if (invoice.safeId) {
         const updatedSafe = await tx.treasurySafe.update({
           where: { id: invoice.safeId },
-          data: { balance: { increment: invoice.total } }
+          data: { balance: { increment: invoice.total } },
         });
-        pendingAlerts.push({ type: 'treasury', name: updatedSafe.name, value: updatedSafe.balance });
+        pendingAlerts.push({
+          type: "treasury",
+          name: updatedSafe.name,
+          value: updatedSafe.balance,
+        });
       } else if (invoice.bankId) {
         const updatedBank = await tx.treasuryBank.update({
           where: { id: invoice.bankId },
-          data: { balance: { increment: invoice.total } }
+          data: { balance: { increment: invoice.total } },
         });
-        pendingAlerts.push({ type: 'treasury', name: updatedBank.name, value: updatedBank.balance });
+        pendingAlerts.push({
+          type: "treasury",
+          name: updatedBank.name,
+          value: updatedBank.balance,
+        });
       }
     }
 
     // تعديل الرصيد قبل الحذف (مع منع الرصيد السالب)
     const items = await tx.purchaseInvoiceItem.findMany({
       where: { invoiceId: id },
-      select: { productId: true, quantity: true }
+      select: { productId: true, quantity: true },
     });
 
     for (const item of items) {
       if (item.productId) {
         const product = await tx.product.findUnique({
           where: { id: item.productId },
-          select: { currentStock: true }
+          select: { currentStock: true },
         });
         const currentVal = product?.currentStock ?? 0;
         const actualDeduct = Math.min(currentVal, item.quantity);
-        
+
         if (actualDeduct > 0) {
           await tx.product.update({
             where: { id: item.productId },
-            data: { currentStock: { decrement: actualDeduct } }
+            data: { currentStock: { decrement: actualDeduct } },
           });
         }
       }
@@ -789,41 +963,51 @@ export async function deletePurchaseInvoice(id: number) {
 
     // تحقق من وجود معاملات مرتبطة
     const relatedVouchers = await prisma.paymentVoucher.count({
-      where: { bankId: invoice?.bankId || -1 } // Use a placeholder if bankId is null
+      where: { bankId: invoice?.bankId || -1 }, // Use a placeholder if bankId is null
     });
 
     const relatedReceipts = await prisma.receiptVoucher.count({
-      where: { bankId: invoice?.bankId || -1 }
+      where: { bankId: invoice?.bankId || -1 },
     });
 
     const relatedSalesInvoices = await prisma.salesInvoice.count({
-      where: { bankId: invoice?.bankId || -1, status: 'cash' }
+      where: { bankId: invoice?.bankId || -1, status: "cash" },
     });
 
     const relatedPurchaseInvoices = await prisma.purchaseInvoice.count({
-      where: { bankId: invoice?.bankId || -1, status: 'cash' }
+      where: { bankId: invoice?.bankId || -1, status: "cash" },
     });
 
-    const hasTransactions = relatedVouchers > 0 || relatedReceipts > 0 || relatedSalesInvoices > 0 || relatedPurchaseInvoices > 0;
+    const hasTransactions =
+      relatedVouchers > 0 ||
+      relatedReceipts > 0 ||
+      relatedSalesInvoices > 0 ||
+      relatedPurchaseInvoices > 0;
 
     await tx.stockMovement.deleteMany({ where: { purchaseInvoiceId: id } });
-    
+
     // 3. حذف القيود المحاسبية المرتبطة
     await tx.journalEntry.deleteMany({
-        where: { sourceType: 'PURCHASE_INVOICE', sourceId: id }
+      where: { sourceType: "PURCHASE_INVOICE", sourceId: id },
     });
     // حذف أي سند صرف نظامي مرتبط بهذه الفاتورة
     await tx.journalEntry.deleteMany({
-        where: { sourceType: 'PAYMENT_VOUCHER', sourceId: id, description: { contains: `سداد نقدي فاتورة` } }
+      where: {
+        sourceType: "PAYMENT_VOUCHER",
+        sourceId: id,
+        description: { contains: `سداد نقدي فاتورة` },
+      },
     });
 
-    const deletedInvoice = await tx.purchaseInvoice.delete({ where: { id: id } });
+    const deletedInvoice = await tx.purchaseInvoice.delete({
+      where: { id: id },
+    });
 
     if (user_session && deletedInvoice) {
       await triggerStaffActivityAlert(
         user_session.user,
         "حذف فاتورة مشتريات",
-        `تم حذف فاتورة مشتريات #${deletedInvoice.invoiceNumber} من المورد ${deletedInvoice.supplierName} بقيمة ${deletedInvoice.total}`
+        `تم حذف فاتورة مشتريات #${deletedInvoice.invoiceNumber} من المورد ${deletedInvoice.supplierName} بقيمة ${deletedInvoice.total}`,
       );
     }
     revalidatePath("/purchase-invoices");
@@ -831,7 +1015,7 @@ export async function deletePurchaseInvoice(id: number) {
   });
 
   for (const alert of pendingAlerts) {
-    if (alert.type === 'treasury') {
+    if (alert.type === "treasury") {
       await triggerTreasuryAlert(alert.name, alert.value);
     }
   }
@@ -843,13 +1027,13 @@ export async function getPurchaseInvoiceWithReturns(id: number) {
     where: { id },
     include: {
       items: {
-        include: { product: true }
+        include: { product: true },
       },
       supplier: true,
       purchaseReturns: {
-        include: { items: true }
-      }
-    }
+        include: { items: true },
+      },
+    },
   });
 }
 
@@ -857,13 +1041,13 @@ export async function getPurchaseInvoiceWithReturns(id: number) {
 export async function getPurchaseInvoicesBySupplier(supplierId: number) {
   return prisma.purchaseInvoice.findMany({
     where: { supplierId },
-    orderBy: { invoiceDate: 'desc' },
+    orderBy: { invoiceDate: "desc" },
     select: {
       id: true,
       invoiceNumber: true,
       supplierName: true,
       invoiceDate: true,
       total: true,
-    }
+    },
   });
 }

@@ -61,7 +61,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { getCOATree, createSubAccount, suggestNextAccountCode, deleteAccount, updateAccount } from "../actions";
+import {
+  getCOATree,
+  createSubAccount,
+  suggestNextAccountCode,
+  deleteAccount,
+  updateAccount,
+} from "../actions";
 import { useManagementMode } from "@/hooks/use-management-mode";
 import { PasswordProtectionGate } from "@/components/shared/PasswordProtectionGate";
 import Link from "next/link";
@@ -89,14 +95,59 @@ interface AccountNode {
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
-const TYPE_CONFIG: Record<string, { label: string; icon: any; color: string; bg: string; dot: string }> = {
-  ASSET:     { label: "أصول",         icon: FolderTree,      color: "text-emerald-700 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-900/20",  dot: "bg-emerald-500" },
-  LIABILITY: { label: "خصوم",         icon: Hash,             color: "text-rose-700 dark:text-rose-400",      bg: "bg-rose-50 dark:bg-rose-900/20",         dot: "bg-rose-500" },
-  EQUITY:    { label: "حقوق ملكية",   icon: PieChart,         color: "text-violet-700 dark:text-violet-400",  bg: "bg-violet-50 dark:bg-violet-900/20",     dot: "bg-violet-500" },
-  REVENUE:   { label: "إيرادات",      icon: TrendingUp,       color: "text-amber-700 dark:text-amber-400",    bg: "bg-amber-50 dark:bg-amber-900/20",       dot: "bg-amber-500" },
-  EXPENSE:   { label: "مصروفات",      icon: ArrowRightLeft,   color: "text-indigo-700 dark:text-indigo-400",  bg: "bg-indigo-50 dark:bg-indigo-900/20",     dot: "bg-indigo-500" },
-  SAFE:      { label: "خزينة",        icon: Wallet,           color: "text-amber-700 dark:text-amber-400",    bg: "bg-amber-50 dark:bg-amber-900/20",       dot: "bg-amber-400" },
-  BANK:      { label: "بنك",          icon: Landmark,         color: "text-blue-700 dark:text-blue-400",      bg: "bg-blue-50 dark:bg-blue-900/20",         dot: "bg-blue-500" },
+const TYPE_CONFIG: Record<
+  string,
+  { label: string; icon: any; color: string; bg: string; dot: string }
+> = {
+  ASSET: {
+    label: "أصول",
+    icon: FolderTree,
+    color: "text-emerald-700 dark:text-emerald-400",
+    bg: "bg-emerald-50 dark:bg-emerald-900/20",
+    dot: "bg-emerald-500",
+  },
+  LIABILITY: {
+    label: "خصوم",
+    icon: Hash,
+    color: "text-rose-700 dark:text-rose-400",
+    bg: "bg-rose-50 dark:bg-rose-900/20",
+    dot: "bg-rose-500",
+  },
+  EQUITY: {
+    label: "حقوق ملكية",
+    icon: PieChart,
+    color: "text-violet-700 dark:text-violet-400",
+    bg: "bg-violet-50 dark:bg-violet-900/20",
+    dot: "bg-violet-500",
+  },
+  REVENUE: {
+    label: "إيرادات",
+    icon: TrendingUp,
+    color: "text-amber-700 dark:text-amber-400",
+    bg: "bg-amber-50 dark:bg-amber-900/20",
+    dot: "bg-amber-500",
+  },
+  EXPENSE: {
+    label: "مصروفات",
+    icon: ArrowRightLeft,
+    color: "text-indigo-700 dark:text-indigo-400",
+    bg: "bg-indigo-50 dark:bg-indigo-900/20",
+    dot: "bg-indigo-500",
+  },
+  SAFE: {
+    label: "خزينة",
+    icon: Wallet,
+    color: "text-amber-700 dark:text-amber-400",
+    bg: "bg-amber-50 dark:bg-amber-900/20",
+    dot: "bg-amber-400",
+  },
+  BANK: {
+    label: "بنك",
+    icon: Landmark,
+    color: "text-blue-700 dark:text-blue-400",
+    bg: "bg-blue-50 dark:bg-blue-900/20",
+    dot: "bg-blue-500",
+  },
 };
 
 const LEVEL_LABEL: Record<number, string> = {
@@ -108,7 +159,10 @@ const LEVEL_LABEL: Record<number, string> = {
 
 // ─── Flatten helper ───────────────────────────────────────────────────────────
 
-const flattenTree = (items: AccountNode[], depth = 0): Array<AccountNode & { depth: number }> =>
+const flattenTree = (
+  items: AccountNode[],
+  depth = 0,
+): Array<AccountNode & { depth: number }> =>
   items.flatMap((item) => [
     { ...item, depth },
     ...(item.children ? flattenTree(item.children, depth + 1) : []),
@@ -164,10 +218,21 @@ const StatsBar: React.FC<{ tree: AccountNode[] }> = ({ tree }) => {
           key={s.label}
           className="flex items-center gap-3 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl px-4 py-3 shadow-sm"
         >
-          <div className={cn("p-2 rounded-xl flex-shrink-0", s.bg, s.color)}>{s.icon}</div>
+          <div className={cn("p-2 rounded-xl flex-shrink-0", s.bg, s.color)}>
+            {s.icon}
+          </div>
           <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 truncate">{s.label}</p>
-            <p className={cn("font-black text-[15px] tabular-nums mt-0.5", s.color)}>{s.value}</p>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 truncate">
+              {s.label}
+            </p>
+            <p
+              className={cn(
+                "font-black text-[15px] tabular-nums mt-0.5",
+                s.color,
+              )}
+            >
+              {s.value}
+            </p>
           </div>
         </div>
       ))}
@@ -198,7 +263,9 @@ function TreeNode({
 }) {
   const hasMoneyChild = React.useMemo(() => {
     const check = (children: AccountNode[]): boolean =>
-      children.some((c) => !!c.treasurySafe || !!c.treasuryBank || check(c.children));
+      children.some(
+        (c) => !!c.treasurySafe || !!c.treasuryBank || check(c.children),
+      );
     return check(node.children || []);
   }, [node]);
 
@@ -211,7 +278,13 @@ function TreeNode({
   }, [searchQuery]);
   const hasChildren = node.children && node.children.length > 0;
 
-  let config = TYPE_CONFIG[node.type] || { icon: FileText, color: "text-slate-600", bg: "bg-slate-50 dark:bg-slate-800", dot: "bg-slate-400", label: node.type };
+  let config = TYPE_CONFIG[node.type] || {
+    icon: FileText,
+    color: "text-slate-600",
+    bg: "bg-slate-50 dark:bg-slate-800",
+    dot: "bg-slate-400",
+    label: node.type,
+  };
   const isSystemAccount = ["4101", "5101", "3101", "501"].includes(node.code);
   const isOperational = !!node.treasurySafe || !!node.treasuryBank;
   if (node.treasurySafe) config = TYPE_CONFIG.SAFE;
@@ -233,12 +306,18 @@ function TreeNode({
         className={cn(
           "group flex flex-row-reverse items-center gap-3 transition-all duration-200 cursor-pointer border",
           // L1: dark card
-          isL1 && "py-4 px-5 rounded-2xl bg-slate-900 text-white border-slate-800 shadow-xl mb-2",
+          isL1 &&
+            "py-4 px-5 rounded-2xl bg-slate-900 text-white border-slate-800 shadow-xl mb-2",
           // L2: soft card
-          isL2 && !isL1 && "py-3 px-5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 mb-1 ml-6",
+          isL2 &&
+            !isL1 &&
+            "py-3 px-5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 mb-1 ml-6",
           // L3+
-          !isL1 && !isL2 && "py-2.5 px-4 rounded-xl border-transparent hover:bg-slate-50 dark:hover:bg-slate-800/40 hover:border-slate-100 dark:hover:border-slate-800",
-          isMatch && "ring-2 ring-amber-400 ring-offset-1 bg-amber-50/30 dark:bg-amber-900/10 border-amber-200 dark:border-amber-700"
+          !isL1 &&
+            !isL2 &&
+            "py-2.5 px-4 rounded-xl border-transparent hover:bg-slate-50 dark:hover:bg-slate-800/40 hover:border-slate-100 dark:hover:border-slate-800",
+          isMatch &&
+            "ring-2 ring-amber-400 ring-offset-1 bg-amber-50/30 dark:bg-amber-900/10 border-amber-200 dark:border-amber-700",
         )}
         style={{ marginRight: !isL1 ? `${depth * 20}px` : "0" }}
         onClick={() => setIsOpen((o) => !o)}
@@ -247,12 +326,28 @@ function TreeNode({
         <div className="flex-shrink-0 w-5">
           {hasChildren ? (
             isOpen ? (
-              <ChevronDown className={cn("w-4 h-4", isL1 ? "text-white/50" : "text-slate-400")} />
+              <ChevronDown
+                className={cn(
+                  "w-4 h-4",
+                  isL1 ? "text-white/50" : "text-slate-400",
+                )}
+              />
             ) : (
-              <ChevronRight className={cn("w-4 h-4", isL1 ? "text-white/50" : "text-slate-400")} />
+              <ChevronRight
+                className={cn(
+                  "w-4 h-4",
+                  isL1 ? "text-white/50" : "text-slate-400",
+                )}
+              />
             )
           ) : (
-            <span className={cn("inline-block w-1.5 h-1.5 rounded-full mx-auto", config.dot, "opacity-60")} />
+            <span
+              className={cn(
+                "inline-block w-1.5 h-1.5 rounded-full mx-auto",
+                config.dot,
+                "opacity-60",
+              )}
+            />
           )}
         </div>
 
@@ -260,7 +355,7 @@ function TreeNode({
         <div
           className={cn(
             "flex-shrink-0 p-2 rounded-lg transition-colors",
-            isL1 ? "bg-white/10 text-white" : cn(config.bg, config.color)
+            isL1 ? "bg-white/10 text-white" : cn(config.bg, config.color),
           )}
         >
           <Icon className="w-4 h-4" />
@@ -271,7 +366,7 @@ function TreeNode({
           <span
             className={cn(
               "font-mono text-[10px] flex-shrink-0",
-              isL1 ? "text-white/40" : "text-slate-400"
+              isL1 ? "text-white/40" : "text-slate-400",
             )}
           >
             {node.code}
@@ -279,13 +374,22 @@ function TreeNode({
           <span
             className={cn(
               "font-bold truncate",
-              isL1 ? "text-base text-white" : isL2 ? "text-sm text-slate-700 dark:text-slate-200" : "text-[13px] text-slate-700 dark:text-slate-300"
+              isL1
+                ? "text-base text-white"
+                : isL2
+                  ? "text-sm text-slate-700 dark:text-slate-200"
+                  : "text-[13px] text-slate-700 dark:text-slate-300",
             )}
           >
             {node.name}
           </span>
           {node.nameEn && (
-            <span className={cn("text-[11px] hidden md:inline truncate", isL1 ? "text-white/30" : "text-slate-400")}>
+            <span
+              className={cn(
+                "text-[11px] hidden md:inline truncate",
+                isL1 ? "text-white/30" : "text-slate-400",
+              )}
+            >
               {node.nameEn}
             </span>
           )}
@@ -303,17 +407,41 @@ function TreeNode({
         </div>
 
         {/* Balance */}
-        <div className={cn("flex-shrink-0 text-left min-w-[120px]", isL1 ? "border-r border-white/10" : "border-r border-slate-200 dark:border-slate-700", "pr-4 mr-2")}>
+        <div
+          className={cn(
+            "flex-shrink-0 text-left min-w-[120px]",
+            isL1
+              ? "border-r border-white/10"
+              : "border-r border-slate-200 dark:border-slate-700",
+            "pr-4 mr-2",
+          )}
+        >
           <p
             className={cn(
               "font-black text-sm tabular-nums",
-              isL1 ? "text-white" : balance < 0 ? "text-rose-600 dark:text-rose-400" : "text-emerald-700 dark:text-emerald-400"
+              isL1
+                ? "text-white"
+                : balance < 0
+                  ? "text-rose-600 dark:text-rose-400"
+                  : "text-emerald-700 dark:text-emerald-400",
             )}
           >
             {balance.toLocaleString("ar-EG", { minimumFractionDigits: 2 })}
-            <span className={cn("text-[10px] font-bold mr-1", isL1 ? "text-white/40" : "text-slate-400")}>ج.م</span>
+            <span
+              className={cn(
+                "text-[10px] font-bold mr-1",
+                isL1 ? "text-white/40" : "text-slate-400",
+              )}
+            >
+              ج.م
+            </span>
           </p>
-          <p className={cn("text-[9px] font-bold uppercase tracking-widest mt-0.5", isL1 ? "text-white/30" : "text-slate-400")}>
+          <p
+            className={cn(
+              "text-[9px] font-bold uppercase tracking-widest mt-0.5",
+              isL1 ? "text-white/30" : "text-slate-400",
+            )}
+          >
             {node.type === "ASSET" || node.type === "EXPENSE" ? "مدين" : "دائن"}
           </p>
         </div>
@@ -322,27 +450,31 @@ function TreeNode({
         <div
           className={cn(
             "flex-shrink-0 flex items-center gap-1.5 transition-all duration-200",
-            isManagementActive 
-              ? "opacity-100" 
-              : "opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto"
+            isManagementActive
+              ? "opacity-100"
+              : "opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto",
           )}
           onClick={(e) => e.stopPropagation()}
         >
           {/* Add sub-account - Level 2, 3 */}
-          {isManagementActive && !isOperational && !node.customerId && !node.supplierId && (node.level === 2 || node.level === 3) && (
-            <button
-              onClick={() => onAddSub(node)}
-              title="إضافة حساب فرعي"
-              className={cn(
-                "flex items-center gap-1 h-8 px-3 rounded-lg text-[11px] font-black transition-all",
-                isL1
-                  ? "bg-white/10 text-white hover:bg-white hover:text-slate-900"
-                  : "bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-800/40 border border-blue-100 dark:border-blue-800"
-              )}
-            >
-              <Plus size={12} /> فرعي
-            </button>
-          )}
+          {isManagementActive &&
+            !isOperational &&
+            !node.customerId &&
+            !node.supplierId &&
+            (node.level === 2 || node.level === 3) && (
+              <button
+                onClick={() => onAddSub(node)}
+                title="إضافة حساب فرعي"
+                className={cn(
+                  "flex items-center gap-1 h-8 px-3 rounded-lg text-[11px] font-black transition-all",
+                  isL1
+                    ? "bg-white/10 text-white hover:bg-white hover:text-slate-900"
+                    : "bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-800/40 border border-blue-100 dark:border-blue-800",
+                )}
+              >
+                <Plus size={12} /> فرعي
+              </button>
+            )}
 
           {/* Edit account */}
           {isManagementActive && (
@@ -351,7 +483,8 @@ function TreeNode({
               title="تعديل الحساب"
               className={cn(
                 "flex items-center justify-center h-8 w-8 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 transition-all",
-                isL1 && "bg-white/10 text-white hover:bg-white hover:text-slate-900"
+                isL1 &&
+                  "bg-white/10 text-white hover:bg-white hover:text-slate-900",
               )}
             >
               <Pencil size={12} />
@@ -366,7 +499,7 @@ function TreeNode({
                   "flex items-center gap-1 h-8 px-3 rounded-lg text-[11px] font-black transition-all",
                   isL1
                     ? "bg-white/10 text-white hover:bg-white hover:text-slate-900"
-                    : "bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700"
+                    : "bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700",
                 )}
               >
                 <BookOpen size={12} /> الدفتر
@@ -375,15 +508,18 @@ function TreeNode({
           )}
 
           {/* Delete */}
-          {node.level > 1 && !hasChildren && isManagementActive && (!node.journalItemsCount || node.journalItemsCount === 0) && (
-            <button
-              onClick={() => onDelete(node)}
-              title="حذف الحساب"
-              className="h-8 w-8 flex items-center justify-center rounded-lg bg-rose-50 dark:bg-rose-900/20 text-rose-500 hover:bg-rose-100 dark:hover:bg-rose-800/40 border border-rose-100 dark:border-rose-800 transition-all"
-            >
-              <Trash2 size={13} />
-            </button>
-          )}
+          {node.level > 1 &&
+            !hasChildren &&
+            isManagementActive &&
+            (!node.journalItemsCount || node.journalItemsCount === 0) && (
+              <button
+                onClick={() => onDelete(node)}
+                title="حذف الحساب"
+                className="h-8 w-8 flex items-center justify-center rounded-lg bg-rose-50 dark:bg-rose-900/20 text-rose-500 hover:bg-rose-100 dark:hover:bg-rose-800/40 border border-rose-100 dark:border-rose-800 transition-all"
+              >
+                <Trash2 size={13} />
+              </button>
+            )}
         </div>
       </div>
 
@@ -424,10 +560,19 @@ const ListView: React.FC<{
   onEdit: (n: AccountNode) => void;
   onDelete: (n: AccountNode) => void;
   isManagementActive: boolean;
-}> = ({ tree, searchQuery, onAddSub, onEdit, onDelete, isManagementActive }) => {
+}> = ({
+  tree,
+  searchQuery,
+  onAddSub,
+  onEdit,
+  onDelete,
+  isManagementActive,
+}) => {
   const flat = flattenTree(tree);
   const filtered = searchQuery.trim()
-    ? flat.filter((a) => a.name.includes(searchQuery) || a.code.includes(searchQuery))
+    ? flat.filter(
+        (a) => a.name.includes(searchQuery) || a.code.includes(searchQuery),
+      )
     : flat;
 
   return (
@@ -435,25 +580,46 @@ const ListView: React.FC<{
       <table className="w-full text-sm text-right">
         <thead>
           <tr className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
-            {["الكود", "اسم الحساب", "المستوى", "النوع", "الرصيد", ""].map((h) => (
-              <th key={h} className="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-400">
-                {h}
-              </th>
-            ))}
+            {["الكود", "اسم الحساب", "المستوى", "النوع", "الرصيد", ""].map(
+              (h) => (
+                <th
+                  key={h}
+                  className="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-400"
+                >
+                  {h}
+                </th>
+              ),
+            )}
           </tr>
         </thead>
         <tbody>
           {filtered.map((account) => {
-            const config = TYPE_CONFIG[account.type] ?? { label: account.type, color: "text-slate-500", bg: "bg-slate-50 dark:bg-slate-800", dot: "bg-slate-400", icon: FileText };
+            const config = TYPE_CONFIG[account.type] ?? {
+              label: account.type,
+              color: "text-slate-500",
+              bg: "bg-slate-50 dark:bg-slate-800",
+              dot: "bg-slate-400",
+              icon: FileText,
+            };
             return (
               <tr
                 key={account.id}
                 className="border-b border-slate-100 dark:border-slate-800/60 hover:bg-slate-50/80 dark:hover:bg-slate-900/50 transition-colors group"
               >
-                <td className="px-4 py-3 font-mono text-[11px] text-slate-400">{account.code}</td>
+                <td className="px-4 py-3 font-mono text-[11px] text-slate-400">
+                  {account.code}
+                </td>
                 <td className="px-4 py-3">
-                  <div className="flex items-center gap-2" style={{ paddingRight: account.depth * 20 }}>
-                    <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", config.dot)} />
+                  <div
+                    className="flex items-center gap-2"
+                    style={{ paddingRight: account.depth * 20 }}
+                  >
+                    <span
+                      className={cn(
+                        "w-1.5 h-1.5 rounded-full flex-shrink-0",
+                        config.dot,
+                      )}
+                    />
                     <span className="font-semibold text-slate-800 dark:text-slate-200 text-[13px]">
                       {account.name}
                     </span>
@@ -470,13 +636,23 @@ const ListView: React.FC<{
                   </span>
                 </td>
                 <td className="px-4 py-3">
-                  <span className={cn("text-[10px] font-black px-2 py-1 rounded-full", config.bg, config.color)}>
+                  <span
+                    className={cn(
+                      "text-[10px] font-black px-2 py-1 rounded-full",
+                      config.bg,
+                      config.color,
+                    )}
+                  >
                     {config.label}
                   </span>
                 </td>
                 <td className="px-4 py-3 font-black tabular-nums text-[13px] text-slate-800 dark:text-slate-200">
-                  {(account.balance ?? 0).toLocaleString("ar-EG", { minimumFractionDigits: 2 })}
-                  <span className="text-[10px] font-bold text-slate-400 mr-1">ج.م</span>
+                  {(account.balance ?? 0).toLocaleString("ar-EG", {
+                    minimumFractionDigits: 2,
+                  })}
+                  <span className="text-[10px] font-bold text-slate-400 mr-1">
+                    ج.م
+                  </span>
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -487,14 +663,17 @@ const ListView: React.FC<{
                         </button>
                       </Link>
                     )}
-                    {!account.isTerminal && isManagementActive && account.level < 4 && (
-                      <button
-                        onClick={() => onAddSub(account)}
-                        className="flex items-center gap-1 h-7 px-2.5 rounded-lg text-[10px] font-black bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-800/40 border border-blue-100 dark:border-blue-800 transition-all"
-                      >
-                        <Plus size={11} /> فرعي
-                      </button>
-                    )}
+                    {!account.isTerminal &&
+                      isManagementActive &&
+                      account.level < 4 &&
+                      account.code !== "120301" && (
+                        <button
+                          onClick={() => onAddSub(account)}
+                          className="flex items-center gap-1 h-7 px-2.5 rounded-lg text-[10px] font-black bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-800/40 border border-blue-100 dark:border-blue-800 transition-all"
+                        >
+                          <Plus size={11} /> فرعي
+                        </button>
+                      )}
                     {isManagementActive && (
                       <button
                         onClick={() => onEdit(account)}
@@ -503,14 +682,18 @@ const ListView: React.FC<{
                         <Pencil size={11} />
                       </button>
                     )}
-                    {account.level > 1 && !account.children?.length && isManagementActive && (!account.journalItemsCount || account.journalItemsCount === 0) && (
-                      <button
-                        onClick={() => onDelete(account)}
-                        className="h-7 w-7 flex items-center justify-center rounded-lg bg-rose-50 dark:bg-rose-900/20 text-rose-500 hover:bg-rose-100 dark:hover:bg-rose-800/40 border border-rose-100 dark:border-rose-800 transition-all"
-                      >
-                        <Trash2 size={11} />
-                      </button>
-                    )}
+                    {account.level > 1 &&
+                      !account.children?.length &&
+                      isManagementActive &&
+                      (!account.journalItemsCount ||
+                        account.journalItemsCount === 0) && (
+                        <button
+                          onClick={() => onDelete(account)}
+                          className="h-7 w-7 flex items-center justify-center rounded-lg bg-rose-50 dark:bg-rose-900/20 text-rose-500 hover:bg-rose-100 dark:hover:bg-rose-800/40 border border-rose-100 dark:border-rose-800 transition-all"
+                        >
+                          <Trash2 size={11} />
+                        </button>
+                      )}
                   </div>
                 </td>
               </tr>
@@ -561,7 +744,13 @@ function AddAccountModal({
     if (!parent) return;
     setLoading(true);
     try {
-      const result = await createSubAccount({ parentId: parent.id, code, name, nameEn, isAdminMode });
+      const result = await createSubAccount({
+        parentId: parent.id,
+        code,
+        name,
+        nameEn,
+        isAdminMode,
+      });
       if (result.success) {
         toast.success("تمت إضافة الحساب بنجاح");
         onSuccess();
@@ -587,18 +776,31 @@ function AddAccountModal({
         {/* Header */}
         <div className="p-6 border-b border-slate-100 dark:border-slate-800 bg-gradient-to-bl from-blue-50/60 to-white dark:from-slate-800/40 dark:to-slate-900">
           <div className="flex items-start gap-4">
-            <div className={cn("p-3 rounded-2xl flex-shrink-0 shadow-sm", config?.bg ?? "bg-blue-50 dark:bg-blue-900/20")}>
-              <Sparkles className={cn("w-5 h-5", config?.color ?? "text-blue-600")} />
+            <div
+              className={cn(
+                "p-3 rounded-2xl flex-shrink-0 shadow-sm",
+                config?.bg ?? "bg-blue-50 dark:bg-blue-900/20",
+              )}
+            >
+              <Sparkles
+                className={cn("w-5 h-5", config?.color ?? "text-blue-600")}
+              />
             </div>
             <div>
-              <h2 className="text-lg font-black tracking-tight text-slate-900 dark:text-white">إضافة حساب فرعي جديد</h2>
+              <h2 className="text-lg font-black tracking-tight text-slate-900 dark:text-white">
+                إضافة حساب فرعي جديد
+              </h2>
               {parent && (
                 <div className="mt-1.5 flex items-center gap-2">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">تحت حساب</span>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                    تحت حساب
+                  </span>
                   <span className="text-xs font-black text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-lg">
                     {parent.name}
                   </span>
-                  <span className="font-mono text-[10px] text-slate-400">{parent.code}</span>
+                  <span className="font-mono text-[10px] text-slate-400">
+                    {parent.code}
+                  </span>
                 </div>
               )}
             </div>
@@ -623,17 +825,22 @@ function AddAccountModal({
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">طبيعة الحساب</label>
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                طبيعة الحساب
+              </label>
               <div
                 className={cn(
                   "h-11 flex items-center px-3 rounded-xl border border-transparent font-bold text-sm flex-row-reverse gap-2",
                   config?.bg,
-                  config?.color
+                  config?.color,
                 )}
               >
                 {config?.label}
                 <span className="text-[10px] opacity-70">
-                  — {parent?.type === "ASSET" || parent?.type === "EXPENSE" ? "مدين" : "دائن"}
+                  —{" "}
+                  {parent?.type === "ASSET" || parent?.type === "EXPENSE"
+                    ? "مدين"
+                    : "دائن"}
                 </span>
               </div>
             </div>
@@ -657,7 +864,9 @@ function AddAccountModal({
           <div className="space-y-1.5">
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
               Account Name (English)
-              <span className="mr-2 text-slate-300 normal-case font-bold">اختياري</span>
+              <span className="mr-2 text-slate-300 normal-case font-bold">
+                اختياري
+              </span>
             </label>
             <Input
               value={nameEn}
@@ -682,7 +891,11 @@ function AddAccountModal({
               disabled={loading}
               className="flex-[2] h-12 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black shadow-lg shadow-blue-200 dark:shadow-none transition-all text-sm flex items-center justify-center gap-2 disabled:opacity-60"
             >
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              {loading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Save className="w-4 h-4" />
+              )}
               حفظ الحساب
             </button>
           </div>
@@ -723,7 +936,12 @@ function EditAccountModal({
     if (!account) return;
     setLoading(true);
     try {
-      const result = await updateAccount({ accountId: account.id, name, nameEn, isAdminMode });
+      const result = await updateAccount({
+        accountId: account.id,
+        name,
+        nameEn,
+        isAdminMode,
+      });
       if (result.success) {
         toast.success("تم تحديث الحساب بنجاح");
         onSuccess();
@@ -750,10 +968,14 @@ function EditAccountModal({
               <Pencil className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-black tracking-tight text-slate-900 dark:text-white">تعديل حساب</h2>
+              <h2 className="text-lg font-black tracking-tight text-slate-900 dark:text-white">
+                تعديل حساب
+              </h2>
               {account && (
                 <div className="mt-1.5 flex items-center gap-2">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">كود الحساب</span>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                    كود الحساب
+                  </span>
                   <span className="text-xs font-black text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-lg">
                     {account.code}
                   </span>
@@ -780,7 +1002,9 @@ function EditAccountModal({
           <div className="space-y-1.5">
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
               Account Name (English)
-              <span className="mr-2 text-slate-300 normal-case font-bold">اختياري</span>
+              <span className="mr-2 text-slate-300 normal-case font-bold">
+                اختياري
+              </span>
             </label>
             <Input
               value={nameEn}
@@ -804,7 +1028,11 @@ function EditAccountModal({
               disabled={loading}
               className="flex-[2] h-12 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-black shadow-lg shadow-amber-200 dark:shadow-none transition-all text-sm flex items-center justify-center gap-2 disabled:opacity-60"
             >
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              {loading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Save className="w-4 h-4" />
+              )}
               حفظ التعديلات
             </button>
           </div>
@@ -820,16 +1048,21 @@ export default function AccountTreePage() {
   const [tree, setTree] = useState<AccountNode[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedParent, setSelectedParent] = useState<AccountNode | null>(null);
+  const [selectedParent, setSelectedParent] = useState<AccountNode | null>(
+    null,
+  );
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [accountToEdit, setAccountToEdit] = useState<AccountNode | null>(null);
 
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [accountToDelete, setAccountToDelete] = useState<AccountNode | null>(null);
+  const [accountToDelete, setAccountToDelete] = useState<AccountNode | null>(
+    null,
+  );
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const { isManagementActive, toggleManagementMode, isUserAdmin } = useManagementMode();
+  const { isManagementActive, toggleManagementMode, isUserAdmin } =
+    useManagementMode();
   const [isPassGateOpen, setIsPassGateOpen] = useState(false);
 
   // "tree" = the collapsible tree, "list" = flat table, "flow" = ReactFlow diagram
@@ -844,7 +1077,9 @@ export default function AccountTreePage() {
       .finally(() => setLoading(false));
   }, []);
 
-  useEffect(() => { refreshTree(); }, [refreshTree]);
+  useEffect(() => {
+    refreshTree();
+  }, [refreshTree]);
 
   const handleAddSub = (parent: any) => {
     setSelectedParent(parent);
@@ -860,7 +1095,10 @@ export default function AccountTreePage() {
     if (!accountToDelete) return;
     setIsDeleting(true);
     try {
-      const result = await deleteAccount(accountToDelete.id, isManagementActive);
+      const result = await deleteAccount(
+        accountToDelete.id,
+        isManagementActive,
+      );
       if (result.success) {
         toast.success(`تم حذف "${accountToDelete.name}" بنجاح`);
         refreshTree();
@@ -886,8 +1124,10 @@ export default function AccountTreePage() {
     <>
       <Navbar title="دليل شجرة الحسابات" />
 
-      <div className="flex-1 p-4 md:p-8 space-y-6 bg-slate-50/30 dark:bg-transparent min-h-screen" dir="rtl">
-
+      <div
+        className="flex-1 p-4 md:p-8 space-y-6 bg-slate-50/30 dark:bg-transparent min-h-screen"
+        dir="rtl"
+      >
         {/* ── Page header ── */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
@@ -897,7 +1137,9 @@ export default function AccountTreePage() {
               </div>
               <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">
                 دليل الحسابات
-                <span className="text-slate-400 font-bold mr-2 text-base">COA</span>
+                <span className="text-slate-400 font-bold mr-2 text-base">
+                  COA
+                </span>
               </h1>
             </div>
             <p className="text-slate-500 text-sm font-medium mt-1 mr-1">
@@ -909,19 +1151,25 @@ export default function AccountTreePage() {
             {/* Management mode toggle */}
             {isUserAdmin && (
               <button
-                onClick={() => isManagementActive ? toggleManagementMode(false) : setIsPassGateOpen(true)}
+                onClick={() =>
+                  isManagementActive
+                    ? toggleManagementMode(false)
+                    : setIsPassGateOpen(true)
+                }
                 className={cn(
                   "flex items-center gap-2 h-10 px-4 rounded-xl font-black text-sm transition-all border shadow-sm",
                   isManagementActive
                     ? "bg-emerald-600 border-emerald-500 text-white shadow-emerald-200 dark:shadow-none hover:bg-emerald-700"
-                    : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+                    : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800",
                 )}
               >
                 {isManagementActive ? (
                   <>
                     <ShieldCheck size={15} />
                     وضع الإدارة
-                    <span className="text-[10px] font-bold bg-white/20 px-1.5 py-0.5 rounded-md">مفعّل</span>
+                    <span className="text-[10px] font-bold bg-white/20 px-1.5 py-0.5 rounded-md">
+                      مفعّل
+                    </span>
                   </>
                 ) : (
                   <>
@@ -942,7 +1190,10 @@ export default function AccountTreePage() {
         <div className="flex items-center gap-3">
           {/* Search */}
           <div className="relative flex-1 max-w-sm">
-            <Search size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            <Search
+              size={13}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+            />
             <input
               type="text"
               value={searchQuery}
@@ -963,7 +1214,14 @@ export default function AccountTreePage() {
           {/* Result count */}
           {searchQuery && (
             <span className="text-[11px] font-bold text-slate-500 flex-shrink-0">
-              {flattenTree(tree).filter((a) => a.name.includes(searchQuery) || a.code.includes(searchQuery)).length} نتيجة
+              {
+                flattenTree(tree).filter(
+                  (a) =>
+                    a.name.includes(searchQuery) ||
+                    a.code.includes(searchQuery),
+                ).length
+              }{" "}
+              نتيجة
             </span>
           )}
 
@@ -977,7 +1235,7 @@ export default function AccountTreePage() {
                   "flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-black transition-all",
                   viewMode === id
                     ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm"
-                    : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                    : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300",
                 )}
               >
                 {icon} {label}
@@ -1006,30 +1264,41 @@ export default function AccountTreePage() {
         <div
           className={cn(
             "bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden transition-all duration-300",
-            viewMode === "flow" ? "rounded-3xl p-3" : "rounded-3xl p-5 md:p-8"
+            viewMode === "flow" ? "rounded-3xl p-3" : "rounded-3xl p-5 md:p-8",
           )}
         >
           {loading && tree.length === 0 ? (
             <div className="py-28 flex flex-col items-center justify-center gap-4">
               <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
-              <p className="font-bold text-slate-400 text-sm">جاري تحميل شجرة الحسابات...</p>
+              <p className="font-bold text-slate-400 text-sm">
+                جاري تحميل شجرة الحسابات...
+              </p>
             </div>
           ) : tree.length === 0 ? (
             <div className="py-28 flex flex-col items-center justify-center gap-4 text-center">
               <div className="w-16 h-16 bg-slate-50 dark:bg-slate-800 rounded-3xl flex items-center justify-center">
                 <FolderTree className="w-8 h-8 text-slate-300" />
               </div>
-              <p className="font-bold text-slate-400">لم يتم إعداد شجرة الحسابات بعد</p>
+              <p className="font-bold text-slate-400">
+                لم يتم إعداد شجرة الحسابات بعد
+              </p>
             </div>
           ) : viewMode === "flow" ? (
-            <COAFlowTree data={tree} onAddSub={handleAddSub} isManagementActive={isManagementActive} />
+            <COAFlowTree
+              data={tree}
+              onAddSub={handleAddSub}
+              isManagementActive={isManagementActive}
+            />
           ) : viewMode === "list" ? (
             <ListView
               tree={tree}
               searchQuery={searchQuery}
               onAddSub={handleAddSub}
               onEdit={handleEdit}
-              onDelete={(n) => { setAccountToDelete(n); setIsDeleteDialogOpen(true); }}
+              onDelete={(n) => {
+                setAccountToDelete(n);
+                setIsDeleteDialogOpen(true);
+              }}
               isManagementActive={isManagementActive}
             />
           ) : (
@@ -1042,7 +1311,10 @@ export default function AccountTreePage() {
                   onAddSub={handleAddSub}
                   onEdit={handleEdit}
                   onRefresh={refreshTree}
-                  onDelete={(n) => { setAccountToDelete(n); setIsDeleteDialogOpen(true); }}
+                  onDelete={(n) => {
+                    setAccountToDelete(n);
+                    setIsDeleteDialogOpen(true);
+                  }}
                   isManagementActive={isManagementActive}
                   searchQuery={searchQuery}
                 />
@@ -1058,8 +1330,12 @@ export default function AccountTreePage() {
               key={type}
               className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-sm"
             >
-              <span className={cn("w-2 h-2 rounded-full flex-shrink-0", config.dot)} />
-              <span className="text-[11px] font-black text-slate-500 dark:text-slate-400">{config.label}</span>
+              <span
+                className={cn("w-2 h-2 rounded-full flex-shrink-0", config.dot)}
+              />
+              <span className="text-[11px] font-black text-slate-500 dark:text-slate-400">
+                {config.label}
+              </span>
             </div>
           ))}
         </div>
@@ -1089,7 +1365,10 @@ export default function AccountTreePage() {
       />
 
       {/* Delete confirmation */}
-      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+      <AlertDialog
+        open={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
+      >
         <AlertDialogContent
           className="sm:max-w-[420px] border-0 shadow-2xl rounded-3xl p-0 overflow-hidden bg-white dark:bg-slate-900"
           dir="rtl"
@@ -1099,19 +1378,28 @@ export default function AccountTreePage() {
               <Trash2 className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-black text-slate-900 dark:text-white">تأكيد الحذف</h3>
-              <p className="text-xs font-bold text-rose-500 mt-0.5">هذا الإجراء لا يمكن التراجع عنه</p>
+              <h3 className="font-black text-slate-900 dark:text-white">
+                تأكيد الحذف
+              </h3>
+              <p className="text-xs font-bold text-rose-500 mt-0.5">
+                هذا الإجراء لا يمكن التراجع عنه
+              </p>
             </div>
           </div>
 
           <div className="p-6 space-y-5">
             <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
-              <p className="text-base font-black text-slate-800 dark:text-slate-100">{accountToDelete?.name}</p>
-              <p className="text-xs font-mono font-bold text-slate-400 mt-1">كود: {accountToDelete?.code}</p>
+              <p className="text-base font-black text-slate-800 dark:text-slate-100">
+                {accountToDelete?.name}
+              </p>
+              <p className="text-xs font-mono font-bold text-slate-400 mt-1">
+                كود: {accountToDelete?.code}
+              </p>
             </div>
 
             <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
-              سيتم مسح هذا الحساب نهائياً من شجرة الحسابات. تأكد من عدم وجود ارتباطات قبل المتابعة.
+              سيتم مسح هذا الحساب نهائياً من شجرة الحسابات. تأكد من عدم وجود
+              ارتباطات قبل المتابعة.
             </p>
 
             <div className="grid grid-cols-2 gap-3">
@@ -1119,11 +1407,18 @@ export default function AccountTreePage() {
                 إلغاء
               </AlertDialogCancel>
               <AlertDialogAction
-                onClick={(e) => { e.preventDefault(); handleConfirmDelete(); }}
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleConfirmDelete();
+                }}
                 disabled={isDeleting}
                 className="h-12 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-black shadow-lg shadow-rose-200/50 dark:shadow-none disabled:opacity-50"
               >
-                {isDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : "تأكيد الحذف"}
+                {isDeleting ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  "تأكيد الحذف"
+                )}
               </AlertDialogAction>
             </div>
           </div>

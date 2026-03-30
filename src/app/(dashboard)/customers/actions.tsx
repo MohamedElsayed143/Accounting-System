@@ -15,22 +15,25 @@ export async function getCustomers() {
   
   const customers = await prisma.customer.findMany({
     where: isRestricted ? { category: "قطاعي" } : {},
-    include: {
-      invoices: { 
-        where: { status: { not: "pending" } },
-        select: { total: true } 
-      },
-      receiptVouchers: { select: { amount: true } },
-      salesReturns: { select: { total: true } },
-    },
     orderBy: { code: "asc" },
   });
 
+  const accountIds = customers.map((c) => c.accountId).filter(Boolean) as number[];
+  
+  const journalSums = await prisma.journalItem.groupBy({
+    by: ["accountId"],
+    _sum: { debit: true, credit: true },
+    where: { accountId: { in: accountIds } },
+  });
+
+  const balanceMap = new Map(
+    journalSums.map((s) => [
+      s.accountId,
+      (s._sum.debit || 0) - (s._sum.credit || 0), // Assets = Debit - Credit
+    ])
+  );
+
   return customers.map((customer) => {
-    const totalInvoices = customer.invoices.reduce((sum, inv) => sum + inv.total, 0);
-    const totalReceipts = customer.receiptVouchers.reduce((sum, rec) => sum + rec.amount, 0);
-    const totalReturns = customer.salesReturns.reduce((sum, ret) => sum + ret.total, 0);
-    
     return {
       id: customer.id,
       name: customer.name,
@@ -38,7 +41,7 @@ export async function getCustomers() {
       phone: customer.phone,
       address: customer.address,
       category: customer.category,
-      balance: totalInvoices - totalReceipts - totalReturns,
+      balance: customer.accountId ? (balanceMap.get(customer.accountId) || 0) : 0,
     };
   });
 }

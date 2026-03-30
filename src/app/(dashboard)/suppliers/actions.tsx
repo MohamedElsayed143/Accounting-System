@@ -8,19 +8,25 @@ import { triggerStaffActivityAlert } from "@/lib/notifications";
 // جلب كل الموردين مع أرصدتهم
 export async function getSuppliers() {
   const suppliers = await prisma.supplier.findMany({
-    include: {
-      invoices: { select: { total: true } },
-      paymentVouchers: { select: { amount: true } },
-      purchaseReturns: { select: { total: true } },
-    },
     orderBy: { code: "asc" },
   });
 
-  return suppliers.map((supplier) => {
-    const totalInvoices = supplier.invoices.reduce((sum, inv) => sum + inv.total, 0);
-    const totalPayments = supplier.paymentVouchers.reduce((sum, pay) => sum + pay.amount, 0);
-    const totalReturns = supplier.purchaseReturns.reduce((sum, ret) => sum + ret.total, 0);
+  const accountIds = suppliers.map((s) => s.accountId).filter(Boolean) as number[];
+  
+  const journalSums = await prisma.journalItem.groupBy({
+    by: ["accountId"],
+    _sum: { debit: true, credit: true },
+    where: { accountId: { in: accountIds } },
+  });
 
+  const balanceMap = new Map(
+    journalSums.map((s) => [
+      s.accountId,
+      (s._sum.credit || 0) - (s._sum.debit || 0), // Liabilities = Credit - Debit
+    ])
+  );
+
+  return suppliers.map((supplier) => {
     return {
       id: supplier.id,
       name: supplier.name,
@@ -28,7 +34,7 @@ export async function getSuppliers() {
       phone: supplier.phone,
       address: supplier.address,
       category: supplier.category,
-      balance: totalInvoices - totalPayments - totalReturns,
+      balance: supplier.accountId ? (balanceMap.get(supplier.accountId) || 0) : 0,
     };
   });
 }

@@ -177,7 +177,7 @@ function InvoiceFormStep({
                 quantity: item.quantity,
                 unitPrice: item.unitPrice,
                 sellingPrice: item.sellingPrice || 0,
-                profitMargin: item.profitMargin || 0,
+                profitMargin: item.profitMargin || item.product?.profitMargin || 0,
                 taxRate: item.taxRate,
                 discount: item.discount || 0,
                 total: item.total,
@@ -284,7 +284,7 @@ function InvoiceFormStep({
         if (field === "unitPrice") {
           // If cost changes, recalculate profit margin based on selling price
           if (Number(updated.sellingPrice) > 0) {
-            updated.profitMargin = (1 - Number(updated.unitPrice) / Number(updated.sellingPrice)) * 100;
+            updated.profitMargin = Number(((1 - Number(updated.unitPrice) / Number(updated.sellingPrice)) * 100).toFixed(2));
           }
         } else if (field === "profitMargin") {
           // If profit margin changes, recalculate purchase price (unitPrice) based on selling price
@@ -292,7 +292,7 @@ function InvoiceFormStep({
         } else if (field === "sellingPrice") {
           // If selling price changes, keep purchase price stable and recalculate profit margin
           if (Number(updated.sellingPrice) > 0) {
-            updated.profitMargin = (1 - Number(updated.unitPrice) / Number(updated.sellingPrice)) * 100;
+            updated.profitMargin = Number(((1 - Number(updated.unitPrice) / Number(updated.sellingPrice)) * 100).toFixed(2));
           }
         }
 

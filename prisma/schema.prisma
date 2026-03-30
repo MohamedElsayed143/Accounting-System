@@ -73,6 +73,7 @@ model SalesInvoiceItem {
   description String       @db.VarChar(255)
   quantity    Float
   unitPrice   Float
+  profitMargin Float       @default(0)
   taxRate     Float        @default(0)
   discount    Float        @default(0)
   total       Float

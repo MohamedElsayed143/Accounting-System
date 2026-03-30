@@ -222,8 +222,12 @@ export async function getCustomerTransactions(
     // دمج جميع المعاملات
     let allTransactions = [...invoiceTransactions, ...receiptTransactions, ...returnTransactions];
 
-    // ترتيب تنازلي حسب التاريخ (الأحدث أولاً)
-    allTransactions.sort((a, b) => b.date.getTime() - a.date.getTime());
+    // ترتيب تنازلي حسب التاريخ والوقت (الأحدث أولاً)
+    allTransactions.sort((a, b) => {
+      const dateCompare = b.date.getTime() - a.date.getTime();
+      if (dateCompare !== 0) return dateCompare;
+      return b.createdAt.getTime() - a.createdAt.getTime();
+    });
 
     // فلترة حسب النوع إذا طلب (بدون خيار "مرتجعات" في الفلتر)
     if (type && type !== 'الكل') {
@@ -340,8 +344,12 @@ export async function getSupplierTransactions(
     // دمج جميع المعاملات
     let allTransactions = [...invoiceTransactions, ...paymentTransactions, ...returnTransactions];
 
-    // ترتيب تنازلي حسب التاريخ (الأحدث أولاً)
-    allTransactions.sort((a, b) => b.date.getTime() - a.date.getTime());
+    // ترتيب تنازلي حسب التاريخ والوقت (الأحدث أولاً)
+    allTransactions.sort((a, b) => {
+      const dateCompare = b.date.getTime() - a.date.getTime();
+      if (dateCompare !== 0) return dateCompare;
+      return b.createdAt.getTime() - a.createdAt.getTime();
+    });
 
     if (type && type !== 'الكل') {
       const typeMap: Record<string, string> = {
@@ -415,46 +423,103 @@ export async function getAccountTransactions(
     const whereAccountFrom = accountType === 'safe' ? { fromSafeId: accountId } : { fromBankId: accountId };
     const whereAccountTo = accountType === 'safe' ? { toSafeId: accountId } : { toBankId: accountId };
 
+    // جلب الـ accountId الخاص بالخزنة أو البنك
+    const account =
+      accountType === "safe"
+        ? await prisma.treasurySafe.findUnique({
+            where: { id: accountId },
+            select: { accountId: true },
+          })
+        : await prisma.treasuryBank.findUnique({
+            where: { id: accountId },
+            select: { accountId: true },
+          });
+
+    const safeBankAccountId = account?.accountId || 0;
+
     // 1. حساب الرصيد الافتتاحي
     let openingBalance = 0;
     if (fromDate) {
-      const [prevReceipts, prevPayments, prevSalesReturns, prevPurchReturns, prevTransfersFrom, prevTransfersTo, prevSalesInvoices, prevPurchInvoices] = await Promise.all([
+      const [
+        prevReceipts,
+        prevPayments,
+        prevSalesReturns,
+        prevPurchReturns,
+        prevTransfersFrom,
+        prevTransfersTo,
+        prevSalesInvoices,
+        prevPurchInvoices,
+        prevManualEntries,
+      ] = await Promise.all([
         prisma.receiptVoucher.aggregate({
           where: { ...whereAccount, date: { lt: fromDate } },
-          _sum: { amount: true }
+          _sum: { amount: true },
         }),
         prisma.paymentVoucher.aggregate({
           where: { ...whereAccount, date: { lt: fromDate } },
-          _sum: { amount: true }
+          _sum: { amount: true },
         }),
         prisma.salesReturn.aggregate({
           where: { ...whereAccount, returnDate: { lt: fromDate } },
-          _sum: { total: true }
+          _sum: { total: true },
         }),
         prisma.purchaseReturn.aggregate({
           where: { ...whereAccount, returnDate: { lt: fromDate } },
-          _sum: { total: true }
+          _sum: { total: true },
         }),
         prisma.treasuryTransfer.aggregate({
           where: { ...whereAccountFrom, date: { lt: fromDate } },
-          _sum: { amount: true }
+          _sum: { amount: true },
         }),
         prisma.treasuryTransfer.aggregate({
           where: { ...whereAccountTo, date: { lt: fromDate } },
-          _sum: { amount: true }
+          _sum: { amount: true },
         }),
         prisma.salesInvoice.aggregate({
-          where: { ...whereAccount, invoiceDate: { lt: fromDate }, status: 'cash' },
-          _sum: { total: true }
+          where: {
+            ...whereAccount,
+            invoiceDate: { lt: fromDate },
+            status: "cash",
+          },
+          _sum: { total: true },
         }),
         prisma.purchaseInvoice.aggregate({
-          where: { ...whereAccount, invoiceDate: { lt: fromDate }, status: 'cash' },
-          _sum: { total: true }
+          where: {
+            ...whereAccount,
+            invoiceDate: { lt: fromDate },
+            status: "cash",
+          },
+          _sum: { total: true },
+        }),
+        prisma.journalItem.aggregate({
+          where: {
+            accountId: safeBankAccountId,
+            journalEntry: {
+              sourceType: "MANUAL",
+              date: { lt: fromDate },
+            },
+          },
+          _sum: { debit: true, credit: true },
         }),
       ]);
 
-      const totalDebit = (prevReceipts._sum.amount || 0) + (prevPurchReturns._sum.total || 0) + (prevTransfersTo._sum.amount || 0) + (prevSalesInvoices._sum.total || 0);
-      const totalCredit = (prevPayments._sum.amount || 0) + (prevSalesReturns._sum.total || 0) + (prevTransfersFrom._sum.amount || 0) + (prevPurchInvoices._sum.total || 0);
+      const totalDebitManual = prevManualEntries._sum.debit || 0;
+      const totalCreditManual = prevManualEntries._sum.credit || 0;
+
+      const totalDebit =
+        (prevReceipts._sum.amount || 0) +
+        (prevPurchReturns._sum.total || 0) +
+        (prevTransfersTo._sum.amount || 0) +
+        (prevSalesInvoices._sum.total || 0) +
+        totalDebitManual;
+
+      const totalCredit =
+        (prevPayments._sum.amount || 0) +
+        (prevSalesReturns._sum.total || 0) +
+        (prevTransfersFrom._sum.amount || 0) +
+        (prevPurchInvoices._sum.total || 0) +
+        totalCreditManual;
+
       openingBalance = totalDebit - totalCredit;
     }
 
@@ -463,148 +528,193 @@ export async function getAccountTransactions(
     const dateFilterReturn = fromDate && toDate ? { returnDate: { gte: fromDate, lte: toDate } } : {};
     const dateFilterInvoice = fromDate && toDate ? { invoiceDate: { gte: fromDate, lte: toDate } } : {};
 
-    const [receipts, payments, salesReturns, purchReturns, transfersFrom, transfersTo, salesInvoices, purchaseInvoices] = await Promise.all([
+    const [
+      receipts,
+      payments,
+      salesReturns,
+      purchReturns,
+      transfersFrom,
+      transfersTo,
+      salesInvoices,
+      purchaseInvoices,
+      manualItems,
+    ] = await Promise.all([
       prisma.receiptVoucher.findMany({
         where: { ...whereAccount, ...dateFilterVoucher },
         include: { customer: { select: { name: true } } },
-        orderBy: { date: 'asc' }
+        orderBy: { date: "asc" },
       }),
       prisma.paymentVoucher.findMany({
         where: { ...whereAccount, ...dateFilterVoucher },
         include: { supplier: { select: { name: true } } },
-        orderBy: { date: 'asc' }
+        orderBy: { date: "asc" },
       }),
       prisma.salesReturn.findMany({
         where: { ...whereAccount, ...dateFilterReturn },
         include: { customer: { select: { name: true } } },
-        orderBy: { returnDate: 'asc' }
+        orderBy: { returnDate: "asc" },
       }),
       prisma.purchaseReturn.findMany({
         where: { ...whereAccount, ...dateFilterReturn },
         include: { supplier: { select: { name: true } } },
-        orderBy: { returnDate: 'asc' }
+        orderBy: { returnDate: "asc" },
       }),
       prisma.treasuryTransfer.findMany({
         where: { ...whereAccountFrom, ...dateFilterVoucher },
         include: { toSafe: true, toBank: true },
-        orderBy: { date: 'asc' }
+        orderBy: { date: "asc" },
       }),
       prisma.treasuryTransfer.findMany({
         where: { ...whereAccountTo, ...dateFilterVoucher },
         include: { fromSafe: true, fromBank: true },
-        orderBy: { date: 'asc' }
+        orderBy: { date: "asc" },
       }),
       prisma.salesInvoice.findMany({
-        where: { ...whereAccount, ...dateFilterInvoice, status: 'cash' },
+        where: { ...whereAccount, ...dateFilterInvoice, status: "cash" },
         include: { customer: { select: { name: true } } },
-        orderBy: { invoiceDate: 'asc' }
+        orderBy: { invoiceDate: "asc" },
       }),
       prisma.purchaseInvoice.findMany({
-        where: { ...whereAccount, ...dateFilterInvoice, status: 'cash' },
+        where: { ...whereAccount, ...dateFilterInvoice, status: "cash" },
         include: { supplier: { select: { name: true } } },
-        orderBy: { invoiceDate: 'asc' }
+        orderBy: { invoiceDate: "asc" },
+      }),
+      prisma.journalItem.findMany({
+        where: {
+          accountId: safeBankAccountId,
+          journalEntry: {
+            sourceType: "MANUAL",
+            ...(fromDate && toDate
+              ? { date: { gte: fromDate, lte: toDate } }
+              : {}),
+          },
+        },
+        include: { journalEntry: true },
+        orderBy: { journalEntry: { date: "asc" } },
       }),
     ]);
 
     // جلب إعدادات الشركة للبادئات
-    const settings = await prisma.companySettings.findUnique({ where: { id: 1 } });
+    const settings = await prisma.companySettings.findUnique({
+      where: { id: 1 },
+    });
 
     // 3. تحويل المعاملات
     const mappedReceipts: TransactionType[] = receipts.map((r: any) => ({
       id: `rec-${r.id}`,
       date: r.date,
       createdAt: r.createdAt,
-      type: 'سند قبض',
+      type: "سند قبض",
       documentId: r.voucherNumber,
       description: r.description || `قبض من العميل ${r.customer.name}`,
-      paymentMethod: accountType === 'safe' ? 'نقدي' : 'بنك',
+      paymentMethod: accountType === "safe" ? "نقدي" : "بنك",
       debit: r.amount,
-      credit: 0
+      credit: 0,
     }));
 
     const mappedPayments: TransactionType[] = payments.map((p: any) => ({
       id: `pay-${p.id}`,
       date: p.date,
       createdAt: p.createdAt,
-      type: 'سند صرف',
+      type: "سند صرف",
       documentId: p.voucherNumber,
       description: p.description || `صرف للمورد ${p.supplier.name}`,
-      paymentMethod: accountType === 'safe' ? 'نقدي' : 'بنك',
+      paymentMethod: accountType === "safe" ? "نقدي" : "بنك",
       debit: 0,
-      credit: p.amount
+      credit: p.amount,
     }));
 
     const mappedSalesReturns: TransactionType[] = salesReturns.map((r: any) => ({
       id: `sret-${r.id}`,
       date: r.returnDate,
       createdAt: r.createdAt,
-      type: 'مرتجع مبيعات',
+      type: "مرتجع مبيعات",
       documentId: `SR-${String(r.returnNumber).padStart(4, "0")}`,
       description: `مرتجع مبيعات من العميل ${r.customer.name}`,
-      paymentMethod: 'نقدي',
+      paymentMethod: "نقدي",
       debit: 0,
-      credit: r.total
+      credit: r.total,
     }));
 
     const mappedPurchReturns: TransactionType[] = purchReturns.map((r: any) => ({
       id: `pret-${r.id}`,
       date: r.returnDate,
       createdAt: r.createdAt,
-      type: 'مرتجع مشتريات',
+      type: "مرتجع مشتريات",
       documentId: `PR-${String(r.returnNumber).padStart(4, "0")}`,
       description: `مرتجع مشتريات من المورد ${r.supplier.name}`,
-      paymentMethod: 'نقدي',
+      paymentMethod: "نقدي",
       debit: r.total,
-      credit: 0
+      credit: 0,
     }));
 
-    const mappedTransfersFrom: TransactionType[] = transfersFrom.map((t: any) => ({
-      id: `tr-out-${t.id}`,
-      date: t.date,
-      createdAt: t.createdAt,
-      type: 'تحويل صادر',
-      documentId: t.transferNumber,
-      description: t.description || `تحويل إلى ${t.toSafe?.name || t.toBank?.name}`,
-      paymentMethod: 'تحويل',
-      debit: 0,
-      credit: t.amount
-    }));
+    const mappedTransfersFrom: TransactionType[] = transfersFrom.map(
+      (t: any) => ({
+        id: `tr-out-${t.id}`,
+        date: t.date,
+        createdAt: t.createdAt,
+        type: "تحويل صادر",
+        documentId: t.transferNumber,
+        description: t.description || `تحويل إلى ${t.toSafe?.name || t.toBank?.name}`,
+        paymentMethod: "تحويل",
+        debit: 0,
+        credit: t.amount,
+      })
+    );
 
     const mappedTransfersTo: TransactionType[] = transfersTo.map((t: any) => ({
       id: `tr-in-${t.id}`,
       date: t.date,
       createdAt: t.createdAt,
-      type: 'تحويل وارد',
+      type: "تحويل وارد",
       documentId: t.transferNumber,
       description: t.description || `تحويل من ${t.fromSafe?.name || t.fromBank?.name}`,
-      paymentMethod: 'تحويل',
+      paymentMethod: "تحويل",
       debit: t.amount,
-      credit: 0
+      credit: 0,
     }));
 
-    const mappedSalesInvoices: TransactionType[] = salesInvoices.map((s: any) => ({
-      id: `si-${s.id}`,
-      date: s.invoiceDate,
-      createdAt: s.createdAt,
-      type: 'فاتورة مبيعات',
-      documentId: `${settings?.salesPrefix || 'INV'}-${String(s.invoiceNumber).padStart(4, "0")}`,
-      description: `فاتورة مبيعات كاش - ${s.customerName}`,
-      paymentMethod: 'نقدي',
-      debit: s.total,
-      credit: 0
-    }));
+    const mappedSalesInvoices: TransactionType[] = salesInvoices.map(
+      (s: any) => ({
+        id: `si-${s.id}`,
+        date: s.invoiceDate,
+        createdAt: s.createdAt,
+        type: "فاتورة مبيعات",
+        documentId: `${settings?.salesPrefix || "INV"}-${String(s.invoiceNumber).padStart(4, "0")}`,
+        description: `فاتورة مبيعات كاش - ${s.customerName}`,
+        paymentMethod: "نقدي",
+        debit: s.total,
+        credit: 0,
+      })
+    );
 
-    const mappedPurchaseInvoices: TransactionType[] = purchaseInvoices.map((p: any) => ({
-      id: `pi-${p.id}`,
-      date: p.invoiceDate,
-      createdAt: p.createdAt,
-      type: 'فاتورة مشتريات',
-      documentId: `${settings?.purchasePrefix || 'PUR'}-${String(p.invoiceNumber).padStart(4, "0")}`,
-      description: `فاتورة مشتريات كاش - ${p.supplierName}`,
-      paymentMethod: 'نقدي',
-      debit: 0,
-      credit: p.total
-    }));
+    const mappedPurchaseInvoices: TransactionType[] = purchaseInvoices.map(
+      (p: any) => ({
+        id: `pi-${p.id}`,
+        date: p.invoiceDate,
+        createdAt: p.createdAt,
+        type: "فاتورة مشتريات",
+        documentId: `${settings?.purchasePrefix || "PUR"}-${String(p.invoiceNumber).padStart(4, "0")}`,
+        description: `فاتورة مشتريات كاش - ${p.supplierName}`,
+        paymentMethod: "نقدي",
+        debit: 0,
+        credit: p.total,
+      })
+    );
+
+    const mappedManualEntries: TransactionType[] = manualItems.map(
+      (item: any) => ({
+        id: `manual-${item.id}`,
+        date: item.journalEntry.date,
+        createdAt: item.journalEntry.createdAt,
+        type: "قيد يدوي",
+        documentId: `JV-${item.journalEntry.entryNumber}`,
+        description: item.description || item.journalEntry.description,
+        paymentMethod: "أخرى",
+        debit: item.debit,
+        credit: item.credit,
+      })
+    );
 
     // دمج وترتيب وحساب الرصيد التراكمي
     let allTransactions = [
@@ -615,20 +725,21 @@ export async function getAccountTransactions(
       ...mappedTransfersFrom,
       ...mappedTransfersTo,
       ...mappedSalesInvoices,
-      ...mappedPurchaseInvoices
+      ...mappedPurchaseInvoices,
+      ...mappedManualEntries,
     ].sort((a, b) => {
       const dateCompare = a.date.getTime() - b.date.getTime();
       if (dateCompare !== 0) return dateCompare;
       return a.createdAt.getTime() - b.createdAt.getTime();
     });
 
-    if (filterType !== 'الكل') {
-      allTransactions = allTransactions.filter(t => t.type === filterType);
+    if (filterType !== "الكل") {
+      allTransactions = allTransactions.filter((t) => t.type === filterType);
     }
 
     let currentBalance = openingBalance;
-    allTransactions = allTransactions.map(t => {
-      currentBalance += (t.debit - t.credit);
+    allTransactions = allTransactions.map((t) => {
+      currentBalance += t.debit - t.credit;
       return { ...t, runningBalance: currentBalance };
     });
 
