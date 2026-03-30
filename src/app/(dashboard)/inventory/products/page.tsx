@@ -184,10 +184,9 @@ export default function ProductsPage() {
                   <div className="rounded-lg border overflow-hidden">
                     <Table>
                       <TableHeader>
-                        <TableRow className="bg-muted/50 hover:bg-muted/50">
-                          <TableHead className="font-bold text-center">
-                            الكود
-                          </TableHead>
+                        <TableRow className="bg-slate-50 dark:bg-slate-800/60 transition-colors">
+                          <TableHead className="w-[80px] text-center font-bold text-slate-500 uppercase">صورة</TableHead>
+                          <TableHead className="font-bold text-slate-500 uppercase">الكود</TableHead>
                           <TableHead className="font-bold text-center">
                             الاسم
                           </TableHead>
@@ -210,25 +209,30 @@ export default function ProductsPage() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {paginated.map((product, index) => (
-                          <TableRow
-                            key={product.id}
-                            className={
-                              index % 2 === 0
-                                ? "bg-muted/20 hover:bg-muted/40"
-                                : "hover:bg-muted/20"
-                            }
+                        {paginated.map((p, index) => (
+                          <TableRow 
+                            key={p.id}
+                            className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors group"
                           >
-                            <TableCell className="font-mono font-bold text-primary text-center">
-                              {product.code}
+                            <TableCell className="p-2">
+                              <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center border border-slate-200 dark:border-slate-700 overflow-hidden group-hover:scale-105 transition-transform">
+                                {(p as any).imageUrl ? (
+                                  <img src={(p as any).imageUrl} alt={p.name} className="w-full h-full object-cover" />
+                                ) : (
+                                  <Package className="w-5 h-5 text-slate-400" />
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-center font-mono text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50/30 dark:bg-blue-900/10">
+                              {p.code}
                             </TableCell>
                             <TableCell className="font-medium text-center">
-                              {product.name}
+                              {p.name}
                             </TableCell>
                             <TableCell className="text-center">
-                              {product.category ? (
+                              {p.category ? (
                                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border bg-blue-50 text-blue-700 border-blue-200">
-                                  {product.category.name}
+                                  {p.category.name}
                                 </span>
                               ) : (
                                 <span className="text-muted-foreground text-sm">
@@ -237,13 +241,13 @@ export default function ProductsPage() {
                               )}
                             </TableCell>
                             <TableCell className="text-center text-muted-foreground font-medium">
-                              {product.unit ?? "—"}
+                              {p.unit ?? "—"}
                             </TableCell>
                             <TableCell className="text-center font-bold">
-                              {product.buyPrice.toLocaleString("ar-EG")} ج.م
+                              {p.buyPrice.toLocaleString("ar-EG")} ج.م
                             </TableCell>
                             <TableCell className="text-center font-bold text-green-700">
-                              {product.sellPrice.toLocaleString("ar-EG")} ج.م
+                              {p.sellPrice.toLocaleString("ar-EG")} ج.م
                             </TableCell>
 
                             <TableCell className="text-center">
@@ -252,7 +256,7 @@ export default function ProductsPage() {
                                   <Button
                                     variant="ghost"
                                     size="icon"
-                                    onClick={() => openEdit(product)}
+                                    onClick={() => openEdit(p)}
                                     className="hover:bg-primary/10 transition-all"
                                     title="تعديل"
                                   >
@@ -263,7 +267,7 @@ export default function ProductsPage() {
                                   <Button
                                     variant="ghost"
                                     size="icon"
-                                    onClick={() => openDelete(product)}
+                                    onClick={() => openDelete(p)}
                                     className="hover:bg-destructive/10 transition-all"
                                      title="إيقاف التعامل"
                                    >

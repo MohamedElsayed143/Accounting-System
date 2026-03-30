@@ -1,18 +1,16 @@
 // app/(dashboard)/sales-quotations/create/page.tsx
 "use client";
 
-import { useState, useEffect } from "react";
+import { Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Loader2 } from "lucide-react";
 import { Navbar } from "@/components/layout/navbar";
 import { QuotationForm } from "../components/QuotationForm";
-import { getQuotationById } from "../actions";
+import { Loader2 } from "lucide-react";
 
-export default function CreateQuotationPage() {
+function CreateQuotationContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const quotationId = searchParams.get("id");
-
+  const quotationId = searchParams?.get("id");
   const title = quotationId ? "تعديل عرض سعر" : "إنشاء عرض سعر جديد";
 
   return (
@@ -26,5 +24,19 @@ export default function CreateQuotationPage() {
         />
       </div>
     </>
+  );
+}
+
+export default function CreateQuotationPage() {
+  return (
+    <Suspense 
+      fallback={
+        <div className="flex items-center justify-center min-h-[400px]">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      }
+    >
+      <CreateQuotationContent />
+    </Suspense>
   );
 }

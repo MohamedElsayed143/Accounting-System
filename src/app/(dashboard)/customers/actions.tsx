@@ -14,7 +14,7 @@ export async function getCustomers() {
   const isRestricted = await hasPermission(session.userId, "customers_retail_only");
   
   const customers = await prisma.customer.findMany({
-    where: isRestricted ? { category: "Retail" } : {},
+    where: isRestricted ? { category: "قطاعي" } : {},
     include: {
       invoices: { 
         where: { status: { not: "pending" } },

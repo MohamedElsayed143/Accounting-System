@@ -41,7 +41,7 @@ export async function getCategories(): Promise<CategoryData[]> {
   });
 }
 
-export async function createCategory(data: { name: string }) {
+export async function createCategory(data: { name: string; imageUrl?: string }) {
   const session = await getSession();
   const canManage = session ? await hasPermission(session.userId, "inventory_view") : false;
   if (!canManage) throw new Error("ليس لديك صلاحية إضافة تصنيفات");
@@ -54,7 +54,8 @@ export async function createCategory(data: { name: string }) {
     const category = await tx.category.create({
       data: { 
         name: data.name.trim(), 
-        code 
+        code,
+        imageUrl: data.imageUrl || null,
       },
     });
     
@@ -64,7 +65,7 @@ export async function createCategory(data: { name: string }) {
   });
 }
 
-export async function updateCategory(id: number, data: { name: string }) {
+export async function updateCategory(id: number, data: { name: string; imageUrl?: string }) {
   const session = await getSession();
   const canManage = session ? await hasPermission(session.userId, "inventory_view") : false;
   if (!canManage) throw new Error("ليس لديك صلاحية تعديل تصنيفات");
@@ -73,7 +74,10 @@ export async function updateCategory(id: number, data: { name: string }) {
 
   const category = await prisma.category.update({
     where: { id },
-    data: { name: data.name.trim() },
+    data: { 
+      name: data.name.trim(),
+      imageUrl: data.imageUrl || null,
+    },
   });
   revalidatePath("/inventory/categories");
   return category;

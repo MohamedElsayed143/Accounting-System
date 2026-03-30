@@ -22,6 +22,8 @@ import {
 import { getCategories } from "../../categories/actions";
 import { getNextProductCode } from "../actions";
 import { toast } from "sonner";
+import { PRODUCT_UNITS } from "@/constants/units";
+import { ImageUploader } from "@/components/shared/ImageUploader";
 
 interface Category {
   id: number;
@@ -36,6 +38,7 @@ interface ProductFormValues {
   sellPrice: string;
   categoryId: string;
   discountPercent: string; // نسبة الخصم/الربح (بالنسبة لسعر البيع)
+  imageUrl: string;
 }
 
 interface ProductFormProps {
@@ -49,6 +52,7 @@ interface ProductFormProps {
     sellPrice: number;
     profitMargin: number;
     categoryId?: number;
+    imageUrl?: string;
   }) => Promise<void>;
   initialValues?: Partial<ProductFormValues> & { id?: number };
   title: string;
@@ -62,6 +66,7 @@ const defaultValues: ProductFormValues = {
   sellPrice: "",
   categoryId: "",
   discountPercent: "",
+  imageUrl: "",
 };
 
 export function ProductForm({
@@ -192,7 +197,8 @@ export function ProductForm({
         buyPrice,
         sellPrice,
         profitMargin: parseFloat(values.discountPercent) || 0,
-        categoryId: values.categoryId ? parseInt(values.categoryId) : undefined,
+        categoryId: values.categoryId === "none" ? undefined : parseInt(values.categoryId, 10),
+        imageUrl: values.imageUrl.trim() || undefined,
       });
       onClose();
     } catch (err: unknown) {
@@ -212,6 +218,7 @@ export function ProductForm({
         sellPrice: initialValues?.sellPrice ?? "",
         categoryId: initialValues?.categoryId ?? "",
         discountPercent: "", // سيتم حسابه تلقائياً بواسطة useEffect
+        imageUrl: initialValues?.imageUrl ?? "",
       });
     }
   }, [open, initialValues]);
@@ -245,13 +252,23 @@ export function ProductForm({
             {/* وحدة القياس - إلزامية */}
             <div className="space-y-2">
               <Label htmlFor="unit">وحدة القياس *</Label>
-              <Input
-                id="unit"
-                placeholder="مثال: كيلو، قطعة"
+              <Select
                 value={values.unit}
-                onChange={setField("unit")}
-                required
-              />
+                onValueChange={(v) =>
+                  setValues((prev) => ({ ...prev, unit: v }))
+                }
+              >
+                <SelectTrigger id="unit" className="bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 font-bold focus:ring-blue-500">
+                  <SelectValue placeholder="اختر وحدة القياس" />
+                </SelectTrigger>
+                <SelectContent dir="rtl">
+                  {PRODUCT_UNITS.map((unit) => (
+                    <SelectItem key={unit} value={unit}>
+                      {unit}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             {/* اسم الصنف - إلزامي */}
@@ -335,6 +352,16 @@ export function ProductForm({
                 onChange={handleSellPriceChange}
                 dir="ltr"
                 required
+              />
+            </div>
+
+            {/* صورة المنتج */}
+            <div className="col-span-2 mt-2">
+              <ImageUploader
+                label="صورة المنتج"
+                value={values.imageUrl}
+                onChange={(base64: string) => setValues((prev) => ({ ...prev, imageUrl: base64 }))}
+                hint="اختر صورة واضحة للمنتج (يفضل أن تكون مربعة)"
               />
             </div>
           </div>

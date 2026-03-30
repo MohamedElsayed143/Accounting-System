@@ -296,7 +296,7 @@ export async function createSubAccount(data: {
               name: newAccount.name,
               code: numericCode,
               accountId: newAccount.id,
-              category: "Retail"
+              category: "قطاعي"
             }
           });
         } else if (parentCode === '2101') { // Suppliers

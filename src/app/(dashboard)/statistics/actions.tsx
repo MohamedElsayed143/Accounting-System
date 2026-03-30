@@ -192,23 +192,21 @@ export async function getTopCustomers(
         ? { invoiceDate: { gte: fromDate, lte: toDate } }
         : {};
 
-    const invoices = await prisma.salesInvoice.findMany({
+    const topCustomers = await prisma.salesInvoice.groupBy({
+      by: ["customerId", "customerName"],
       where: { status: { in: ["cash", "credit"] }, ...dateFilter },
-      select: { customerId: true, customerName: true, total: true },
+      _sum: { total: true },
+      _count: true,
+      orderBy: { _sum: { total: "desc" } },
+      take: limit,
     });
 
-    const map = new Map<number, { name: string; total: number; count: number }>();
-    invoices.forEach((inv) => {
-      const existing = map.get(inv.customerId) ?? { name: inv.customerName, total: 0, count: 0 };
-      existing.total += inv.total;
-      existing.count += 1;
-      map.set(inv.customerId, existing);
-    });
-
-    return Array.from(map.entries())
-      .map(([id, data]) => ({ id, ...data }))
-      .sort((a, b) => b.total - a.total)
-      .slice(0, limit);
+    return topCustomers.map((c) => ({
+      id: c.customerId,
+      name: c.customerName,
+      total: c._sum.total ?? 0,
+      count: c._count,
+    }));
   } catch (error) {
     console.error("getTopCustomers error:", error);
     return [];
@@ -227,23 +225,21 @@ export async function getTopSuppliers(
         ? { invoiceDate: { gte: fromDate, lte: toDate } }
         : {};
 
-    const invoices = await prisma.purchaseInvoice.findMany({
+    const topSuppliers = await prisma.purchaseInvoice.groupBy({
+      by: ["supplierId", "supplierName"],
       where: { status: { in: ["cash", "credit"] }, ...dateFilter },
-      select: { supplierId: true, supplierName: true, total: true },
+      _sum: { total: true },
+      _count: true,
+      orderBy: { _sum: { total: "desc" } },
+      take: limit,
     });
 
-    const map = new Map<number, { name: string; total: number; count: number }>();
-    invoices.forEach((inv) => {
-      const existing = map.get(inv.supplierId) ?? { name: inv.supplierName, total: 0, count: 0 };
-      existing.total += inv.total;
-      existing.count += 1;
-      map.set(inv.supplierId, existing);
-    });
-
-    return Array.from(map.entries())
-      .map(([id, data]) => ({ id, ...data }))
-      .sort((a, b) => b.total - a.total)
-      .slice(0, limit);
+    return topSuppliers.map((s) => ({
+      id: s.supplierId,
+      name: s.supplierName,
+      total: s._sum.total ?? 0,
+      count: s._count,
+    }));
   } catch (error) {
     console.error("getTopSuppliers error:", error);
     return [];

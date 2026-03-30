@@ -70,7 +70,7 @@ export async function hasPermission(userId: number, key: PermissionKey): Promise
 export async function getCustomerFilter(userId: number) {
   const isRestricted = await hasPermission(userId, "customers_retail_only");
   if (isRestricted) {
-    return { category: "Retail" };
+    return { category: "قطاعي" };
   }
   return {};
 }

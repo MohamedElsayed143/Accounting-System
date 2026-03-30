@@ -131,7 +131,7 @@ export default function CustomersPage() {
       name: "",
       phone: "",
       address: "",
-      category: "Retail", // Default to Retail as requested
+      category: "قطاعي", // Default to Retail as requested
     });
     setCodeError("");
     setIsModalOpen(true);
@@ -255,8 +255,8 @@ export default function CustomersPage() {
             </p>
           </div>
 
-          {isUserAdmin && (
-            <div className="flex gap-2 items-center">
+          <div className="flex gap-2 items-center">
+            {isUserAdmin && (
               <Button
                 variant={isManagementActive ? "destructive" : "outline"}
                 onClick={() => {
@@ -281,18 +281,16 @@ export default function CustomersPage() {
                   </>
                 )}
               </Button>
+            )}
 
-              {isManagementActive && hasPermission("customers_manage") && (
-                <Button 
-                  onClick={openCreateModal} 
-                  className="gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-lg hover:shadow-xl transition-all duration-200"
-                >
-                  <UserPlus className="h-4 w-4" />
-                  إضافة عميل جديد
-                </Button>
-              )}
-            </div>
-          )}
+            <Button 
+              onClick={openCreateModal} 
+              className="gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-lg hover:shadow-xl transition-all duration-200"
+            >
+              <UserPlus className="h-4 w-4" />
+              إضافة عميل جديد
+            </Button>
+          </div>
         </div>
 
         <Card className="border-none shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm">
@@ -542,7 +540,7 @@ export default function CustomersPage() {
               <div className="space-y-2">
                 <Label htmlFor="category" className="flex items-center gap-2 text-sm font-medium">
                   <Package className="h-4 w-4 text-slate-600" />
-                  تصنيف العميل (مثال: Retail)
+                  تصنيف العميل (مثال: قطاعي)
                 </Label>
                 <Input
                   id="category"
@@ -550,11 +548,11 @@ export default function CustomersPage() {
                   onChange={(e) =>
                     setFormData((p) => ({ ...p, category: e.target.value }))
                   }
-                  placeholder="أدخل التصنيف (مثال: Retail)"
+                  placeholder="أدخل التصنيف (مثال: قطاعي)"
                   className="focus:ring-2 focus:ring-slate-500"
                 />
                 <p className="text-[10px] text-muted-foreground font-medium pr-1">
-                  💡 استخدم "Retail" لظهور العميل للموظفين
+                  💡 استخدم "قطاعي" لظهور العميل للموظفين
                 </p>
               </div>
             </div>

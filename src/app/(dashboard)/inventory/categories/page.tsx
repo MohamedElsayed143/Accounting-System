@@ -34,6 +34,7 @@ import {
   type CategoryData,
 } from "./actions";
 import { usePermissions } from "@/hooks/use-permissions";
+import { ImageUploader } from "@/components/shared/ImageUploader";
 
 const ITEMS_PER_PAGE = 10;
 
@@ -48,6 +49,7 @@ export default function CategoriesPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<CategoryData | null>(null);
   const [formName, setFormName] = useState("");
+  const [formImageUrl, setFormImageUrl] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   // Delete state
@@ -80,12 +82,14 @@ export default function CategoriesPage() {
   const openCreate = () => {
     setEditingCategory(null);
     setFormName("");
+    setFormImageUrl("");
     setFormOpen(true);
   };
 
   const openEdit = (c: CategoryData) => {
     setEditingCategory(c);
     setFormName(c.name);
+    setFormImageUrl(c.imageUrl || "");
     setFormOpen(true);
   };
 
@@ -101,10 +105,16 @@ export default function CategoriesPage() {
     setSubmitting(true);
     try {
       if (editingCategory) {
-        await updateCategory(editingCategory.id, { name: formName });
+        await updateCategory(editingCategory.id, { 
+          name: formName, 
+          imageUrl: formImageUrl 
+        });
         toast.success("تم تحديث التصنيف بنجاح");
       } else {
-        await createCategory({ name: formName });
+        await createCategory({ 
+          name: formName, 
+          imageUrl: formImageUrl 
+        });
         toast.success("تم إضافة التصنيف بنجاح");
       }
       setFormOpen(false);
@@ -179,6 +189,7 @@ export default function CategoriesPage() {
                       <TableHeader>
                         <TableRow className="bg-muted/50 hover:bg-muted/50">
                           <TableHead className="font-bold text-center">الكود</TableHead>
+                          <TableHead className="font-bold text-center">الصورة</TableHead>
                           <TableHead className="font-bold text-center">الاسم</TableHead>
                           <TableHead className="font-bold text-center">عدد الأصناف</TableHead>
                           <TableHead className="font-bold text-center">تاريخ الإنشاء</TableHead>
@@ -197,6 +208,21 @@ export default function CategoriesPage() {
                           >
                             <TableCell className="font-mono text-primary text-center font-bold">
                               {cat.code ?? "—"}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <div className="flex justify-center">
+                                {cat.imageUrl ? (
+                                  <img
+                                    src={cat.imageUrl}
+                                    alt={cat.name}
+                                    className="w-10 h-10 rounded-lg object-cover border border-slate-200 shadow-sm transition-transform hover:scale-110"
+                                  />
+                                ) : (
+                                  <div className="w-10 h-10 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 border border-slate-200 dark:border-slate-700">
+                                    <Tags size={18} />
+                                  </div>
+                                )}
+                              </div>
                             </TableCell>
                             <TableCell className="font-medium text-center">{cat.name}</TableCell>
                             <TableCell className="text-center">
@@ -280,6 +306,17 @@ export default function CategoriesPage() {
                   placeholder="مثال: إلكترونيات"
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
+                  className="font-bold"
+                />
+              </div>
+
+              <div className="space-y-4">
+                <ImageUploader
+                  label="صورة التصنيف"
+                  value={formImageUrl}
+                  onChange={(base64: string) => setFormImageUrl(base64)}
+                  compact
+                  hint="اختر أيقونة أو صورة تمثل التصنيف"
                 />
               </div>
             </div>

@@ -84,6 +84,7 @@ export async function createProduct(data: {
   profitMargin: number;
   taxRate: number;
   categoryId?: number;
+  imageUrl?: string;
 }) {
   const session = await getSession();
   if (!session) throw new Error("Unauthorized");
@@ -114,6 +115,7 @@ export async function createProduct(data: {
         taxRate: data.taxRate,
         minStock: 0,
         categoryId: data.categoryId || null,
+        imageUrl: data.imageUrl || null,
         isActive: true,
       },
     });
@@ -133,6 +135,7 @@ export async function updateProduct(
     profitMargin: number;
     taxRate: number;
     categoryId?: number;
+    imageUrl?: string;
   }
 ) {
   const session = await getSession();
@@ -156,6 +159,7 @@ export async function updateProduct(
       profitMargin: data.profitMargin,
       taxRate: data.taxRate,
       categoryId: data.categoryId || null,
+      imageUrl: data.imageUrl || null,
     },
   });
   revalidatePath("/inventory/products");

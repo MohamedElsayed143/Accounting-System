@@ -318,16 +318,18 @@ function TreeNode({
           </p>
         </div>
 
-        {/* Actions — reveal on hover */}
+        {/* Actions */}
         <div
           className={cn(
             "flex-shrink-0 flex items-center gap-1.5 transition-all duration-200",
-            "opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto"
+            isManagementActive 
+              ? "opacity-100" 
+              : "opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto"
           )}
           onClick={(e) => e.stopPropagation()}
         >
-          {/* Add sub-account - Level 3 + L2 Equity */}
-          {isManagementActive && !isOperational && !node.customerId && !node.supplierId && (node.level === 3 || (node.level === 2 && node.type === 'EQUITY')) && (
+          {/* Add sub-account - Level 2, 3 */}
+          {isManagementActive && !isOperational && !node.customerId && !node.supplierId && (node.level === 2 || node.level === 3) && (
             <button
               onClick={() => onAddSub(node)}
               title="إضافة حساب فرعي"

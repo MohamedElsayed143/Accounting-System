@@ -253,8 +253,8 @@ export default function SuppliersPage() {
             </p>
           </div>
 
-          {isUserAdmin && (
-            <div className="flex gap-2 items-center">
+          <div className="flex gap-2 items-center">
+            {isUserAdmin && (
               <Button
                 variant={isManagementActive ? "destructive" : "outline"}
                 onClick={() => {
@@ -279,18 +279,16 @@ export default function SuppliersPage() {
                   </>
                 )}
               </Button>
+            )}
 
-              {isManagementActive && (
-                <Button
-                  onClick={openCreateModal}
-                  className="gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-lg hover:shadow-xl transition-all duration-200"
-                >
-                  <PackagePlus className="h-4 w-4" />
-                  إضافة مورد جديد
-                </Button>
-              )}
-            </div>
-          )}
+            <Button
+              onClick={openCreateModal}
+              className="gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-lg hover:shadow-xl transition-all duration-200"
+            >
+              <PackagePlus className="h-4 w-4" />
+              إضافة مورد جديد
+            </Button>
+          </div>
         </div>
 
         <Card className="border-none shadow-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm">

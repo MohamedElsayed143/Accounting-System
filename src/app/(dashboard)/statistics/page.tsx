@@ -32,6 +32,7 @@ import {
 import { getCompanySettingsAction } from "../settings/actions";
 import { Navbar } from "@/components/layout/navbar";
 import { getAuthSession } from "@/app/login/actions";
+import { cn } from "@/lib/utils";
 
 // ─────────────────────────────────────────────
 // Types
@@ -210,10 +211,15 @@ function DonutChart({ slices, companySettings }: { slices: PaymentSlice[]; compa
 }
 
 // ─────────────────────────────────────────────
-// Loading skeleton
+// Loading skeleton (Premium)
 // ─────────────────────────────────────────────
 const Skeleton = ({ className = "" }: { className?: string }) => (
-  <div className={`animate-pulse rounded bg-slate-200 dark:bg-slate-800 ${className}`} />
+  <div 
+    className={cn(
+      "animate-pulse bg-gradient-to-r from-slate-200 via-slate-100 to-slate-200 dark:from-slate-800 dark:via-slate-700 dark:to-slate-800 bg-[length:200%_100%] rounded-xl",
+      className
+    )} 
+  />
 );
 
 // ─────────────────────────────────────────────
