@@ -251,7 +251,7 @@ export async function createPurchaseInvoice(data: {
 
         const product = await tx.product.findUnique({
           where: { id: item.productId },
-          select: { currentStock: true, buyPrice: true },
+          select: { currentStock: true, buyPrice: true, minStock: true, name: true },
         });
         const currentStock = product?.currentStock ?? 0;
         const currentBuyPrice = product?.buyPrice ?? 0;
@@ -271,19 +271,27 @@ export async function createPurchaseInvoice(data: {
             movementType: "PURCHASE",
             quantity: item.quantity,
             unitPrice: item.unitPrice,
-            reference: `فاتورة شراء مؤكدة #${invoice.invoiceNumber}`,
+            reference: `فاتورة شراء #${invoice.invoiceNumber}`,
             purchaseInvoiceId: invoice.id,
           },
         });
 
-        await tx.product.update({
+        const updatedProduct = await tx.product.update({
           where: { id: item.productId },
           data: {
             currentStock: { increment: item.quantity },
             buyPrice: weightedCost,
             sellPrice: item.sellingPrice,
             profitMargin: item.profitMargin,
+            taxRate: item.taxRate,
           },
+        });
+
+        pendingAlerts.push({
+          type: "stock",
+          name: updatedProduct.name,
+          value: updatedProduct.currentStock,
+          limit: updatedProduct.minStock,
         });
       }
     }
@@ -417,39 +425,7 @@ export async function createPurchaseInvoice(data: {
       }
     }
 
-    // 4. إنشاء حركات مخزون وتحديث الرصيد الحالي وتحديث أسعار المنتج (فقط إذا لم تكن معلقة)
-    if (data.status !== "pending") {
-      for (const item of data.items) {
-        await tx.stockMovement.create({
-          data: {
-            productId: item.productId,
-            movementType: "PURCHASE",
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            reference: `فاتورة شراء #${data.invoiceNumber}`,
-            purchaseInvoiceId: invoice.id,
-          },
-        });
 
-        // تحديث الرصيد في بطاقة الصنف وتحديث الأسعار
-        const updatedProduct = await tx.product.update({
-          where: { id: item.productId },
-          data: {
-            currentStock: { increment: item.quantity },
-            buyPrice: item.unitPrice,
-            sellPrice: item.sellingPrice,
-            profitMargin: item.profitMargin,
-            taxRate: item.taxRate,
-          },
-        });
-        pendingAlerts.push({
-          type: "stock",
-          name: updatedProduct.name,
-          value: updatedProduct.currentStock,
-          limit: updatedProduct.minStock,
-        });
-      }
-    }
 
     revalidatePath("/purchase-invoices");
     revalidatePath("/inventory/stock");

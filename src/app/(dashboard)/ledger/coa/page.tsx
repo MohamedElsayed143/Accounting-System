@@ -285,7 +285,7 @@ function TreeNode({
     dot: "bg-slate-400",
     label: node.type,
   };
-  const isSystemAccount = ["4101", "5101", "3101", "501"].includes(node.code);
+
   const isOperational = !!node.treasurySafe || !!node.treasuryBank;
   if (node.treasurySafe) config = TYPE_CONFIG.SAFE;
   else if (node.treasuryBank) config = TYPE_CONFIG.BANK;
@@ -393,11 +393,7 @@ function TreeNode({
               {node.nameEn}
             </span>
           )}
-          {isSystemAccount && (
-            <span className="flex-shrink-0 text-[9px] font-black px-1.5 py-0.5 rounded bg-amber-400 text-slate-900 uppercase tracking-tight">
-              نظامي
-            </span>
-          )}
+
           {node.isTerminal && (
             <span className="flex-shrink-0 flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -492,7 +488,7 @@ function TreeNode({
           )}
 
           {/* View ledger */}
-          {node.isTerminal && (
+          {(node.isTerminal || node.level === 4) && (
             <Link href={`/ledger?accountId=${node.id}`}>
               <button
                 className={cn(
@@ -508,7 +504,7 @@ function TreeNode({
           )}
 
           {/* Delete */}
-          {node.level > 1 &&
+          {node.level === 4 &&
             !hasChildren &&
             isManagementActive &&
             (!node.journalItemsCount || node.journalItemsCount === 0) && (
@@ -656,7 +652,7 @@ const ListView: React.FC<{
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                    {account.isTerminal && (
+                    {(account.isTerminal || account.level === 4) && (
                       <Link href={`/ledger?accountId=${account.id}`}>
                         <button className="flex items-center gap-1 h-7 px-2.5 rounded-lg text-[10px] font-black bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 transition-all">
                           <BookOpen size={11} /> الدفتر
@@ -682,7 +678,7 @@ const ListView: React.FC<{
                         <Pencil size={11} />
                       </button>
                     )}
-                    {account.level > 1 &&
+                    {account.level === 4 &&
                       !account.children?.length &&
                       isManagementActive &&
                       (!account.journalItemsCount ||

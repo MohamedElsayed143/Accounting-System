@@ -282,17 +282,17 @@ function InvoiceFormStep({
 
         // Dynamic Pricing Linkage logic
         if (field === "unitPrice") {
-          // If cost changes, recalculate profit margin based on selling price
-          if (Number(updated.sellingPrice) > 0) {
-            updated.profitMargin = Number(((1 - Number(updated.unitPrice) / Number(updated.sellingPrice)) * 100).toFixed(2));
+          // If cost changes, keep selling price as is, and update profit margin.
+          if (Number(updated.unitPrice) > 0) {
+            updated.profitMargin = Number((((Number(updated.sellingPrice) - Number(updated.unitPrice)) / Number(updated.unitPrice)) * 100).toFixed(2));
           }
         } else if (field === "profitMargin") {
-          // If profit margin changes, recalculate purchase price (unitPrice) based on selling price
-          updated.unitPrice = Number(updated.sellingPrice) * (1 - Number(updated.profitMargin) / 100);
+          // If profit margin (markup %) changes, recalculate sellingPrice based on unitPrice
+          updated.sellingPrice = Number((Number(updated.unitPrice) * (1 + Number(updated.profitMargin) / 100)).toFixed(2));
         } else if (field === "sellingPrice") {
-          // If selling price changes, keep purchase price stable and recalculate profit margin
-          if (Number(updated.sellingPrice) > 0) {
-            updated.profitMargin = Number(((1 - Number(updated.unitPrice) / Number(updated.sellingPrice)) * 100).toFixed(2));
+          // If selling price changes, recalculate profit margin
+          if (Number(updated.unitPrice) > 0) {
+            updated.profitMargin = Number((((Number(updated.sellingPrice) - Number(updated.unitPrice)) / Number(updated.unitPrice)) * 100).toFixed(2));
           }
         }
 

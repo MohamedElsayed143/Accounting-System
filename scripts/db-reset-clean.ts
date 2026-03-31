@@ -1,47 +1,67 @@
 import { PrismaClient } from '@prisma/client';
-import { execSync } from 'child_process';
 
 const prisma = new PrismaClient();
 
-async function main() {
-  console.log('🚀 Starting complete database reset...');
+async function resetDatabase() {
+  console.log('⏳ جاري فرمتة وإعادة ضبط قاعدة البيانات...');
 
   try {
-    // 1. Get all table names from the public schema (excluding Prisma migrations)
-    const tables: { tablename: string }[] = await prisma.$queryRaw`
-      SELECT tablename 
-      FROM pg_tables 
-      WHERE schemaname = 'public' 
-      AND tablename NOT LIKE '_prisma_migrations';
-    `;
+    // استخدام transaction لضمان نجاح جميع العمليات معاً
+    await prisma.$transaction(async (tx) => {
+      // 1. استخدام $executeRawUnsafe لعمل TRUNCATE لجميع الحركات والكيانات
+      // هذه الخطوة ستمسح أيضا جميع الجداول الفرعية مثل (Items و Details) بسبب CASCADE
+      console.log('🧹 جاري تفريغ الجداول (الفواتير، القيود، الأصناف، الموردين، العملاء)...');
+      await tx.$executeRawUnsafe(`
+        TRUNCATE TABLE 
+          "Customer", 
+          "Supplier", 
+          "Product", 
+          "JournalEntry", 
+          "SalesInvoice", 
+          "PurchaseInvoice", 
+          "SalesReturn", 
+          "PurchaseReturn", 
+          "Quotation", 
+          "ReceiptVoucher", 
+          "PaymentVoucher", 
+          "TreasuryTransfer", 
+          "TreasuryActionRequest",
+          "TreasuryBank"
+        RESTART IDENTITY CASCADE;
+      `);
 
-    if (tables.length === 0) {
-      console.log('⚠️ No tables found to truncate.');
-    } else {
-      const tableNames = tables.map(t => `"${t.tablename}"`).join(', ');
-      console.log(`🧹 Truncating tables: ${tableNames}`);
+      // 1.2 مسح كل الخزائن باستثناء الخزينة الرئيسية
+      console.log('🧹 جاري مسح الخزائن الفرعية والبنوك...');
+      await tx.$executeRawUnsafe(`
+        DELETE FROM "TreasurySafe" WHERE "isPrimary" = false AND id != 1;
+      `);
 
-      // 2. Truncate all tables and restart identity (resets sequences)
-      await prisma.$executeRawUnsafe(`TRUNCATE TABLE ${tableNames} RESTART IDENTITY CASCADE;`);
-      console.log('✅ All tables truncated and sequences reset.');
-    }
+      // 1.5 حذف الحسابات الطرفية (المستوى الرابع فما فوق) التي أنشأها المستخدم
+      // مع استثناء الحسابات الأساسية الافتراضية (الخزينة الرئيسية، المخزون، مشتريات المخزن الرئيسي، العجز والتالف)
+      // واستثناء حساب الخزائن المتبقية
+      console.log('🧹 جاري مسح الحسابات الطرفية للمستخدم (مع الاحتفاظ بحسابات المخزون والخزينة الرئيسية)...');
+      await tx.$executeRawUnsafe(`
+        DELETE FROM "Account" 
+        WHERE level >= 4
+          AND code NOT IN ('120101', '120301', '610401', '620401')
+          AND id NOT IN (SELECT "accountId" FROM "TreasurySafe" WHERE "accountId" IS NOT NULL);
+      `);
 
-    // 3. Run seed scripts
-    console.log('🌱 Re-running seed scripts...');
-    
-    console.log('📦 Running main seed...');
-    execSync('npx tsx prisma/seed.ts', { stdio: 'inherit' });
-    
-    console.log('🌳 Running COA seed...');
-    execSync('npx tsx prisma/seed_coa.ts', { stdio: 'inherit' });
+      // 2. تصفير رصيد الخزينة الرئيسية (وعدم لمس البنوك لأنها اتمسحت)
+      console.log('🔄 جاري تصفير أرصدة الخزينة الرئيسية...');
+      await tx.treasurySafe.updateMany({
+        data: { balance: 0 },
+      });
 
-    console.log('✨ Database reset and seeding completed successfully!');
+      console.log('✅ تم إعادة ضبط قاعدة البيانات بالكامل مع الحفاظ على الهيكل المطلوب للسنوات القادمة.');
+    });
+
+    console.log('🎉 اكتملت عملية الإعادة (Reset) بنجاح!');
   } catch (error) {
-    console.error('❌ Error during database reset:', error);
-    process.exit(1);
+    console.error('❌ حدث خطأ أثناء تنفيذ الإعدادات:', error);
   } finally {
     await prisma.$disconnect();
   }
 }
 
-main();
+resetDatabase();
