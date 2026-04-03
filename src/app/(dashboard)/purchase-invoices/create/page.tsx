@@ -401,6 +401,15 @@ function InvoiceFormStep({
     if (grandTotal <= 0 && items.length > 0) return toast.error("إجمالي الفاتورة يجب أن يكون أكبر من صفر");
     if (items.length === 0) return toast.error("لا يمكن حفظ فاتورة فارغة");
 
+    if ((paymentType === "credit" || paymentType === "pending") && dueDate) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const selectedDueDate = new Date(dueDate);
+      if (selectedDueDate < today) {
+        return toast.error("تاريخ الاستحقاق لا يمكن أن يكون في الماضي");
+      }
+    }
+
     try {
       setSaving(true);
       const invoiceData = {

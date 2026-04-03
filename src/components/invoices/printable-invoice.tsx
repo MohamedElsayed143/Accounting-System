@@ -172,13 +172,21 @@ export const PrintableInvoice = React.forwardRef<HTMLDivElement, PrintableInvoic
             </div>
 
             <div className="flex flex-col items-end justify-center space-y-3">
-               <div className="flex items-center gap-3">
-                  <span className="text-sm font-black text-slate-400">حالة الدفع:</span>
-                  <span className={`px-6 py-1 rounded-full text-sm font-black border-2 ${paymentStatus === "cash" ? "bg-green-50 border-green-500 text-green-700" : "bg-orange-50 border-orange-500 text-orange-700"}`}>
-                    {paymentStatus === "cash" ? "نقدي" : "آجل"}
-                  </span>
-               </div>
-               {paymentStatus === "credit" && dueDate && (
+                {!isQuotation && (
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-black text-slate-400">حالة الدفع:</span>
+                    <span className={`px-6 py-1 rounded-full text-sm font-black border-2 ${
+                      paymentStatus === "cash" 
+                        ? "bg-green-50 border-green-500 text-green-700" 
+                        : paymentStatus === "pending"
+                        ? "bg-amber-50 border-amber-500 text-amber-700"
+                        : "bg-orange-50 border-orange-500 text-orange-700"
+                    }`}>
+                      {paymentStatus === "cash" ? "نقدي" : paymentStatus === "pending" ? "معلقة" : "آجل"}
+                    </span>
+                  </div>
+                )}
+               {(paymentStatus === "credit" || paymentStatus === "pending") && dueDate && (
                 <div className="bg-red-600 text-white px-4 py-2 rounded-lg shadow-md text-center min-w-[180px]">
                   <span className="text-[10px] block font-bold opacity-80 uppercase">تاريخ الاستحقاق</span>
                   <span className="text-lg font-black">{format(new Date(dueDate), "yyyy/MM/dd")}</span>

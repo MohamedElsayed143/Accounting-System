@@ -613,6 +613,16 @@ function InvoiceFormStep({
       return;
     }
 
+    if ((paymentType === "credit" || paymentType === "pending") && dueDate) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const selectedDueDate = new Date(dueDate);
+      if (selectedDueDate < today) {
+        toast.error("تاريخ الاستحقاق لا يمكن أن يكون في الماضي");
+        return;
+      }
+    }
+
     const invoiceData = {
       invoiceNumber,
       customerId: customer.id,

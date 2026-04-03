@@ -171,6 +171,16 @@ export async function createPurchaseInvoice(data: {
     throw new Error("يجب تحديد جهة الصرف (الخزنة أو البنك) للفواتير النقدية");
   }
 
+  // التحقق من تاريخ الاستحقاق (يجب ألا يكون في الماضي للفواتير الآجلة)
+  if ((data.status === "credit" || data.status === "pending") && data.dueDate) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const selectedDueDate = new Date(data.dueDate);
+    if (selectedDueDate < today) {
+      throw new Error("تاريخ الاستحقاق لا يمكن أن يكون في الماضي");
+    }
+  }
+
   const pendingAlerts: {
     type: "treasury" | "stock";
     name: string;
@@ -503,6 +513,16 @@ export async function updatePurchaseInvoice(
   if (!data.supplierId) throw new Error("يجب اختيار المورد أولاً");
   if (data.status === "cash" && !data.safeId && !data.bankId) {
     throw new Error("يجب تحديد جهة الصرف (الخزنة أو البنك) للفواتير النقدية");
+  }
+
+  // التحقق من تاريخ الاستحقاق (يجب ألا يكون في الماضي للفواتير الآجلة)
+  if ((data.status === "credit" || data.status === "pending") && data.dueDate) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const selectedDueDate = new Date(data.dueDate);
+    if (selectedDueDate < today) {
+      throw new Error("تاريخ الاستحقاق لا يمكن أن يكون في الماضي");
+    }
   }
 
   const result = await (prisma as any).$transaction(async (tx: any) => {

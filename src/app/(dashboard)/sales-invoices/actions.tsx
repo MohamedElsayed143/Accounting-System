@@ -168,6 +168,16 @@ export async function createSalesInvoice(data: {
     throw new Error("يجب تحديد جهة الدفع (الخزنة أو البنك) للفواتير النقدية");
   }
 
+  // التحقق من تاريخ الاستحقاق (يجب ألا يكون في الماضي للفواتير الآجلة)
+  if ((data.status === "credit" || data.status === "pending") && data.dueDate) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const selectedDueDate = new Date(data.dueDate);
+    if (selectedDueDate < today) {
+      throw new Error("تاريخ الاستحقاق لا يمكن أن يكون في الماضي");
+    }
+  }
+
   // جلب الإعدادات مرة واحدة خارج المعاملة
   const settings = await getSystemSettings();
   const allowNegativeStock = settings?.inventory?.allowNegativeStock ?? false;
@@ -599,6 +609,16 @@ export async function updateSalesInvoice(
 
   const canEdit = await hasPermission(session.userId, "sales_edit");
   if (!canEdit) throw new Error("ليس لديك صلاحية تعديل فواتير");
+
+  // التحقق من تاريخ الاستحقاق (يجب ألا يكون في الماضي للفواتير الآجلة)
+  if ((data.status === "credit" || data.status === "pending") && data.dueDate) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const selectedDueDate = new Date(data.dueDate);
+    if (selectedDueDate < today) {
+      throw new Error("تاريخ الاستحقاق لا يمكن أن يكون في الماضي");
+    }
+  }
 
   if (!data.customerId) throw new Error("يجب اختيار العميل أولاً");
   if (data.items.length === 0) throw new Error("لا يمكن حفظ فاتورة فارغة");
