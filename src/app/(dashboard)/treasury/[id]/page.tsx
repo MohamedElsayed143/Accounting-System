@@ -7,9 +7,11 @@ import {
   ArrowDownCircle,
   Landmark,
   Building2,
+  FolderTree,
 } from "lucide-react";
 import { Navbar } from "@/components/layout/navbar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { getAccountDetails, type AccountDetails } from "../actions";
 import { useRouter } from "next/navigation";
 
@@ -86,11 +88,28 @@ export default function AccountDetailsPage() {
                   </p>
                 </div>
               </div>
-              <div className="text-left">
+              <div className="text-left flex flex-col items-end">
                 <p className="text-sm text-muted-foreground">الرصيد الحالي</p>
-                <p className="text-3xl font-black">
+                <p className="text-3xl font-black mb-3">
                   {data.balance.toLocaleString()} ج.م
                 </p>
+                {data.accountId && (
+                  <Button 
+                    onClick={() => {
+                      if (isSafe) {
+                        router.push(`/reports/treasury?safeId=${data.id}&accountId=${data.accountId}&name=${encodeURIComponent(data.name)}`);
+                      } else {
+                        router.push(`/reports/banks?bankId=${data.id}&accountId=${data.accountId}&name=${encodeURIComponent(data.name)}`);
+                      }
+                    }}
+                    variant="outline"
+                    size="sm"
+                    className="gap-2 border-primary/20 text-primary hover:bg-primary/10"
+                  >
+                    <FolderTree className="w-4 h-4" />
+                    كشف الحساب
+                  </Button>
+                )}
               </div>
             </div>
 

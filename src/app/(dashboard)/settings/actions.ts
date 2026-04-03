@@ -22,6 +22,7 @@ const CompanySettingsSchema = z.object({
   purchaseInvoiceName: z.string().default("فاتورة مشتريات"),
   startNumber: z.number().int().positive().default(1),
   termsAndConditions: z.string().optional(),
+  invoiceFooterNotes: z.string().optional(),
   // Financial Settings
   taxEnabled: z.boolean().default(true),
   taxName: z.string().default("VAT"),
@@ -132,6 +133,7 @@ export async function updateCompanySettingsAction(data: any) {
         purchaseInvoiceName: validatedData.purchaseInvoiceName,
         startNumber: validatedData.startNumber,
         termsAndConditions: validatedData.termsAndConditions,
+        invoiceFooterNotes: validatedData.invoiceFooterNotes,
       },
       create: {
         id: 1,
@@ -151,6 +153,7 @@ export async function updateCompanySettingsAction(data: any) {
         purchaseInvoiceName: validatedData.purchaseInvoiceName,
         startNumber: validatedData.startNumber,
         termsAndConditions: validatedData.termsAndConditions,
+        invoiceFooterNotes: validatedData.invoiceFooterNotes,
       },
     });
     

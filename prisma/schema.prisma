@@ -481,6 +481,7 @@ model CompanySettings {
   taxType             TaxType  @default(EXCLUSIVE)
   currencyCode        String   @default("ج.م")
   decimalPlaces       Int      @default(2)
+  invoiceFooterNotes  String?
   updatedAt           DateTime @updatedAt
 }
 

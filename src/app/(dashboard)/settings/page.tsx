@@ -92,6 +92,7 @@ const DEFAULT: Settings = {
     purchaseInvoiceName: "فاتورة مشتريات",
     termsAndConditions:
       "جميع الأسعار شاملة الضريبة المضافة.\nيُرجى السداد خلال 30 يوماً من تاريخ الفاتورة.",
+    invoiceFooterNotes: "",
     showLogoOnPrint: true,
     showStampOnPrint: true,
     showBarcodeOnPrint: true,
@@ -167,7 +168,11 @@ type Settings = {
     invoiceName: string;
     salesInvoiceName: string;
     purchaseInvoiceName: string;
-    termsAndConditions: string; showLogoOnPrint: boolean; showStampOnPrint: boolean; showBarcodeOnPrint: boolean;
+    termsAndConditions: string;
+    invoiceFooterNotes: string;
+    showLogoOnPrint: boolean; 
+    showStampOnPrint: boolean; 
+    showBarcodeOnPrint: boolean;
   };
   tax: {
     enabled: boolean; 
@@ -531,6 +536,7 @@ export default function SystemSettingsPage() {
               showStampOnPrint: companySettings.showStampOnPrint,
               showBarcodeOnPrint: (companySettings as any).showBarcodeOnPrint ?? true,
               termsAndConditions: companySettings.termsAndConditions || prev.invoice.termsAndConditions,
+              invoiceFooterNotes: (companySettings as any).invoiceFooterNotes || "",
             },
             tax: {
               ...prev.tax,
@@ -725,6 +731,7 @@ export default function SystemSettingsPage() {
           purchaseInvoiceName: s.invoice.purchaseInvoiceName,
           startNumber: s.invoice.startingNumber,
           termsAndConditions: s.invoice.termsAndConditions,
+          invoiceFooterNotes: s.invoice.invoiceFooterNotes,
         });
 
         // 3. Save financial settings (Tax & Currency)
@@ -923,6 +930,18 @@ export default function SystemSettingsPage() {
                       </div>
                     </div>
                   </div>
+                </Card>
+
+                <Card title="ملاحظات أسفل الفاتورة" icon={ScrollText}>
+                  <Field label="تظهر في أسفل الفاتورة جهة اليمين" hint="مثل أرقام الموبايل، الموقع، روابط التواصل الاجتماعي">
+                    <textarea
+                      value={s.invoice.invoiceFooterNotes}
+                      onChange={(e) => update("invoice", "invoiceFooterNotes", e.target.value)}
+                      rows={3}
+                      placeholder="أدخل الملاحظات هنا..."
+                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary resize-y text-slate-900 dark:text-white"
+                    />
+                  </Field>
                 </Card>
 
                 <Card title="الشروط والأحكام" icon={ScrollText}>

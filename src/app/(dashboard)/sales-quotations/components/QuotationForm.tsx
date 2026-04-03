@@ -589,6 +589,8 @@ export function QuotationForm({ quotationId, readOnly, onBack }: QuotationFormPr
         showLogo={companySettings?.showLogoOnPrint}
         showStamp={companySettings?.showStampOnPrint}
         showBarcode={companySettings?.showBarcodeOnPrint ?? true}
+        termsAndConditions={companySettings?.termsAndConditions}
+        invoiceFooterNotes={companySettings?.invoiceFooterNotes}
         isQuotation={true}
       />
     </div>

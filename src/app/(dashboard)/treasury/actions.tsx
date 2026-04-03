@@ -394,7 +394,12 @@ export async function getTreasuryData() {
     }),
   ]
   .sort((a, b) => {
-    const dateCompare = new Date(b.date).getTime() - new Date(a.date).getTime();
+    const dA = new Date(a.date);
+    dA.setHours(0, 0, 0, 0);
+    const dB = new Date(b.date);
+    dB.setHours(0, 0, 0, 0);
+    
+    const dateCompare = dB.getTime() - dA.getTime();
     if (dateCompare !== 0) return dateCompare;
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
   })
@@ -947,12 +952,14 @@ export async function getAccountDetails(id: number, type: 'safe' | 'bank') {
           }))
         ),
       ].sort((a, b) => {
-        const dateCompare =
-          new Date(b.date).getTime() - new Date(a.date).getTime();
+        const dA = new Date(a.date);
+        dA.setHours(0, 0, 0, 0);
+        const dB = new Date(b.date);
+        dB.setHours(0, 0, 0, 0);
+        
+        const dateCompare = dB.getTime() - dA.getTime();
         if (dateCompare !== 0) return dateCompare;
-        return (
-          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        );
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
       });
 
       return {
@@ -960,6 +967,7 @@ export async function getAccountDetails(id: number, type: 'safe' | 'bank') {
         name: safe.name,
         type: 'safe',
         balance: safe.balance,
+        accountId: safe.accountId,
         createdAt: safe.createdAt,
         updatedAt: safe.updatedAt,
         transactions,
@@ -1107,12 +1115,14 @@ export async function getAccountDetails(id: number, type: 'safe' | 'bank') {
           }))
         ),
       ].sort((a, b) => {
-        const dateCompare =
-          new Date(b.date).getTime() - new Date(a.date).getTime();
+        const dA = new Date(a.date);
+        dA.setHours(0, 0, 0, 0);
+        const dB = new Date(b.date);
+        dB.setHours(0, 0, 0, 0);
+        
+        const dateCompare = dB.getTime() - dA.getTime();
         if (dateCompare !== 0) return dateCompare;
-        return (
-          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        );
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
       });
 
       return {
@@ -1120,6 +1130,7 @@ export async function getAccountDetails(id: number, type: 'safe' | 'bank') {
         name: bank.name,
         type: 'bank',
         balance: bank.balance,
+        accountId: bank.accountId,
         accountNumber: bank.accountNumber,
         branch: bank.branch,
         createdAt: bank.createdAt,

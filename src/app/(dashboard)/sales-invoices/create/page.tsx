@@ -1567,6 +1567,7 @@ function InvoiceFormStep({
         showStamp={settings?.showStampOnPrint}
         showBarcode={(settings as any)?.showBarcodeOnPrint ?? true}
         termsAndConditions={settings?.termsAndConditions}
+        invoiceFooterNotes={settings?.invoiceFooterNotes}
       />
 
       {/* ── Negative Stock Warning Dialog ── */}

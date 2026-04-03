@@ -26,7 +26,10 @@ async function resetDatabase() {
           "PaymentVoucher", 
           "TreasuryTransfer", 
           "TreasuryActionRequest",
-          "TreasuryBank"
+          "TreasuryBank",
+          "CompanySettings",
+          "SystemSettings",
+          "GeneralSettings"
         RESTART IDENTITY CASCADE;
       `);
 
