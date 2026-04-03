@@ -21,6 +21,8 @@ import {
 } from "@/components/shared";
 import { getQuotations, deleteQuotation } from "./actions";
 import { getCompanySettingsAction } from "@/app/(dashboard)/settings/actions";
+import { DateFilterButtons } from "@/components/shared";
+import { isDateInFilter } from "@/lib/date-filters";
 
 // ─── أنواع ───
 interface QuotationRow {
@@ -61,6 +63,7 @@ export default function SalesQuotationsPage() {
   const [quotationToDelete, setQuotationToDelete] = useState<QuotationRow | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [prefix, setPrefix] = useState<string>("QUO");
+  const [dateFilter, setDateFilter] = useState<"today" | "week" | "month" | "year" | "all">("all");
   const router = useRouter();
 
   useEffect(() => {
@@ -79,9 +82,10 @@ export default function SalesQuotationsPage() {
         q.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
         q.customerName.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesStatus = !filters.status || q.status === filters.status;
-      return matchesSearch && matchesStatus;
+      const matchesDate = isDateInFilter(q.date, dateFilter);
+      return matchesSearch && matchesStatus && matchesDate;
     });
-  }, [quotations, searchQuery, filters]);
+  }, [quotations, searchQuery, filters, dateFilter]);
 
   const totalPages = Math.ceil(filteredQuotations.length / ITEMS_PER_PAGE);
   const paginatedQuotations = filteredQuotations.slice(
@@ -162,17 +166,22 @@ export default function SalesQuotationsPage() {
         <Card className="shadow-sm">
           <CardContent className="p-6">
             <div className="space-y-4">
-              <DataTableToolbar
-                searchPlaceholder="ابحث عن عرض سعر..."
-                searchValue={searchQuery}
-                onSearchChange={(value) => {
-                  setSearchQuery(value);
-                  setCurrentPage(1);
-                }}
-                filterOptions={filterOptions}
-                activeFilters={filters}
-                onFilterChange={handleFilterChange}
-              />
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex-1">
+                  <DataTableToolbar
+                    searchPlaceholder="ابحث عن عرض سعر..."
+                    searchValue={searchQuery}
+                    onSearchChange={(value) => {
+                      setSearchQuery(value);
+                      setCurrentPage(1);
+                    }}
+                    filterOptions={filterOptions}
+                    activeFilters={filters}
+                    onFilterChange={handleFilterChange}
+                  />
+                </div>
+                <DateFilterButtons filter={dateFilter} onFilterChange={setDateFilter} />
+              </div>
 
               {loading ? (
                 <div className="flex items-center justify-center py-16">

@@ -186,7 +186,7 @@ export default function ProductsPage() {
                       <TableHeader>
                         <TableRow className="bg-slate-50 dark:bg-slate-800/60 transition-colors">
                           <TableHead className="w-[80px] text-center font-bold text-slate-500 uppercase">صورة</TableHead>
-                          <TableHead className="font-bold text-slate-500 uppercase">الكود</TableHead>
+                          <TableHead className="font-bold text-slate-500 uppercase text-center">الكود</TableHead>
                           <TableHead className="font-bold text-center">
                             الاسم
                           </TableHead>

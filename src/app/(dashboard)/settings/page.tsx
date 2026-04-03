@@ -78,8 +78,9 @@ const DEFAULT: Settings = {
     taxId: "",
     commercialRegister: "",
     website: "",
-    logoBase64: "", // We still use this temporarily in the UI state
+    logoBase64: "",
     stampBase64: "",
+    barcodeBase64: "",
   },
   invoice: {
     salesPrefix: "INV",
@@ -87,10 +88,13 @@ const DEFAULT: Settings = {
     purchasePrefix: "PUR",
     quotationPrefix: "QUO",
     invoiceName: "فاتورة ضريبية",
+    salesInvoiceName: "فاتورة مبيعات",
+    purchaseInvoiceName: "فاتورة مشتريات",
     termsAndConditions:
       "جميع الأسعار شاملة الضريبة المضافة.\nيُرجى السداد خلال 30 يوماً من تاريخ الفاتورة.",
     showLogoOnPrint: true,
     showStampOnPrint: true,
+    showBarcodeOnPrint: true,
   },
   tax: {
     enabled: true,
@@ -155,13 +159,15 @@ type Settings = {
   company: {
     name: string; nameEn: string; email: string; phone: string;
     address: string; taxId: string; commercialRegister: string;
-    website: string; logoBase64: string; stampBase64: string;
+    website: string; logoBase64: string; stampBase64: string; barcodeBase64: string;
   };
   invoice: {
     salesPrefix: string; startingNumber: number;
     purchasePrefix: string; quotationPrefix: string;
     invoiceName: string;
-    termsAndConditions: string; showLogoOnPrint: boolean; showStampOnPrint: boolean;
+    salesInvoiceName: string;
+    purchaseInvoiceName: string;
+    termsAndConditions: string; showLogoOnPrint: boolean; showStampOnPrint: boolean; showBarcodeOnPrint: boolean;
   };
   tax: {
     enabled: boolean; 
@@ -510,6 +516,7 @@ export default function SystemSettingsPage() {
               nameEn: companySettings.companyNameEn || prev.company.nameEn,
               logoBase64: companySettings.companyLogo || prev.company.logoBase64,
               stampBase64: companySettings.companyStamp || prev.company.stampBase64,
+              barcodeBase64: (companySettings as any).companyBarcode || prev.company.barcodeBase64,
             },
             invoice: {
               ...prev.invoice,
@@ -517,9 +524,12 @@ export default function SystemSettingsPage() {
               purchasePrefix: companySettings.purchasePrefix,
               quotationPrefix: companySettings.quotationPrefix,
               invoiceName: companySettings.invoiceName || prev.invoice.invoiceName,
+              salesInvoiceName: companySettings.salesInvoiceName || "فاتورة مبيعات",
+              purchaseInvoiceName: companySettings.purchaseInvoiceName || "فاتورة مشتريات",
               startingNumber: companySettings.startNumber,
               showLogoOnPrint: companySettings.showLogoOnPrint,
               showStampOnPrint: companySettings.showStampOnPrint,
+              showBarcodeOnPrint: (companySettings as any).showBarcodeOnPrint ?? true,
               termsAndConditions: companySettings.termsAndConditions || prev.invoice.termsAndConditions,
             },
             tax: {
@@ -703,12 +713,16 @@ export default function SystemSettingsPage() {
           companyNameEn: s.company.nameEn,
           companyLogo: s.company.logoBase64,
           companyStamp: s.company.stampBase64,
+          companyBarcode: s.company.barcodeBase64,
           showLogoOnPrint: s.invoice.showLogoOnPrint,
           showStampOnPrint: s.invoice.showStampOnPrint,
+          showBarcodeOnPrint: s.invoice.showBarcodeOnPrint,
           salesPrefix: s.invoice.salesPrefix,
           purchasePrefix: s.invoice.purchasePrefix,
           quotationPrefix: s.invoice.quotationPrefix,
           invoiceName: s.invoice.invoiceName,
+          salesInvoiceName: s.invoice.salesInvoiceName,
+          purchaseInvoiceName: s.invoice.purchaseInvoiceName,
           startNumber: s.invoice.startingNumber,
           termsAndConditions: s.invoice.termsAndConditions,
         });
@@ -819,8 +833,8 @@ export default function SystemSettingsPage() {
                   </div>
                 </Card>
 
-                <Card title="صورة الشركة والختم" icon={ImageIcon}>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <Card title="صورة الشركة والختم والباركود" icon={ImageIcon}>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
                     <ImageUploader
                       label="شعار الشركة (Logo)"
                       icon={ImageIcon}
@@ -835,8 +849,15 @@ export default function SystemSettingsPage() {
                       onChange={(v) => update("company", "stampBase64", v)}
                       hint="PNG شفاف مفضل · يظهر أسفل الفاتورة"
                     />
+                    <ImageUploader
+                      label="باركود الشركة (QR / Barcode)"
+                      icon={Hash}
+                      value={s.company.barcodeBase64}
+                      onChange={(v) => update("company", "barcodeBase64", v)}
+                      hint="صورة باركود أو QR Code · يظهر أسفل الفاتورة"
+                    />
                   </div>
-                  <div className="flex gap-4 pt-2">
+                  <div className="flex flex-wrap gap-4 pt-2">
                     <Toggle
                       checked={s.invoice.showLogoOnPrint}
                       onChange={(v) => update("invoice", "showLogoOnPrint", v)}
@@ -846,6 +867,11 @@ export default function SystemSettingsPage() {
                       checked={s.invoice.showStampOnPrint}
                       onChange={(v) => update("invoice", "showStampOnPrint", v)}
                       label="إظهار الختم عند الطباعة"
+                    />
+                    <Toggle
+                      checked={s.invoice.showBarcodeOnPrint}
+                      onChange={(v) => update("invoice", "showBarcodeOnPrint", v)}
+                      label="إظهار الباركود عند الطباعة"
                     />
                   </div>
                 </Card>
@@ -861,8 +887,11 @@ export default function SystemSettingsPage() {
                     <Field label="بادئة عروض الأسعار">
                       <Input value={s.invoice.quotationPrefix} onChange={(v) => update("invoice", "quotationPrefix", v)} placeholder="QUO" dir="ltr" />
                     </Field>
-                    <Field label="مسمى الفاتورة (للطباعة)" hint="يظهر كعنوان للفاتورة">
-                      <Input value={s.invoice.invoiceName} onChange={(v) => update("invoice", "invoiceName", v)} placeholder="فاتورة ضريبية" />
+                    <Field label="مسمى فواتير البيع" hint="يظهر كعنوان للفاتورة">
+                      <Input value={s.invoice.salesInvoiceName} onChange={(v) => update("invoice", "salesInvoiceName", v)} placeholder="فاتورة مبيعات" />
+                    </Field>
+                    <Field label="مسمى فواتير الشراء" hint="يظهر كعنوان للفاتورة">
+                      <Input value={s.invoice.purchaseInvoiceName} onChange={(v) => update("invoice", "purchaseInvoiceName", v)} placeholder="فاتورة مشتريات" />
                     </Field>
                     <Field label="رقم البداية" hint="أول رقم تسلسلي">
                       <Input value={s.invoice.startingNumber} onChange={(v) => update("invoice", "startingNumber", Number(v))} type="number" placeholder="1" />

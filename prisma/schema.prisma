@@ -458,26 +458,30 @@ model Session {
 }
 
 model CompanySettings {
-  id                 Int      @id @default(1)
-  companyName        String?  @default("شركة المحاسبة الحديثة")
-  companyNameEn      String?  @default("Modern Accounting Co.")
-  companyLogo        String?
-  companyStamp       String?
-  showLogoOnPrint    Boolean  @default(true)
-  showStampOnPrint   Boolean  @default(true)
-  salesPrefix        String   @default("INV")
-  purchasePrefix     String   @default("PUR")
-  quotationPrefix    String   @default("QUO")
-  invoiceName        String   @default("فاتورة ضريبية")
-  startNumber        Int      @default(1)
-  termsAndConditions String?
-  taxEnabled         Boolean  @default(true)
-  taxName            String   @default("VAT")
-  taxPercentage      Float    @default(15)
-  taxType            TaxType  @default(EXCLUSIVE)
-  currencyCode       String   @default("ج.م")
-  decimalPlaces      Int      @default(2)
-  updatedAt          DateTime @updatedAt
+  id                  Int      @id @default(1)
+  companyName         String?  @default("شركة المحاسبة الحديثة")
+  companyNameEn       String?  @default("Modern Accounting Co.")
+  companyLogo         String?
+  companyStamp        String?
+  companyBarcode      String?
+  showLogoOnPrint     Boolean  @default(true)
+  showStampOnPrint    Boolean  @default(true)
+  showBarcodeOnPrint  Boolean  @default(true)
+  salesPrefix         String   @default("INV")
+  purchasePrefix      String   @default("PUR")
+  quotationPrefix     String   @default("QUO")
+  invoiceName         String   @default("فاتورة ضريبية")
+  salesInvoiceName    String   @default("فاتورة مبيعات")
+  purchaseInvoiceName String   @default("فاتورة مشتريات")
+  startNumber         Int      @default(1)
+  termsAndConditions  String?
+  taxEnabled          Boolean  @default(true)
+  taxName             String   @default("VAT")
+  taxPercentage       Float    @default(15)
+  taxType             TaxType  @default(EXCLUSIVE)
+  currencyCode        String   @default("ج.م")
+  decimalPlaces       Int      @default(2)
+  updatedAt           DateTime @updatedAt
 }
 
 model Notification {

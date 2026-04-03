@@ -44,6 +44,9 @@ import { toast } from "sonner";
 import TransferDialog from "./components/TransferDialog";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useManagementMode } from "@/hooks/use-management-mode";
+import { DateFilterButtons } from "@/components/shared";
+import { isDateInFilter } from "@/lib/date-filters";
+
 
 
 // تعريف نوع المعاملات
@@ -90,7 +93,7 @@ export default function TreasuryPage() {
   const { isManagementActive, toggleManagementMode, isUserAdmin } = useManagementMode();
   const [isPassGateOpen, setIsPassGateOpen] = useState(false);
   const { hasPermission, isAdmin } = usePermissions();
-
+  const [dateFilter, setDateFilter] = useState<"today" | "week" | "month" | "year" | "all">("all");
 
 
   const loadData = () => {
@@ -402,11 +405,14 @@ export default function TreasuryPage() {
         {/* العمليات الأخيرة */}
         {data.recentTransactions && data.recentTransactions.length > 0 && (
           <div>
-            <h2 className="text-xl font-bold mb-4">آخر العمليات</h2>
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-4">
+              <h2 className="text-xl font-bold">آخر العمليات</h2>
+              <DateFilterButtons filter={dateFilter} onFilterChange={setDateFilter} />
+            </div>
             <Card>
               <CardContent className="p-0">
                 <div className="divide-y">
-                  {data.recentTransactions.map((trans) => (
+                  {data.recentTransactions.filter(trans => isDateInFilter(trans.date, dateFilter)).map((trans) => (
                     <div
                       key={trans.id}
                       className="p-4 flex justify-between items-center hover:bg-muted/50"

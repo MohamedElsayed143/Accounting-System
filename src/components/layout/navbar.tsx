@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, Search, LogOut, User, Settings as SettingsIcon, Package, Users, Truck, FileText, ShoppingCart } from "lucide-react";
+import { Bell, Search, LogOut, User, Settings as SettingsIcon, Package, Users, Truck, FileText, ShoppingCart, ArrowLeft, ArrowRight } from "lucide-react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -133,6 +133,17 @@ export function Navbar({ title }: NavbarProps) {
   return (
     <header className="sticky top-0 z-40 flex h-16 items-center gap-4 border-b border-border/40 bg-background/95 px-6 backdrop-blur supports-[backdrop-filter]:bg-background/60 shadow-sm print:hidden">
       <SidebarTrigger className="md:hidden hover:bg-primary/10 transition-all" />
+      
+      {/* Global Back Button */}
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={() => router.back()}
+        className="hidden md:flex hover:bg-primary/10 hover:text-primary transition-all rounded-full w-9 h-9 border border-border/40"
+        title="رجوع"
+      >
+        <ArrowRight className="h-4 w-4" /> {/* Standard RTL direction back arrow */}
+      </Button>
 
       <div className="flex flex-1 items-center gap-4">
         {title && (

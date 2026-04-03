@@ -19,6 +19,8 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { getPurchaseReturns, deletePurchaseReturn } from "./actions";
+import { DateFilterButtons } from "@/components/shared";
+import { isDateInFilter } from "@/lib/date-filters";
 
 export default function PurchaseReturnsPage() {
   const router = useRouter();
@@ -31,6 +33,7 @@ export default function PurchaseReturnsPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [returnToDelete, setReturnToDelete] = useState<any>(null);
   const [deleting, setDeleting] = useState(false);
+  const [dateFilter, setDateFilter] = useState<"today" | "week" | "month" | "year" | "all">("all");
 
   const loadData = async () => {
     setLoading(true);
@@ -51,10 +54,11 @@ export default function PurchaseReturnsPage() {
 
   const handleFilter = () => loadData();
 
-  const filteredReturns = returns.filter(r =>
-    r.supplier.name.includes(search) ||
-    r.returnNumber.toString().includes(search)
-  );
+  const filteredReturns = returns.filter(r => {
+    const matchesSearch = r.supplier.name.includes(search) || r.returnNumber.toString().includes(search);
+    const matchesDate = isDateInFilter(r.returnDate, dateFilter);
+    return matchesSearch && matchesDate;
+  });
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -114,9 +118,14 @@ export default function PurchaseReturnsPage() {
                   <SelectItem value="rejected">مرفوض</SelectItem>
                 </SelectContent>
               </Select>
-              <Input type="date" placeholder="من تاريخ" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
-              <Input type="date" placeholder="إلى تاريخ" value={toDate} onChange={(e) => setToDate(e.target.value)} />
-              <Button onClick={handleFilter} variant="outline"><Filter className="ml-2 h-4 w-4" /> تطبيق</Button>
+              <div className="md:col-span-3 flex items-center justify-between gap-4">
+                <DateFilterButtons filter={dateFilter} onFilterChange={setDateFilter} />
+                <div className="flex items-center gap-2">
+                  <Input type="date" placeholder="من تاريخ" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+                  <Input type="date" placeholder="إلى تاريخ" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+                  <Button onClick={handleFilter} variant="outline"><Filter className="ml-2 h-4 w-4" /> تطبيق</Button>
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>

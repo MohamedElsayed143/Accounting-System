@@ -28,6 +28,8 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { getPendingInvoices } from "./actions";
 import { ProcessInvoiceDialog } from "./components/ProcessInvoiceDialog";
+import { DateFilterButtons } from "@/components/shared";
+import { isDateInFilter } from "@/lib/date-filters";
 
 export default function PendingInvoicesPage() {
   const [pendingData, setPendingData] = useState<{ sales: any[], purchases: any[] }>({ sales: [], purchases: [] });
@@ -35,6 +37,7 @@ export default function PendingInvoicesPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
   const [invoiceType, setInvoiceType] = useState<"sales" | "purchase">("sales");
+  const [dateFilter, setDateFilter] = useState<"today" | "week" | "month" | "year" | "all">("all");
 
   const loadData = async () => {
     setLoading(true);
@@ -52,15 +55,19 @@ export default function PendingInvoicesPage() {
     loadData();
   }, []);
 
-  const filteredSales = pendingData.sales.filter(inv => 
-    inv.invoiceNumber.toString().includes(searchQuery) || 
-    inv.customer.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredSales = pendingData.sales.filter(inv => {
+    const matchesSearch = inv.invoiceNumber.toString().includes(searchQuery) || 
+                          inv.customer.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesDate = isDateInFilter(inv.invoiceDate, dateFilter);
+    return matchesSearch && matchesDate;
+  });
 
-  const filteredPurchases = pendingData.purchases.filter(inv => 
-    inv.invoiceNumber.toString().includes(searchQuery) || 
-    inv.supplier.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredPurchases = pendingData.purchases.filter(inv => {
+    const matchesSearch = inv.invoiceNumber.toString().includes(searchQuery) || 
+                          inv.supplier.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesDate = isDateInFilter(inv.invoiceDate, dateFilter);
+    return matchesSearch && matchesDate;
+  });
 
   return (
     <>
@@ -98,14 +105,17 @@ export default function PendingInvoicesPage() {
               </TabsTrigger>
             </TabsList>
 
-            <div className="relative w-72">
-              <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input 
-                placeholder="بحث برقم الفاتورة أو الاسم..." 
-                className="pr-10 bg-white/80 dark:bg-slate-900/80 border-slate-200 dark:border-slate-800"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
+            <div className="flex items-center gap-4 flex-wrap">
+              <DateFilterButtons filter={dateFilter} onFilterChange={setDateFilter} />
+              <div className="relative w-72">
+                <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input 
+                  placeholder="بحث برقم الفاتورة أو الاسم..." 
+                  className="pr-10 bg-white/80 dark:bg-slate-900/80 border-slate-200 dark:border-slate-800"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
             </div>
           </div>
 

@@ -151,6 +151,7 @@ export async function createSalesInvoice(data: {
     total: number;
     productId: number;
   }[];
+  topNotes?: any;
   notes?: string[];
   dueDate?: string;
   printableTitle?: string;
@@ -231,6 +232,7 @@ export async function createSalesInvoice(data: {
         discount: data.discount,
         total: data.total,
         notes: data.notes || [],
+        topNotes: data.topNotes || [],
         safeId: safeIdVal,
         bankId: bankIdVal,
         printableTitle: data.printableTitle,
@@ -750,6 +752,7 @@ export async function updateSalesInvoice(
         discount: data.discount,
         total: data.total,
         notes: data.notes || [],
+        topNotes: data.topNotes || [],
         safeId: safeIdVal,
         bankId: bankIdVal,
         printableTitle: data.printableTitle,

@@ -471,6 +471,39 @@ export async function createBank(data: { name: string; accountNumber: string; br
         },
       });
 
+      if (data.initialBalance > 0) {
+        const openingBalanceAccount = await tx.account.findFirst({ where: { code: '3101' } });
+        const cap = await tx.account.findUnique({ where: { code: '31' } });
+        let openingAccId = openingBalanceAccount?.id;
+        if (!openingAccId && cap) {
+          const newAcc = await tx.account.create({
+            data: {
+              code: '3101', name: 'الأرصدة الافتتاحية', type: 'EQUITY',
+              parentId: cap.id, level: 3, isSelectable: true, isTerminal: true
+            }
+          });
+          openingAccId = newAcc.id;
+        }
+
+        if (openingAccId) {
+          const lastEntry = await tx.journalEntry.findFirst({ orderBy: { entryNumber: 'desc' } });
+          await tx.journalEntry.create({
+            data: {
+              entryNumber: (lastEntry?.entryNumber || 0) + 1,
+              date: new Date(),
+              description: `رصيد افتتاحي - ${data.name}`,
+              sourceType: 'MANUAL',
+              items: {
+                create: [
+                  { accountId: account.id, debit: data.initialBalance, credit: 0, description: 'رصيد افتتاحي' },
+                  { accountId: openingAccId, debit: 0, credit: data.initialBalance, description: `رصيد افتتاحي - ${data.name}` }
+                ]
+              }
+            }
+          });
+        }
+      }
+
       return bank;
     });
 
@@ -1399,10 +1432,10 @@ export async function createSafe(data: { name: string; initialBalance: number; d
     const result = await prisma.$transaction(async (tx) => {
       // 1. Find Safe Parent Account
       const parent = await tx.account.findUnique({
-        where: { code: '1101' }
+        where: { code: '1201' }
       });
 
-      if (!parent) throw new Error("حساب الخزينة الرئيسي (1101) غير موجود في شجرة الحسابات");
+      if (!parent) throw new Error("حساب النقدية بالخزينة الرئيسي (1201) غير موجود في شجرة الحسابات");
 
       // 2. Suggest Next Code
       const lastChild = await tx.account.findFirst({
@@ -1438,6 +1471,39 @@ export async function createSafe(data: { name: string; initialBalance: number; d
           accountId: account.id, // Link to COA
         },
       });
+
+      if (data.initialBalance > 0) {
+        const openingBalanceAccount = await tx.account.findFirst({ where: { code: '3101' } });
+        const cap = await tx.account.findUnique({ where: { code: '31' } });
+        let openingAccId = openingBalanceAccount?.id;
+        if (!openingAccId && cap) {
+          const newAcc = await tx.account.create({
+            data: {
+              code: '3101', name: 'الأرصدة الافتتاحية', type: 'EQUITY',
+              parentId: cap.id, level: 3, isSelectable: true, isTerminal: true
+            }
+          });
+          openingAccId = newAcc.id;
+        }
+
+        if (openingAccId) {
+          const lastEntry = await tx.journalEntry.findFirst({ orderBy: { entryNumber: 'desc' } });
+          await tx.journalEntry.create({
+            data: {
+              entryNumber: (lastEntry?.entryNumber || 0) + 1,
+              date: new Date(),
+              description: `رصيد افتتاحي - ${data.name}`,
+              sourceType: 'MANUAL',
+              items: {
+                create: [
+                  { accountId: account.id, debit: data.initialBalance, credit: 0, description: 'رصيد افتتاحي' },
+                  { accountId: openingAccId, debit: 0, credit: data.initialBalance, description: `رصيد افتتاحي - ${data.name}` }
+                ]
+              }
+            }
+          });
+        }
+      }
 
       return safe;
     });

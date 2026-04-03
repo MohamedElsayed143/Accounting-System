@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { ArrowDownCircle, Save, RotateCcw } from "lucide-react";
-import { toast } from "sonner"; // ← أضف هذا
+import React, { useEffect, useState } from "react";
+import { ArrowDownCircle, Save, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { useFormDraft } from "@/hooks/useFormDraft";
 import { Navbar } from "@/components/layout/navbar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -30,19 +31,21 @@ interface Account {
   balance: number;
 }
 
+const INITIAL_RECEIPT_FORM = {
+  voucherNumber: `RV-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 900 + 100))}`,
+  date: (() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  })(),
+  amount: "",
+  customerId: "",
+  accountType: "" as "safe" | "bank" | "",
+  accountId: "",
+  description: "",
+};
+
 export default function ReceiptVoucherPage() {
-  const [formData, setFormData] = useState({
-    voucherNumber: `RV-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 900 + 100))}`,
-    date: (() => {
-      const d = new Date();
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    })(),
-    amount: "",
-    customerId: "",
-    accountType: "" as "safe" | "bank" | "",
-    accountId: "",
-    description: "",
-  });
+  const { draft: formData, setDraft: setFormData, clearDraft, removeDraftOnly, isLoaded } = useFormDraft("receipt_voucher_new", INITIAL_RECEIPT_FORM);
 
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [safes, setSafes] = useState<Account[]>([]);
@@ -72,16 +75,7 @@ export default function ReceiptVoucherPage() {
   };
 
   const handleReset = () => {
-    setFormData({
-      voucherNumber: `RV-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 900 + 100))}`,
-      date: new Date().toISOString().split("T")[0],
-      amount: "",
-      customerId: "",
-      accountType: "",
-      accountId: "",
-      description: "",
-    });
-    toast.info("تم مسح البيانات");
+    clearDraft();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -146,6 +140,7 @@ export default function ReceiptVoucherPage() {
       });
 
       if (result.success) {
+        removeDraftOnly();
         if ((result as any).pending) {
           toast.success(result.message || "✅ تم إرسال الطلب للمدير للموافقة");
         } else {
@@ -180,13 +175,24 @@ export default function ReceiptVoucherPage() {
       <Navbar title="سند قبض" />
       <div className="flex-1 p-6" dir="rtl">
         <Card className="max-w-3xl mx-auto shadow-sm">
-          <CardHeader className="border-b bg-emerald-50/50">
+          <CardHeader className="border-b bg-emerald-50/50 flex flex-row items-center justify-between">
             <CardTitle className="text-xl font-bold flex items-center gap-3">
               <div className="rounded-xl p-2.5 bg-emerald-100 shadow-sm">
                 <ArrowDownCircle className="h-5 w-5 text-emerald-600" />
               </div>
               إنشاء سند قبض جديد
             </CardTitle>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleReset}
+              className="gap-2 text-red-600 border-red-200 hover:bg-red-50"
+              disabled={loading}
+              size="sm"
+            >
+              <Trash2 className="h-4 w-4" />
+              مسح البيانات
+            </Button>
           </CardHeader>
           <CardContent className="pt-6">
             <form onSubmit={handleSubmit} className="space-y-6">
@@ -331,21 +337,11 @@ export default function ReceiptVoucherPage() {
                 />
               </div>
 
-              <div className="flex gap-3 justify-end pt-4 border-t">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleReset}
-                  className="gap-2"
-                  disabled={loading}
-                >
-                  <RotateCcw className="h-4 w-4" />
-                  مسح
-                </Button>
+              <div className="flex justify-end pt-4 border-t">
                 <Button
                   type="submit"
                   className="gap-2 bg-emerald-600 hover:bg-emerald-700"
-                  disabled={loading}
+                  disabled={loading || !isLoaded}
                 >
                   <Save className="h-4 w-4" />
                   {loading ? "جاري الحفظ..." : "حفظ سند القبض"}

@@ -472,17 +472,16 @@ export async function deleteAccount(accountId: number, isAdminMode: boolean) {
 
     if (!account) throw new Error("الحساب غير موجود");
 
-    // Hierarchy Protection: Only Level 4 accounts can be deleted
-    // Levels 1, 2, and 3 are system-defined "Main" accounts and are protected
-    if (account.level < 4) {
+    // Hierarchy Protection: Only Level 1 accounts cannot be deleted
+    if (account.level === 1) {
       throw new Error(
-        "لا يمكن حذف الحسابات الرئيسية (المستوى 1 و 2 و 3). فقط الحسابات الفرعية من المستوى الرابع هي القابلة للحذف.",
+        "لا يمكن حذف الحسابات الأساسية في الجذور (المستوى الأول).",
       );
     }
 
     // Check for children (redundant for L4 but safe)
     if (account._count.children > 0) {
-      throw new Error("لا يمكن حذف الحساب لأنه يحتوي على حسابات فرعية");
+      throw new Error("لا يمكن حذف هذا الحساب لأنه يحتوي على تفرعات. يرجى حذف الحسابات المتفرعة منه أولاً.");
     }
 
     // Check for transactions

@@ -3,7 +3,8 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Save, X, FileText, User, Calendar, Hash, Tag, Percent, DollarSign, CreditCard, Landmark } from "lucide-react";
+import { ArrowLeft, Save, X, FileText, User, Calendar, Hash, Tag, Percent, DollarSign, CreditCard, Landmark, Trash2 } from "lucide-react";
+import { useFormDraft } from "@/hooks/useFormDraft";
 import { Navbar } from "@/components/layout/navbar";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,23 @@ import { getPurchaseInvoiceWithReturns } from "../../purchase-invoices/actions";
 import { getBanks } from "../../treasury/actions";
 import { getProducts, ProductData } from "../../inventory/products/actions";
 
+const INITIAL_PURCHASE_RETURN_FORM = {
+  returnNumber: 0,
+  invoiceId: "",
+  supplierId: "",
+  returnDate: new Date().toISOString().split("T")[0],
+  subtotal: 0,
+  discount: 0,
+  totalTax: 0,
+  total: 0,
+  reason: "",
+  status: "pending",
+  refundMethod: "cash",
+  safeId: "",
+  bankId: "",
+  description: "",
+};
+
 export default function NewPurchaseReturnPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -29,22 +47,7 @@ export default function NewPurchaseReturnPage() {
   const [products, setProducts] = useState<ProductData[]>([]);
   const [items, setItems] = useState<any[]>([]);
   const [invoiceTotal, setInvoiceTotal] = useState(0);
-  const [formData, setFormData] = useState({
-    returnNumber: 0,
-    invoiceId: "",
-    supplierId: "",
-    returnDate: new Date().toISOString().split("T")[0],
-    subtotal: 0,
-    discount: 0,
-    totalTax: 0,
-    total: 0,
-    reason: "",
-    status: "pending",
-    refundMethod: "cash",
-    safeId: "",
-    bankId: "",
-    description: "",
-  });
+  const { draft: formData, setDraft: setFormData, clearDraft, isLoaded } = useFormDraft("purchase_return_new", INITIAL_PURCHASE_RETURN_FORM);
 
   useEffect(() => {
     Promise.all([
@@ -219,6 +222,7 @@ export default function NewPurchaseReturnPage() {
 
       const result = await createPurchaseReturn(input);
       if (result.success) {
+        clearDraft();
         toast.success("تم إنشاء المرتجع بنجاح");
         router.push("/purchase-returns");
       } else {
@@ -243,15 +247,30 @@ export default function NewPurchaseReturnPage() {
         <form onSubmit={handleSubmit}>
           <Card className="max-w-5xl mx-auto shadow-xl border-0 ring-1 ring-slate-200 dark:ring-slate-800">
             <CardHeader className="bg-gradient-to-l from-primary/5 via-transparent to-transparent border-b pb-6">
-              <CardTitle className="text-2xl font-bold flex items-center gap-3">
-                <div className="p-2 bg-primary/10 rounded-xl">
-                  <FileText className="h-6 w-6 text-primary" />
+              <div className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="text-2xl font-bold flex items-center gap-3 mb-2">
+                    <div className="p-2 bg-primary/10 rounded-xl">
+                      <FileText className="h-6 w-6 text-primary" />
+                    </div>
+                    إنشاء مرتجع مشتريات جديد
+                  </CardTitle>
+                  <CardDescription className="text-base">
+                    أدخل بيانات المرتجع والأصناف المرتجعة
+                  </CardDescription>
                 </div>
-                إنشاء مرتجع مشتريات جديد
-              </CardTitle>
-              <CardDescription className="text-base">
-                أدخل بيانات المرتجع والأصناف المرتجعة
-              </CardDescription>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => { clearDraft(); setItems([]); setInvoices([]); }}
+                  className="gap-2 text-red-600 border-red-200 hover:bg-red-50"
+                  disabled={loading}
+                  size="sm"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  مسح البيانات
+                </Button>
+              </div>
             </CardHeader>
 
             <CardContent className="pt-8 space-y-8">
@@ -494,7 +513,7 @@ export default function NewPurchaseReturnPage() {
 
               <div className="flex justify-end gap-3 pt-4">
                 <Button type="button" variant="outline" size="lg" onClick={() => router.back()}>إلغاء</Button>
-                <Button type="submit" size="lg" disabled={loading} className="gap-2 bg-primary hover:bg-primary/90">
+                <Button type="submit" size="lg" disabled={loading || !isLoaded} className="gap-2 bg-primary hover:bg-primary/90">
                   <Save className="h-4 w-4" />
                   {loading ? "جاري الحفظ..." : "حفظ المرتجع"}
                 </Button>

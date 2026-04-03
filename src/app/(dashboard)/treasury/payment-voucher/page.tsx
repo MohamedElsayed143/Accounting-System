@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { ArrowUpCircle, RotateCcw } from "lucide-react";
-import { toast } from "sonner"; // ← أضف هذا
+import React, { useEffect, useState } from "react";
+import { ArrowUpCircle, RotateCcw, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { useFormDraft } from "@/hooks/useFormDraft";
 import { createPaymentVoucher, getInitialData, type InitialData } from "./actions";
 import { Navbar } from "@/components/layout/navbar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,19 +13,21 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
+const INITIAL_PAYMENT_FORM = {
+  voucherNumber: `PV-${new Date().getFullYear()}-${Math.floor(Math.random() * 1000)}`,
+  date: (() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  })(),
+  amount: "",
+  accountType: "" as "safe" | "bank" | "",
+  accountId: "",
+  supplierId: "",
+  description: "",
+};
+
 export default function PaymentVoucherPage() {
-  const [formData, setFormData] = useState({
-    voucherNumber: `PV-${new Date().getFullYear()}-${Math.floor(Math.random() * 1000)}`,
-    date: (() => {
-      const d = new Date();
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    })(),
-    amount: "",
-    accountType: "" as "safe" | "bank" | "",
-    accountId: "",
-    supplierId: "",
-    description: "",
-  });
+  const { draft: formData, setDraft: setFormData, clearDraft, removeDraftOnly, isLoaded } = useFormDraft("payment_voucher_new", INITIAL_PAYMENT_FORM);
 
   const [data, setData] = useState<InitialData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -136,6 +139,7 @@ export default function PaymentVoucherPage() {
       });
       
       if (res.success) {
+        removeDraftOnly();
         if ((res as any).pending) {
           toast.success(res.message || "✅ تم إرسال الطلب للمدير للموافقة");
         } else {
@@ -160,10 +164,21 @@ export default function PaymentVoucherPage() {
       <Navbar title="إنشاء سند صرف" />
       <div className="p-6" dir="rtl">
         <Card className="max-w-2xl mx-auto shadow-lg">
-          <CardHeader className="bg-red-50/50">
+          <CardHeader className="bg-red-50/50 flex flex-row items-center justify-between">
             <CardTitle className="text-red-700 flex items-center gap-2">
               <ArrowUpCircle className="h-6 w-6" /> سند صرف مالي
             </CardTitle>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={clearDraft}
+              className="gap-2 text-red-600 border-red-200 hover:bg-red-50"
+              disabled={loading}
+              size="sm"
+            >
+              <Trash2 className="h-4 w-4" />
+              مسح البيانات
+            </Button>
           </CardHeader>
           <CardContent className="pt-6 space-y-4">
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -279,13 +294,15 @@ export default function PaymentVoucherPage() {
                 />
               </div>
 
-              <Button 
-                type="submit" 
-                className="w-full bg-red-600 hover:bg-red-700" 
-                disabled={loading}
-              >
-                {loading ? "جاري الحفظ..." : "حفظ السند وتحديث الأرصدة"}
-              </Button>
+              <div className="flex gap-3">
+                <Button 
+                  type="submit" 
+                  className="flex-1 bg-red-600 hover:bg-red-700" 
+                  disabled={loading || !isLoaded}
+                >
+                  {loading ? "جاري الحفظ..." : "حفظ السند وتحديث الأرصدة"}
+                </Button>
+              </div>
             </form>
           </CardContent>
         </Card>

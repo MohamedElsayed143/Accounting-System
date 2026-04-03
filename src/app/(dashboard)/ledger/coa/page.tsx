@@ -293,6 +293,8 @@ function TreeNode({
   const Icon = config.icon;
   const isL1 = node.level === 1;
   const isL2 = node.level === 2;
+  const isL3 = node.level === 3;
+  const isL4 = node.level >= 4;
   const balance = node.balance ?? 0;
 
   // Highlight matching text
@@ -306,18 +308,15 @@ function TreeNode({
         className={cn(
           "group flex flex-row-reverse items-center gap-3 transition-all duration-200 cursor-pointer border",
           // L1: dark card
-          isL1 &&
-            "py-4 px-5 rounded-2xl bg-slate-900 text-white border-slate-800 shadow-xl mb-2",
-          // L2: soft card
-          isL2 &&
-            !isL1 &&
-            "py-3 px-5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 mb-1 ml-6",
-          // L3+
-          !isL1 &&
-            !isL2 &&
-            "py-2.5 px-4 rounded-xl border-transparent hover:bg-slate-50 dark:hover:bg-slate-800/40 hover:border-slate-100 dark:hover:border-slate-800",
+          isL1 && "py-4 px-5 rounded-2xl bg-slate-900 text-white border-slate-800 shadow-xl mb-2",
+          // L2: soft blue card
+          isL2 && "py-3 px-5 rounded-xl bg-blue-50/80 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800/60 mb-1",
+          // L3: soft orange/amber card
+          isL3 && "py-2.5 px-5 rounded-xl bg-orange-50/70 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800/60 mb-1",
+          // L4: soft emerald/green card
+          isL4 && "py-2 px-5 rounded-xl bg-emerald-50/40 dark:bg-emerald-900/10 border-emerald-100 dark:border-emerald-800/40 hover:bg-emerald-100/50 mb-1",
           isMatch &&
-            "ring-2 ring-amber-400 ring-offset-1 bg-amber-50/30 dark:bg-amber-900/10 border-amber-200 dark:border-amber-700",
+            "ring-2 ring-rose-400 ring-offset-1",
         )}
         style={{ marginRight: !isL1 ? `${depth * 20}px` : "0" }}
         onClick={() => setIsOpen((o) => !o)}
@@ -377,8 +376,10 @@ function TreeNode({
               isL1
                 ? "text-base text-white"
                 : isL2
-                  ? "text-sm text-slate-700 dark:text-slate-200"
-                  : "text-[13px] text-slate-700 dark:text-slate-300",
+                  ? "text-[15px] font-black text-blue-900 dark:text-blue-100"
+                  : isL3
+                    ? "text-[14px] font-bold text-orange-900 dark:text-orange-100"
+                    : "text-[13px] font-semibold text-emerald-900 dark:text-emerald-100",
             )}
           >
             {node.name}
@@ -504,9 +505,9 @@ function TreeNode({
           )}
 
           {/* Delete */}
-          {node.level === 4 &&
-            !hasChildren &&
+          {node.level > 1 &&
             isManagementActive &&
+            balance === 0 &&
             (!node.journalItemsCount || node.journalItemsCount === 0) && (
               <button
                 onClick={() => onDelete(node)}
@@ -678,9 +679,9 @@ const ListView: React.FC<{
                         <Pencil size={11} />
                       </button>
                     )}
-                    {account.level === 4 &&
-                      !account.children?.length &&
+                    {account.level > 1 &&
                       isManagementActive &&
+                      (account.balance ?? 0) === 0 &&
                       (!account.journalItemsCount ||
                         account.journalItemsCount === 0) && (
                         <button

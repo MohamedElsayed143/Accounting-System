@@ -37,6 +37,9 @@ import { usePermissions } from "@/hooks/use-permissions";
 import { toast } from "sonner";
 import { PasswordProtectionGate } from "@/components/shared/PasswordProtectionGate";
 import { useManagementMode } from "@/hooks/use-management-mode";
+import { DateFilterButtons } from "@/components/shared";
+import { isDateInFilter } from "@/lib/date-filters";
+
 
 
 interface InvoiceRow {
@@ -92,6 +95,7 @@ export default function SalesInvoicesPage() {
   const [deleting, setDeleting] = useState(false);
   const { isManagementActive, toggleManagementMode, isUserAdmin } = useManagementMode();
   const [isPassGateOpen, setIsPassGateOpen] = useState(false);
+  const [dateFilter, setDateFilter] = useState<"today" | "week" | "month" | "year" | "all">("all");
 
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
   const [prefix, setPrefix] = useState<string>("INV");
@@ -117,9 +121,11 @@ export default function SalesInvoicesPage() {
       const matchesStatus =
         !filters.status || invoice.status === filters.status;
 
-      return matchesSearch && matchesStatus;
+      const matchesDate = isDateInFilter(invoice.invoiceDate, dateFilter);
+
+      return matchesSearch && matchesStatus && matchesDate;
     });
-  }, [invoices, searchQuery, filters]);
+  }, [invoices, searchQuery, filters, dateFilter]);
 
   const totalPages = Math.ceil(filteredInvoices.length / ITEMS_PER_PAGE);
   const paginatedInvoices = filteredInvoices.slice(
@@ -231,17 +237,22 @@ export default function SalesInvoicesPage() {
         <Card className="shadow-sm">
           <CardContent className="p-6">
             <div className="space-y-4">
-              <DataTableToolbar
-                searchPlaceholder="ابحث عن فاتورة..."
-                searchValue={searchQuery}
-                onSearchChange={(value) => {
-                  setSearchQuery(value);
-                  setCurrentPage(1);
-                }}
-                filterOptions={filterOptions}
-                activeFilters={filters}
-                onFilterChange={handleFilterChange}
-              />
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex-1">
+                  <DataTableToolbar
+                    searchPlaceholder="ابحث عن فاتورة..."
+                    searchValue={searchQuery}
+                    onSearchChange={(value) => {
+                      setSearchQuery(value);
+                      setCurrentPage(1);
+                    }}
+                    filterOptions={filterOptions}
+                    activeFilters={filters}
+                    onFilterChange={handleFilterChange}
+                  />
+                </div>
+                <DateFilterButtons filter={dateFilter} onFilterChange={setDateFilter} />
+              </div>
 
               {loading ? (
                 <div className="flex items-center justify-center py-16">

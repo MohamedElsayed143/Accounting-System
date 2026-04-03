@@ -563,7 +563,8 @@ export function QuotationForm({ quotationId, readOnly, onBack }: QuotationFormPr
         invoiceNumber={quotationCode}
         date={quotationDate}
         partnerName={customer?.name || guestCustomerName || "عميل عام"}
-        partnerLabel={customer ? `كود العميل: ${customer.code || "---"}` : "عرض سعر لعميل غير مسجل"}
+        phone={customer?.phone || undefined}
+        address={customer?.address || undefined}
         title={printableTitle}
         items={items.map((item) => ({
           description: item.description,
@@ -584,8 +585,10 @@ export function QuotationForm({ quotationId, readOnly, onBack }: QuotationFormPr
         companyNameEn={companySettings?.companyNameEn}
         companyLogo={companySettings?.companyLogo}
         companyStamp={companySettings?.companyStamp}
+        companyBarcode={companySettings?.companyBarcode}
         showLogo={companySettings?.showLogoOnPrint}
         showStamp={companySettings?.showStampOnPrint}
+        showBarcode={companySettings?.showBarcodeOnPrint ?? true}
         isQuotation={true}
       />
     </div>

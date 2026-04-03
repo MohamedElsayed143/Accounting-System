@@ -5,9 +5,26 @@ import { useState, useEffect, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
-  ArrowRight, Plus, Trash2, Save, Calculator,
-  Search, User, ChevronLeft, CreditCard, Hash, Printer,
-  History as HistoryIcon
+  ArrowRight,
+  Trash2,
+  Save,
+  Calculator,
+  User,
+  CreditCard,
+  Hash,
+  Printer,
+  History as HistoryIcon,
+  Loader2,
+  Banknote,
+  Building2,
+  FileText,
+  ShoppingCart,
+  StickyNote,
+  Package,
+  TrendingUp,
+  TrendingDown,
+  Percent,
+  Tag,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -17,10 +34,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Table, TableBody, TableCell,
-  TableHead, TableHeader, TableRow,
-} from "@/components/ui/table";
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -28,6 +41,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { ProductSelect } from "@/components/shared/ProductSelect";
+import { DynamicNotes } from "@/components/shared/DynamicNotes";
+import { SupplierSelect } from "@/components/shared/SupplierSelect";
+import { PrintableInvoice } from "@/components/invoices/printable-invoice";
+import { useFormAutoSave } from "@/hooks/useFormAutoSave";
 
 import { getSuppliers } from "@/app/(dashboard)/suppliers/actions";
 import {
@@ -36,23 +54,20 @@ import {
   createPurchaseInvoice,
   getPurchaseInvoiceWithReturns,
   updatePurchaseInvoice,
-  PurchaseInvoiceItem
-} from "../actions"; // ✅ المسار الصحيح
+} from "../actions";
 import { getTreasuryData } from "@/app/(dashboard)/treasury/actions";
-import { getCompanySettingsAction } from "@/app/(dashboard)/settings/actions";
-import { PrintableInvoice } from "@/components/invoices/printable-invoice";
-import { ProductSelect } from "@/components/shared/ProductSelect";
-import { DynamicNotes } from "@/components/shared/DynamicNotes";
-import { SupplierSelect } from "@/components/shared/SupplierSelect";
-import { getGeneralSettingsAction } from "@/app/(dashboard)/settings/actions";
+import { getCompanySettingsAction, getGeneralSettingsAction } from "@/app/(dashboard)/settings/actions";
+import { getProducts, ProductData } from "@/app/(dashboard)/inventory/products/actions";
 
+// ─── الأنواع ──────────────────────────────────────────────────────────────────
 interface Supplier {
   id: number;
   name: string;
   code?: number;
+  phone?: string | null;
+  address?: string | null;
 }
 
-// ✅ إضافة productId للنوع
 interface PurchaseInvoiceItemWithProduct {
   id: any;
   description: string;
@@ -67,12 +82,44 @@ interface PurchaseInvoiceItemWithProduct {
   stockBalance?: number;
 }
 
-import { getProducts, ProductData } from "@/app/(dashboard)/inventory/products/actions";
-
-// ─── النموذج ──────────────────────────────────────────────────────────────────
+// ============================================================
+// Payment Type Badge Component
+// ============================================================
+function PaymentBadge({ type }: { type: "cash" | "credit" | "pending" }) {
+  const config = {
+    cash: {
+      label: "نقدي",
+      icon: TrendingUp,
+      className: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    },
+    credit: {
+      label: "أجل",
+      icon: TrendingDown,
+      className: "bg-amber-50 text-amber-700 border-amber-200",
+    },
+    pending: {
+      label: "معلقة",
+      icon: Loader2,
+      className: "bg-rose-50 text-rose-700 border-rose-200",
+    },
+  };
+  const c = config[type];
+  const Icon = c.icon;
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border",
+        c.className,
+      )}
+    >
+      <Icon className="h-3 w-3" />
+      {c.label}
+    </span>
+  );
+}
 
 // ============================================================
-// Step 2 — نموذج إنشاء/تعديل/عرض الفاتورة
+// نموذج إنشاء/تعديل/عرض فاتورة المشتريات (بنفس تصميم فاتورة البيع)
 // ============================================================
 function InvoiceFormStep({
   supplier: initialSupplier,
@@ -97,9 +144,7 @@ function InvoiceFormStep({
 
   const [supplier, setSupplier] = useState<Supplier | null>(initialSupplier);
   const [paymentType, setPaymentType] = useState<"cash" | "credit" | "pending">("cash");
-  const [invoiceDate, setInvoiceDate] = useState<string>(
-    new Date().toISOString().split("T")[0]
-  );
+  const [invoiceDate, setInvoiceDate] = useState<string>(new Date().toISOString().split("T")[0]);
   const [dueDate, setDueDate] = useState<string>("");
   const [items, setItems] = useState<PurchaseInvoiceItemWithProduct[]>([]);
   const [topNotes, setTopNotes] = useState<string[]>([]);
@@ -110,40 +155,89 @@ function InvoiceFormStep({
   const [selectedSafeId, setSelectedSafeId] = useState<string>("");
   const [selectedBankId, setSelectedBankId] = useState<string>("");
   const [treasuryType, setTreasuryType] = useState<"safe" | "bank">("safe");
-
-  // قائمة جميع المنتجات للاختيار منها
-  const [products, setProducts] = useState<ProductData[]>([]);
   const [settings, setSettings] = useState<any>(null);
   const [globalSettings, setGlobalSettings] = useState<any>(null);
   const [printableTitle, setPrintableTitle] = useState<string>("فاتورة مشتريات");
   const [topNotesTitle, setTopNotesTitle] = useState<string>("ملاحظات هامة");
   const [notesTitle, setNotesTitle] = useState<string>("ملاحظات إضافية");
 
-  // بيانات المرتجعات
   const [returnsTotal, setReturnsTotal] = useState<number>(0);
   const [returnsCount, setReturnsCount] = useState<number>(0);
   const [returns, setReturns] = useState<any[]>([]);
 
-  // تحميل المنتجات والإعدادات
+  // ─── تحميل البيانات الأولية ────────────────────────────────────────────────
   useEffect(() => {
-    getProducts().then(setProducts);
+    getProducts().then(() => {});
     getCompanySettingsAction().then((s) => {
       setSettings(s);
-      if (s?.invoiceName) {
-        setPrintableTitle(s.invoiceName);
-      }
+      if (s?.purchaseInvoiceName) setPrintableTitle(s.purchaseInvoiceName);
     });
     getGeneralSettingsAction().then(setGlobalSettings);
     getTreasuryData().then((data) => {
-      const allSafes = data.accounts.filter(acc => acc.type === "safe") as any[];
-      const allBanks = data.accounts.filter(acc => acc.type === "bank") as any[];
+      const allSafes = data.accounts.filter((acc) => acc.type === "safe") as any[];
+      const allBanks = data.accounts.filter((acc) => acc.type === "bank") as any[];
       setSafes(allSafes);
       setBanks(allBanks);
       if (allSafes.length > 0) setSelectedSafeId(String(allSafes[0].id));
     });
   }, []);
 
-  // تحميل بيانات الفاتورة إذا كنا في وضع التعديل أو العرض
+  // ─── Auto-save draft ───────────────────────────────────────────────────────
+  const currentFormState = useMemo(
+    () => ({
+      supplier,
+      paymentType,
+      invoiceDate,
+      dueDate,
+      items,
+      topNotes,
+      discount,
+      notes,
+      printableTitle,
+      topNotesTitle,
+      notesTitle,
+      selectedSafeId,
+      selectedBankId,
+      treasuryType,
+    }),
+    [supplier, paymentType, invoiceDate, dueDate, items, topNotes, discount, notes, printableTitle, topNotesTitle, notesTitle, selectedSafeId, selectedBankId, treasuryType],
+  );
+
+  const { clearDraft, removeDraftOnly } = useFormAutoSave(
+    "purchase_invoice_new",
+    currentFormState,
+    (saved) => {
+      if (saved.supplier) setSupplier(saved.supplier);
+      if (saved.paymentType) setPaymentType(saved.paymentType);
+      if (saved.invoiceDate) setInvoiceDate(saved.invoiceDate);
+      if (saved.dueDate) setDueDate(saved.dueDate);
+      if (saved.items && saved.items.length > 0) setItems(saved.items);
+      if (saved.topNotes) setTopNotes(saved.topNotes);
+      if (saved.discount !== undefined) setDiscount(saved.discount);
+      if (saved.notes) setNotes(saved.notes);
+      if (saved.printableTitle) setPrintableTitle(saved.printableTitle);
+      if (saved.topNotesTitle) setTopNotesTitle(saved.topNotesTitle);
+      if (saved.notesTitle) setNotesTitle(saved.notesTitle);
+      if (saved.selectedSafeId) setSelectedSafeId(saved.selectedSafeId);
+      if (saved.selectedBankId) setSelectedBankId(saved.selectedBankId);
+      if (saved.treasuryType) setTreasuryType(saved.treasuryType as any);
+    },
+    isEditMode || isViewMode,
+  );
+
+  const handleClearDraft = () => {
+    setSupplier(null);
+    setPaymentType("cash");
+    setInvoiceDate(new Date().toISOString().split("T")[0]);
+    setDueDate("");
+    setItems([]);
+    setTopNotes([]);
+    setDiscount(0);
+    setNotes([]);
+    clearDraft();
+  };
+
+  // ─── تحميل بيانات الفاتورة عند التعديل/العرض ────────────────────────────────
   useEffect(() => {
     if ((isEditMode || isViewMode) && invoiceId) {
       setLoading(true);
@@ -153,18 +247,16 @@ function InvoiceFormStep({
             setInvoiceNumber(invoice.invoiceNumber);
             setPaymentType(invoice.status as "cash" | "credit" | "pending");
             setInvoiceDate(new Date(invoice.invoiceDate).toISOString().split("T")[0]);
-            if ((invoice as any).dueDate) {
-              setDueDate(new Date((invoice as any).dueDate).toISOString().split("T")[0]);
-            }
+            if ((invoice as any).dueDate) setDueDate(new Date((invoice as any).dueDate).toISOString().split("T")[0]);
             setDiscount(invoice.discount || 0);
-
             if ((invoice as any).supplier) {
               setSupplier({
                 id: (invoice as any).supplier.id,
                 name: (invoice as any).supplier.name,
+                phone: (invoice as any).supplier.phone,
+                address: (invoice as any).supplier.address,
               });
             }
-
             const totalReturns = invoice.purchaseReturns?.reduce((sum: number, ret: any) => sum + ret.total, 0) || 0;
             setReturnsTotal(totalReturns);
             setReturnsCount(invoice.purchaseReturns?.length || 0);
@@ -184,56 +276,44 @@ function InvoiceFormStep({
                 productId: item.productId || null,
                 stockBalance: item.product?.currentStock || 0,
               }));
-               setItems(formattedItems);
-                
-                // Handle topNotes (Json format: {title, items})
-                const rawTopNotes = (invoice as any).topNotes;
-                if (rawTopNotes && typeof rawTopNotes === 'object' && 'items' in rawTopNotes) {
-                  setTopNotesTitle(rawTopNotes.title || "ملاحظات هامة");
-                  setTopNotes(rawTopNotes.items || []);
-                } else {
-                  setTopNotes(rawTopNotes || []);
-                }
+              setItems(formattedItems);
+            }
 
-                // Handle bottom notes
-                const rawNotes = (invoice as any).notes;
-                if (rawNotes && typeof rawNotes === 'object' && 'items' in rawNotes) {
-                  setNotesTitle(rawNotes.title || "ملاحظات إضافية");
-                  setNotes(rawNotes.items || []);
-                } else {
-                  setNotes(rawNotes || []);
-                }
-             }
+            const rawTopNotes = (invoice as any).topNotes || [];
+            if (rawTopNotes && typeof rawTopNotes === "object" && "items" in rawTopNotes) {
+              setTopNotesTitle(rawTopNotes.title || "ملاحظات هامة");
+              setTopNotes(rawTopNotes.items || []);
+            } else {
+              setTopNotes(Array.isArray(rawTopNotes) ? rawTopNotes : []);
+            }
+            const rawNotes = (invoice as any).notes || [];
+            if (rawNotes && typeof rawNotes === "object" && "items" in rawNotes) {
+              setNotesTitle(rawNotes.title || "ملاحظات إضافية");
+              setNotes(rawNotes.items || []);
+            } else {
+              setNotes(Array.isArray(rawNotes) ? rawNotes : []);
+            }
           }
         })
-        .catch((error) => {
-          console.error("Error loading invoice:", error);
-          toast.error("حدث خطأ أثناء تحميل بيانات الفاتورة");
-        })
+        .catch(() => toast.error("حدث خطأ أثناء تحميل بيانات الفاتورة"))
         .finally(() => setLoading(false));
     }
   }, [isEditMode, isViewMode, invoiceId]);
 
   useEffect(() => {
-    if (!isEditMode && !isViewMode) {
-      getNextPurchaseInvoiceNumber().then(setInvoiceNumber);
-    }
+    if (!isEditMode && !isViewMode) getNextPurchaseInvoiceNumber().then(setInvoiceNumber);
   }, [isEditMode, isViewMode]);
 
   useEffect(() => {
     if (isViewMode) return;
     if (!invoiceNumber || invoiceNumber < 1) return;
-
     setCheckingNumber(true);
     const timer = setTimeout(async () => {
       const taken = await checkPurchaseInvoiceNumberExists(invoiceNumber);
       if (isEditMode && taken) {
         const invoice = await getPurchaseInvoiceWithReturns(Number(invoiceId));
-        if (invoice && invoice.invoiceNumber === invoiceNumber) {
-          setInvoiceNumberError("");
-        } else {
-          setInvoiceNumberError(taken ? `رقم الفاتورة #${invoiceNumber} مستخدم مسبقاً` : "");
-        }
+        if (invoice && invoice.invoiceNumber === invoiceNumber) setInvoiceNumberError("");
+        else setInvoiceNumberError(taken ? `رقم الفاتورة #${invoiceNumber} مستخدم مسبقاً` : "");
       } else {
         setInvoiceNumberError(taken ? `رقم الفاتورة #${invoiceNumber} مستخدم مسبقاً` : "");
       }
@@ -273,24 +353,19 @@ function InvoiceFormStep({
       prev.map((item, i) => {
         if (i !== index) return item;
         let finalValue = value;
-        
-        if (field === "quantity" || field === "unitPrice" || field === "taxRate" || field === "discount" || field === "sellingPrice" || field === "profitMargin") {
+        if (["quantity", "unitPrice", "taxRate", "discount", "sellingPrice", "profitMargin"].includes(field)) {
           finalValue = Math.max(0, Number(value));
         }
-
         const updated = { ...item, [field]: finalValue };
 
-        // Dynamic Pricing Linkage logic
+        // ربط الأسعار
         if (field === "unitPrice") {
-          // If cost changes, keep selling price as is, and update profit margin.
           if (Number(updated.unitPrice) > 0) {
             updated.profitMargin = Number((((Number(updated.sellingPrice) - Number(updated.unitPrice)) / Number(updated.unitPrice)) * 100).toFixed(2));
           }
         } else if (field === "profitMargin") {
-          // If profit margin (markup %) changes, recalculate sellingPrice based on unitPrice
           updated.sellingPrice = Number((Number(updated.unitPrice) * (1 + Number(updated.profitMargin) / 100)).toFixed(2));
         } else if (field === "sellingPrice") {
-          // If selling price changes, recalculate profit margin
           if (Number(updated.unitPrice) > 0) {
             updated.profitMargin = Number((((Number(updated.sellingPrice) - Number(updated.unitPrice)) / Number(updated.unitPrice)) * 100).toFixed(2));
           }
@@ -300,29 +375,20 @@ function InvoiceFormStep({
         const priceAfterDiscount = basePrice - Number(updated.discount || 0);
         updated.total = priceAfterDiscount + priceAfterDiscount * (Number(updated.taxRate) / 100);
         return updated;
-      })
+      }),
     );
   };
 
-  const subtotal = useMemo(
-    () => items.reduce((sum, i) => sum + Number(i.quantity) * Number(i.unitPrice), 0),
-    [items]
-  );
-  const itemsDiscount = useMemo(
-    () => items.reduce((sum, i) => sum + Number(i.discount || 0), 0),
-    [items]
-  );
+  const subtotal = useMemo(() => items.reduce((sum, i) => sum + Number(i.quantity) * Number(i.unitPrice), 0), [items]);
+  const itemsDiscount = useMemo(() => items.reduce((sum, i) => sum + Number(i.discount || 0), 0), [items]);
   const totalTax = useMemo(
     () =>
-      items.reduce(
-        (sum, i) => {
-          const itemBase = Number(i.quantity) * Number(i.unitPrice);
-          const itemAfterDiscount = itemBase - Number(i.discount || 0);
-          return sum + itemAfterDiscount * (Number(i.taxRate) / 100);
-        },
-        0
-      ),
-    [items]
+      items.reduce((sum, i) => {
+        const itemBase = Number(i.quantity) * Number(i.unitPrice);
+        const itemAfterDiscount = itemBase - Number(i.discount || 0);
+        return sum + itemAfterDiscount * (Number(i.taxRate) / 100);
+      }, 0),
+    [items],
   );
   const grandTotal = subtotal - itemsDiscount - discount + totalTax;
   const netTotal = grandTotal - returnsTotal;
@@ -330,22 +396,10 @@ function InvoiceFormStep({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isViewMode) return;
-    if (invoiceNumberError || checkingNumber) {
-      toast.error("يرجى تصحيح رقم الفاتورة أولاً");
-      return;
-    }
-    if (!supplier) {
-      toast.error("يرجى اختيار المورد أولاً");
-      return;
-    }
-    if (grandTotal <= 0 && items.length > 0) {
-      toast.error("إجمالي الفاتورة يجب أن يكون أكبر من صفر");
-      return;
-    }
-    if (items.length === 0) {
-      toast.error("لا يمكن حفظ فاتورة فارغة");
-      return;
-    }
+    if (invoiceNumberError || checkingNumber) return toast.error("يرجى تصحيح رقم الفاتورة أولاً");
+    if (!supplier) return toast.error("يرجى اختيار المورد أولاً");
+    if (grandTotal <= 0 && items.length > 0) return toast.error("إجمالي الفاتورة يجب أن يكون أكبر من صفر");
+    if (items.length === 0) return toast.error("لا يمكن حفظ فاتورة فارغة");
 
     try {
       setSaving(true);
@@ -359,7 +413,7 @@ function InvoiceFormStep({
         discount: itemsDiscount + discount,
         total: grandTotal,
         status: paymentType,
-        dueDate: (paymentType === "credit" || globalSettings?.showDueDateOnInvoices) ? dueDate : undefined,
+        dueDate: paymentType === "credit" || globalSettings?.showDueDateOnInvoices ? dueDate : undefined,
         safeId: paymentType === "cash" && treasuryType === "safe" ? Number(selectedSafeId) : undefined,
         bankId: paymentType === "cash" && treasuryType === "bank" ? Number(selectedBankId) : undefined,
         topNotes: { title: topNotesTitle, items: topNotes } as any,
@@ -377,7 +431,6 @@ function InvoiceFormStep({
           productId: productId!,
         })),
       };
-
       if (isEditMode && invoiceId) {
         await updatePurchaseInvoice(Number(invoiceId), invoiceData);
         toast.success(`تم تحديث الفاتورة #${invoiceNumber} بنجاح`);
@@ -386,10 +439,10 @@ function InvoiceFormStep({
         toast.success(`تم حفظ الفاتورة #${invoiceNumber} بنجاح`);
       }
       router.push("/purchase-invoices");
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "حدث خطأ أثناء الحفظ";
-      toast.error(message);
+    } catch (err: any) {
+      toast.error(err.message || "حدث خطأ أثناء الحفظ");
     } finally {
+      if (!isEditMode && !isViewMode) removeDraftOnly();
       setSaving(false);
     }
   };
@@ -398,10 +451,15 @@ function InvoiceFormStep({
 
   if (loading) {
     return (
-      <div className="flex-1 flex items-center justify-center p-6 bg-slate-50/50 min-h-[calc(100vh-64px)]">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-          <p className="text-sm text-muted-foreground font-medium">جاري تحميل بيانات الفاتورة...</p>
+      <div className="flex-1 flex items-center justify-center p-6 bg-gray-50 min-h-[calc(100vh-64px)]">
+        <div className="flex flex-col items-center gap-4">
+          <div className="relative">
+            <div className="w-16 h-16 rounded-2xl bg-blue-50 flex items-center justify-center">
+              <FileText className="h-8 w-8 text-blue-500" />
+            </div>
+            <div className="absolute -inset-1 rounded-2xl border-2 border-blue-200 border-t-blue-500 animate-spin" />
+          </div>
+          <p className="text-sm text-gray-500 font-medium">جاري تحميل بيانات الفاتورة...</p>
         </div>
       </div>
     );
@@ -411,49 +469,95 @@ function InvoiceFormStep({
     const originalTitle = document.title;
     document.title = "fast";
     window.print();
-    setTimeout(() => {
-      document.title = originalTitle;
-    }, 100);
+    setTimeout(() => (document.title = originalTitle), 100);
   };
 
+  const pageTitle = isViewMode ? "عرض الفاتورة" : isEditMode ? "تعديل الفاتورة" : "فاتورة جديدة";
+
   return (
-    <div className="flex-1 space-y-6 p-6 print:p-0 print:space-y-0 print:bg-white bg-slate-50/50 min-h-screen print:min-h-0" dir="rtl">
-      <div className="print:hidden flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <Button variant="outline" size="icon" onClick={onBack} className="rounded-full shadow-sm">
-            <ArrowRight className="h-4 w-4" />
-          </Button>
-          <div>
-            <h2 className="text-3xl font-black text-slate-800 tracking-tight">
-              {isViewMode ? "عرض فاتورة مشتريات" : isEditMode ? "تعديل فاتورة مشتريات" : "إنشاء فاتورة مشتريات"}
-            </h2>
-            <p className="text-muted-foreground font-medium">نظام إدارة المشتريات</p>
+    <div className="flex-1 print:p-0 print:space-y-0 print:bg-white bg-gray-50 min-h-screen print:min-h-0" dir="rtl">
+      {/* ── Top Header Bar ── */}
+      <div className="print:hidden sticky top-0 z-20 bg-white border-b border-gray-200 shadow-sm">
+        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <button
+              type="button"
+              onClick={onBack}
+              className="flex-shrink-0 inline-flex items-center justify-center w-9 h-9 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 transition-all shadow-sm"
+            >
+              <ArrowRight className="h-4 w-4 text-gray-600" />
+            </button>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h1 className="text-lg font-bold text-gray-900 truncate">{pageTitle}</h1>
+                <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 text-xs font-bold border border-blue-100">
+                  #{invoiceNumber}
+                </span>
+                {(isEditMode || isViewMode) && <PaymentBadge type={paymentType} />}
+              </div>
+              <p className="text-xs text-gray-400 mt-0.5 hidden sm:block">نظام إدارة المشتريات</p>
+            </div>
           </div>
-        </div>
-        {(isEditMode || isViewMode || invoiceId) && (
-          <div className="flex flex-col md:flex-row gap-3 items-end">
-            <Button variant="outline" size="lg" onClick={handlePrint} className="gap-2 shadow-sm border-primary/20 hover:bg-primary/5 hover:border-primary/50 text-primary h-[42px]">
-              <Printer className="h-5 w-5" /> طباعة الفاتورة
-            </Button>
-            {isViewMode && supplier && (
-              <Button
-                variant="outline"
-                size="lg"
-                asChild
-                className="gap-2 shadow-sm border-blue-200 hover:bg-blue-50 hover:border-blue-400 text-blue-600 h-[42px]"
+
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {!isEditMode && !isViewMode && (
+              <button
+                type="button"
+                onClick={handleClearDraft}
+                disabled={saving}
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 rounded-xl transition-all disabled:opacity-50"
               >
-                <Link href={`/reports?supplierId=${supplier.id}`}>
-                  <HistoryIcon className="h-5 w-5" />
-                  كشف حساب المورد
-                </Link>
-              </Button>
+                <Trash2 className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">مسح المسودة</span>
+              </button>
+            )}
+            {(isEditMode || isViewMode || invoiceId) && (
+              <button
+                type="button"
+                onClick={handlePrint}
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-600 bg-white hover:bg-gray-50 border border-gray-200 rounded-xl transition-all shadow-sm"
+              >
+                <Printer className="h-4 w-4" />
+                <span className="hidden sm:inline">طباعة</span>
+              </button>
+            )}
+            {isViewMode && supplier && (
+              <Link
+                href={`/reports?supplierId=${supplier.id}`}
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-xl transition-all"
+              >
+                <HistoryIcon className="h-4 w-4" />
+                <span className="hidden sm:inline">كشف الحساب</span>
+              </Link>
+            )}
+            {!isViewMode && (
+              <button
+                type="submit"
+                form="invoice-form"
+                disabled={!canSave}
+                className="inline-flex items-center gap-2 px-5 py-2 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-xl transition-all shadow-sm active:scale-95"
+              >
+                {saving ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    جاري الحفظ...
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4" />
+                    {isEditMode ? "تحديث" : "حفظ الفاتورة"}
+                  </>
+                )}
+              </button>
             )}
           </div>
-        )}
+        </div>
       </div>
 
-      <div className="print:hidden">
-        <div className="mb-6">
+      {/* ── Main Content ── */}
+      <div className="print:hidden max-w-[1400px] mx-auto px-4 sm:px-6 py-6 space-y-5">
+        {/* Top Notes */}
+        <div className="rounded-2xl border border-amber-200 bg-amber-50/60 overflow-hidden">
           <DynamicNotes
             title={topNotesTitle}
             onTitleChange={setTopNotesTitle}
@@ -462,385 +566,474 @@ function InvoiceFormStep({
             disabled={isViewMode}
           />
         </div>
-        <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-4">
-          <div className="lg:col-span-3 space-y-6">
-            <Card className="border-none shadow-sm overflow-hidden">
-              <CardHeader className="bg-white border-b py-4">
-                <CardTitle className="text-base font-bold flex items-center gap-2">
-                  <div className="w-2 h-6 bg-primary rounded-full" /> بيانات المورد والطلب
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="bg-white pt-5 pb-5">
-                <div className="flex flex-col md:flex-row md:items-start gap-4 justify-between">
-                  <div className="w-full max-w-sm">
-                    <SupplierSelect
-                      onSelect={(s) => setSupplier(s)}
-                      selectedId={supplier?.id}
-                      selectedName={supplier?.name}
-                      selectedCode={supplier?.code}
-                      disabled={isViewMode || isEditMode}
-                      error={!supplier ? "يرجى اختيار المورد" : ""}
+
+        <form id="invoice-form" onSubmit={handleSubmit} className="space-y-5">
+          {/* ── Section 1: Invoice Info ── */}
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100 bg-gray-50/50">
+              <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-blue-100">
+                <FileText className="h-4 w-4 text-blue-600" />
+              </div>
+              <h2 className="font-bold text-gray-800 text-sm">بيانات الفاتورة والمورد</h2>
+            </div>
+            <div className="p-5 space-y-5">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
+                    <User className="h-3 w-3" />
+                    المورد
+                  </label>
+                  <SupplierSelect
+                    onSelect={(s) => setSupplier(s)}
+                    selectedId={supplier?.id}
+                    selectedName={supplier?.name}
+                    selectedCode={supplier?.code}
+                    disabled={isViewMode || isEditMode}
+                    error={!supplier ? "يرجى اختيار المورد" : ""}
+                  />
+                  {supplier && (
+                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                      {supplier.phone && (
+                        <span className="inline-flex items-center gap-1 text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
+                          📞 {supplier.phone}
+                        </span>
+                      )}
+                      {supplier.address && (
+                        <span className="inline-flex items-center gap-1 text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
+                          📍 {supplier.address}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wide flex items-center gap-1">
+                      <Hash className="h-3 w-3" />
+                      رقم الفاتورة
+                    </label>
+                    <div className="relative">
+                      <Input
+                        type="number"
+                        min={1}
+                        value={invoiceNumber}
+                        onChange={(e) => setInvoiceNumber(Number(e.target.value))}
+                        disabled={isViewMode}
+                        className={cn(
+                          "text-center font-bold text-base h-10 rounded-xl border-gray-200 bg-gray-50 focus:bg-white transition-colors",
+                          invoiceNumberError && "border-red-400 bg-red-50",
+                        )}
+                        required={!isViewMode}
+                      />
+                      {checkingNumber && (
+                        <div className="absolute left-2 top-1/2 -translate-y-1/2">
+                          <Loader2 className="h-3 w-3 animate-spin text-gray-400" />
+                        </div>
+                      )}
+                    </div>
+                    {invoiceNumberError && !checkingNumber && !isViewMode && (
+                      <p className="text-xs text-red-500 font-medium">{invoiceNumberError}</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wide">تاريخ الفاتورة</label>
+                    <Input
+                      type="date"
+                      value={invoiceDate}
+                      onChange={(e) => setInvoiceDate(e.target.value)}
+                      disabled={isViewMode}
+                      className="h-10 rounded-xl border-gray-200 bg-gray-50 focus:bg-white transition-colors"
+                      required={!isViewMode}
                     />
                   </div>
 
-                  <div className="flex items-end gap-4 flex-wrap">
-                    <div className="space-y-1.5">
-                      <Label className="text-slate-600 text-sm font-bold flex items-center gap-1">
-                        <Hash className="h-3 w-3" /> رقم الفاتورة
-                      </Label>
-                      <div className="space-y-1">
-                        <Input
-                          type="number"
-                          min={1}
-                          value={invoiceNumber}
-                          onChange={(e) => setInvoiceNumber(Number(e.target.value))}
-                          disabled={isViewMode}
-                          className={`w-32 bg-slate-50 border-slate-200 text-center font-bold text-lg ${
-                            invoiceNumberError ? "border-red-400 bg-red-50" : ""
-                          }`}
-                          required={!isViewMode}
-                        />
-                        {checkingNumber && !isViewMode && (
-                          <p className="text-xs text-slate-400 font-medium">جاري التحقق...</p>
-                        )}
-                        {invoiceNumberError && !checkingNumber && !isViewMode && (
-                          <p className="text-xs text-red-500 font-medium max-w-[220px] leading-tight">
-                            {invoiceNumberError}
-                          </p>
-                        )}
-                      </div>
-                    </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wide">مسمى الفاتورة</label>
+                    <Input
+                      value={printableTitle}
+                      onChange={(e) => setPrintableTitle(e.target.value)}
+                      disabled={isViewMode}
+                      className="h-10 rounded-xl border-gray-200 bg-gray-50 focus:bg-white transition-colors font-bold"
+                      placeholder="فاتورة مشتريات"
+                    />
+                  </div>
+                </div>
+              </div>
 
-                    <div className="space-y-1.5">
-                      <Label className="text-slate-600 text-sm font-bold flex items-center gap-1">
-                        <CreditCard className="h-3 w-3" /> نوع الفاتورة
-                      </Label>
-                      <Select
-                        value={paymentType}
-                        onValueChange={(v) => setPaymentType(v as "cash" | "credit" | "pending")}
+              {/* Payment Type + Treasury */}
+              <div className="pt-4 border-t border-gray-100">
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3 block">نوع الدفع</label>
+                <div className="flex flex-wrap items-start gap-4">
+                  <div className="flex rounded-xl border border-gray-200 bg-gray-50 p-1 gap-1">
+                    {[
+                      { value: "cash", label: "نقدي", icon: "💵", active: "bg-emerald-500 text-white shadow-sm" },
+                      { value: "credit", label: "أجل", icon: "📋", active: "bg-amber-500 text-white shadow-sm" },
+                      { value: "pending", label: "معلقة", icon: "⏳", active: "bg-rose-500 text-white shadow-sm" },
+                    ].map((pt) => (
+                      <button
+                        key={pt.value}
+                        type="button"
                         disabled={isViewMode || isEditMode}
+                        onClick={() => setPaymentType(pt.value as any)}
+                        className={cn(
+                          "flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-bold transition-all",
+                          paymentType === pt.value ? pt.active : "text-gray-500 hover:text-gray-700 hover:bg-gray-100",
+                          (isViewMode || isEditMode) && "opacity-75 cursor-default",
+                        )}
                       >
-                        <SelectTrigger className="w-36 bg-slate-50 border-slate-200">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="cash">نقدي</SelectItem>
-                          <SelectItem value="credit">أجل</SelectItem>
-                          <SelectItem value="pending">معلقة</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
+                        <span>{pt.icon}</span>
+                        {pt.label}
+                      </button>
+                    ))}
+                  </div>
 
+                  {(paymentType === "credit" || globalSettings?.showDueDateOnInvoices) && (
                     <div className="space-y-1.5">
-                      <Label className="text-slate-600 text-sm font-bold flex items-center gap-1">
-                        مسمى الفاتورة
-                      </Label>
-                      <Input
-                        value={printableTitle}
-                        onChange={(e) => setPrintableTitle(e.target.value)}
-                        disabled={isViewMode}
-                        className="bg-slate-50 border-slate-200 w-44 font-bold"
-                        placeholder="مثلاً: فاتورة مشتريات"
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <Label className="text-slate-600 text-sm font-bold">تاريخ الفاتورة</Label>
+                      <label className="text-xs font-bold text-gray-500 uppercase tracking-wide block">
+                        {paymentType === "credit" ? "تاريخ الاستحقاق" : "تاريخ السداد المتوقع"}
+                      </label>
                       <Input
                         type="date"
-                        value={invoiceDate}
-                        onChange={(e) => setInvoiceDate(e.target.value)}
+                        value={dueDate}
+                        onChange={(e) => setDueDate(e.target.value)}
                         disabled={isViewMode}
-                        className="bg-slate-50 border-slate-200 w-44"
-                        required={!isViewMode}
+                        className="h-10 rounded-xl border-gray-200 bg-gray-50 focus:bg-white transition-colors w-44"
                       />
                     </div>
+                  )}
 
-                    {(paymentType === "credit" || globalSettings?.showDueDateOnInvoices) && (
+                  {paymentType === "cash" && (
+                    <div className="flex items-end gap-3 flex-wrap">
                       <div className="space-y-1.5">
-                        <Label className="text-slate-600 text-sm font-bold flex items-center gap-1">
-                          {paymentType === "credit" ? "تاريخ الاستحقاق" : "تاريخ السداد المتوقع"}
-                        </Label>
-                        <Input
-                          type="date"
-                          value={dueDate}
-                          onChange={(e) => setDueDate(e.target.value)}
-                          disabled={isViewMode}
-                          className="bg-slate-50 border-slate-200 w-44"
-                        />
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {paymentType === "cash" && (
-                  <div className="mt-4 pt-4 border-t flex flex-wrap items-end gap-4">
-                    <div className="space-y-1.5">
-                      <Label className="text-slate-600 text-sm font-bold">جهة الدفع (نقدي)</Label>
-                      <Select
-                        value={treasuryType}
-                        onValueChange={(v) => setTreasuryType(v as "safe" | "bank")}
-                        disabled={isViewMode || isEditMode}
-                      >
-                        <SelectTrigger className="w-32 bg-slate-50 border-slate-200">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="safe">خزنة</SelectItem>
-                          <SelectItem value="bank">بنك</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    {treasuryType === "safe" ? (
-                      <div className="space-y-1.5 flex-1 max-w-[200px]">
-                        <Label className="text-slate-600 text-sm font-bold">اختر الخزنة</Label>
-                        <Select
-                          value={selectedSafeId}
-                          onValueChange={setSelectedSafeId}
-                          disabled={isViewMode || isEditMode || safes.length === 0}
-                        >
-                          <SelectTrigger className="bg-slate-50 border-slate-200">
-                            <SelectValue placeholder={safes.length === 0 ? "لا يوجد خزن" : "اختر الخزنة"} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {safes.map((s) => (
-                              <SelectItem key={s.id} value={String(s.id)}>
-                                {s.name} ({s.balance.toLocaleString()} {settings?.currencyCode || "ج.م"})
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    ) : (
-                      <div className="space-y-1.5 flex-1 max-w-[200px]">
-                        <Label className="text-slate-600 text-sm font-bold">اختر البنك</Label>
-                        <Select
-                          value={selectedBankId}
-                          onValueChange={setSelectedBankId}
-                          disabled={isViewMode || isEditMode || banks.length === 0}
-                        >
-                          <SelectTrigger className="bg-slate-50 border-slate-200">
-                            <SelectValue placeholder={banks.length === 0 ? "لا يوجد بنوك" : "اختر البنك"} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {banks.map((b) => (
-                              <SelectItem key={b.id} value={String(b.id)}>
-                                {b.name} ({b.balance.toLocaleString()} {settings?.currencyCode || "ج.م"})
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card className="border-none shadow-sm overflow-hidden">
-              <CardHeader className="flex flex-row items-center justify-between bg-white border-b py-4">
-                <CardTitle className="text-base font-bold flex items-center gap-2">
-                  <div className="w-2 h-6 bg-orange-500 rounded-full" /> تفاصيل الأصناف
-                </CardTitle>
-                {!isViewMode && (
-                  <div className="w-72">
-                    <ProductSelect onSelect={addItem} disabled={loading} />
-                  </div>
-                )}
-              </CardHeader>
-              <CardContent className="p-0 bg-white">
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader className="bg-slate-50">
-                      <TableRow>
-                        <TableHead className="text-right font-bold">الصنف</TableHead>
-                        <TableHead className="text-right font-bold w-24 text-blue-600 outline-none">الرصيد</TableHead>
-                        <TableHead className="text-right font-bold w-24">الكمية *</TableHead>
-                        <TableHead className="text-right font-bold w-24">سعر الشراء *</TableHead>
-                        <TableHead className="text-right font-bold w-24 text-blue-600">سعر البيع</TableHead>
-                        <TableHead className="text-right font-bold w-24 text-green-600">الربح (%)</TableHead>
-                        <TableHead className="text-right font-bold w-20">الضريبة %</TableHead>
-                        <TableHead className="text-right font-bold w-32">الإجمالي</TableHead>
-                        <TableHead className="w-10"></TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {items.map((item, index) => (
-                        <TableRow key={item.id || index}>
-                          <TableCell className="p-3">
-                            <div className="flex flex-col gap-0.5">
-                              <span className="font-bold text-slate-800">{item.description}</span>
-                              <span className="text-[10px] text-muted-foreground font-mono">
-                                PID: {item.productId}
-                              </span>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <span className={cn(
-                              "font-bold px-2 py-1 rounded text-sm",
-                              (item.stockBalance || 0) <= 0 ? "bg-red-50 text-red-600" : "bg-blue-50 text-blue-600"
-                            )}>
-                              {Math.max(0, item.stockBalance || 0).toLocaleString()}
-                            </span>
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              type="number"
-                              step="any"
-                              value={item.quantity || ""}
-                              onChange={(e) => updateItem(index, "quantity", e.target.value)}
-                              disabled={isViewMode}
-                              className="bg-slate-50 h-9 font-bold text-center"
-                              required={!isViewMode}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              type="number"
-                              step="any"
-                              value={item.unitPrice || ""}
-                              onChange={(e) => updateItem(index, "unitPrice", e.target.value)}
-                              disabled={isViewMode}
-                              className="bg-slate-50 h-9 font-bold text-center"
-                              required={!isViewMode}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              type="number"
-                              step="any"
-                              value={item.sellingPrice || ""}
-                              onChange={(e) => updateItem(index, "sellingPrice", e.target.value)}
-                              disabled={isViewMode}
-                              className="bg-blue-50 border-blue-100 h-9 font-bold text-center text-blue-700"
-                              placeholder="بيع"
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              type="number"
-                              step="any"
-                              value={item.profitMargin || ""}
-                              onChange={(e) => updateItem(index, "profitMargin", e.target.value)}
-                              disabled={isViewMode}
-                              className="bg-green-50 border-green-100 h-9 font-bold text-center text-green-700"
-                              placeholder="الربح"
-                            />
-                          </TableCell>
-                          
-                          <TableCell>
-                            <Input
-                              type="number"
-                              step="any"
-                              value={item.taxRate}
-                              onChange={(e) => updateItem(index, "taxRate", e.target.value)}
-                              disabled={isViewMode}
-                              className="bg-orange-50 border-orange-200 h-9 font-bold text-center"
-                            />
-                          </TableCell>
-                          <TableCell className="font-bold text-primary text-sm whitespace-nowrap">
-                            {item.total.toLocaleString("ar-EG")} {settings?.currencyCode || "ج.م"}
-                          </TableCell>
-                          <TableCell>
-                            {!isViewMode && (
-                              <Button
+                        <label className="text-xs font-bold text-gray-500 uppercase tracking-wide block">جهة الدفع</label>
+                        <div className="flex rounded-xl border border-gray-200 bg-gray-50 p-1 gap-1">
+                          {[
+                            { value: "safe", label: "خزنة", icon: Banknote },
+                            { value: "bank", label: "بنك", icon: Building2 },
+                          ].map((tt) => {
+                            const Icon = tt.icon;
+                            return (
+                              <button
+                                key={tt.value}
                                 type="button"
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => removeItem(index)}
-                                disabled={items.length === 1}
-                                className="text-red-400 h-8 w-8"
+                                disabled={isViewMode || isEditMode}
+                                onClick={() => setTreasuryType(tt.value as "safe" | "bank")}
+                                className={cn(
+                                  "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold transition-all",
+                                  treasuryType === tt.value ? "bg-blue-500 text-white shadow-sm" : "text-gray-500 hover:text-gray-700 hover:bg-gray-100",
+                                  (isViewMode || isEditMode) && "opacity-75 cursor-default",
+                                )}
                               >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                                <Icon className="h-3.5 w-3.5" />
+                                {tt.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-gray-500 uppercase tracking-wide block">
+                          {treasuryType === "safe" ? "اختر الخزنة" : "اختر البنك"}
+                        </label>
+                        {treasuryType === "safe" ? (
+                          <>
+                            <Select
+                              value={selectedSafeId}
+                              onValueChange={setSelectedSafeId}
+                              disabled={isViewMode || isEditMode || safes.length === 0}
+                            >
+                              <SelectTrigger className="w-48 h-10 rounded-xl border-gray-200 bg-gray-50">
+                                <SelectValue placeholder={safes.length === 0 ? "لا يوجد خزن" : "اختر الخزنة"} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {safes.map((s) => (
+                                  <SelectItem key={s.id} value={String(s.id)}>
+                                    {s.name} ({s.balance.toLocaleString()} {settings?.currencyCode || "ج.م"})
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            {safes.length === 0 && <p className="text-xs text-red-500">يرجى إضافة خزنة أولاً</p>}
+                          </>
+                        ) : (
+                          <>
+                            <Select
+                              value={selectedBankId}
+                              onValueChange={setSelectedBankId}
+                              disabled={isViewMode || isEditMode || banks.length === 0}
+                            >
+                              <SelectTrigger className="w-48 h-10 rounded-xl border-gray-200 bg-gray-50">
+                                <SelectValue placeholder={banks.length === 0 ? "لا يوجد بنوك" : "اختر البنك"} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {banks.map((b) => (
+                                  <SelectItem key={b.id} value={String(b.id)}>
+                                    {b.name} ({b.balance.toLocaleString()} {settings?.currencyCode || "ج.م"})
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            {banks.length === 0 && <p className="text-xs text-red-500">يرجى إضافة بنك أولاً</p>}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </CardContent>
-            </Card>
-
-            <DynamicNotes 
-              title={notesTitle} 
-              onTitleChange={setNotesTitle} 
-              notes={notes} 
-              onChange={setNotes} 
-              disabled={isViewMode} 
-            />
+              </div>
+            </div>
           </div>
 
-          <div className="space-y-6">
-            <Card className="border-none shadow-xl bg-slate-900 text-white p-6 space-y-4">
-              <h3 className="text-lg font-bold flex items-center gap-2 border-b border-white/10 pb-4">
-                <Calculator className="h-5 w-5 text-orange-400" /> ملخص الفاتورة
-              </h3>
-              <div className="space-y-3">
-                <div className="flex justify-between text-slate-400 text-sm">
-                  <span>رقم الفاتورة:</span>
-                  <span className="text-white font-mono font-bold">#{invoiceNumber}</span>
+          {/* ── Section 2: Items ── */}
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 px-5 py-4 border-b border-gray-100 bg-gray-50/50">
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-orange-100 flex-shrink-0">
+                  <ShoppingCart className="h-4 w-4 text-orange-600" />
                 </div>
-                <Separator className="bg-white/10" />
-                <div className="flex justify-between text-slate-400 text-sm">
-                  <span>الإجمالي قبل الضريبة:</span>
-                  <span className="text-white font-mono">{subtotal.toLocaleString("ar-EG")} {settings?.currencyCode || "ج.م"}</span>
-                </div>
-                <div className="flex justify-between text-slate-400 text-sm">
-                  <span>إجمالي الضرائب:</span>
-                  <span className="text-orange-400 font-mono">+{totalTax.toLocaleString("ar-EG")} {settings?.currencyCode || "ج.م"}</span>
-                </div>
-                <div className="space-y-1.5 pt-2">
-                  <div className="flex justify-between text-slate-400 text-sm mb-1">
-                    <span>خصم إضافي:</span>
-                    <span className="text-red-400 font-mono">
-                      -{discount.toLocaleString("ar-EG")} {settings?.currencyCode || "ج.م"}
-                    </span>
-                  </div>
-                  <Input
-                    type="number"
-                    value={discount || ""}
-                    onChange={(e) => setDiscount(Math.max(0, Number(e.target.value)))}
-                    disabled={isViewMode}
-                    className="bg-white/5 border-white/10 h-8 text-center font-bold"
-                    placeholder="قيمة الخصم..."
-                  />
-                </div>
-                {returnsCount > 0 && (
-                  <>
-                    <div className="flex justify-between text-slate-400 text-sm">
-                      <span>إجمالي المرتجعات:</span>
-                      <span className="text-red-400 font-mono">-{returnsTotal.toLocaleString("ar-EG")} {settings?.currencyCode || "ج.م"}</span>
-                    </div>
-                    <div className="flex justify-between text-slate-400 text-sm">
-                      <span>عدد المرتجعات:</span>
-                      <span className="text-white font-mono">{returnsCount}</span>
-                    </div>
-                  </>
-                )}
-                <Separator className="bg-white/10" />
-                <div className="pt-2">
-                  <p className="text-xs text-slate-400 mb-1">الصافي النهائي:</p>
-                  <p className="text-3xl font-black text-green-400">{netTotal.toLocaleString("ar-EG")} {settings?.currencyCode || "ج.m"}</p>
+                <div className="min-w-0">
+                  <h2 className="font-bold text-gray-800 text-sm">تفاصيل الأصناف</h2>
+                  {items.length > 0 && <p className="text-xs text-gray-400 mt-0.5">{items.length} صنف</p>}
                 </div>
               </div>
               {!isViewMode && (
-                <Button type="submit" disabled={!canSave} className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-50 h-14 text-lg font-bold gap-2 mt-4">
-                  {saving ? (
+                <div className="w-72">
+                  <ProductSelect onSelect={addItem} disabled={loading} />
+                </div>
+              )}
+            </div>
+
+            {items.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 px-4">
+                <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center mb-4">
+                  <Package className="h-8 w-8 text-gray-300" />
+                </div>
+                <p className="text-gray-400 font-medium text-sm">لم يتم إضافة أصناف بعد</p>
+                <p className="text-gray-300 text-xs mt-1">استخدم الحقل أعلاه للبحث وإضافة الأصناف</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100">
+                      <th className="text-right font-bold text-gray-500 text-xs uppercase tracking-wide px-5 py-3 bg-gray-50/30">الصنف</th>
+                      <th className="text-center font-bold text-blue-500 text-xs uppercase tracking-wide px-3 py-3 bg-gray-50/30 w-24">الرصيد</th>
+                      <th className="text-center font-bold text-gray-500 text-xs uppercase tracking-wide px-3 py-3 bg-gray-50/30 w-24">الكمية</th>
+                      <th className="text-center font-bold text-gray-500 text-xs uppercase tracking-wide px-3 py-3 bg-gray-50/30 w-28">سعر الشراء</th>
+                      <th className="text-center font-bold text-blue-600 text-xs uppercase tracking-wide px-3 py-3 bg-gray-50/30 w-28">سعر البيع</th>
+                      <th className="text-center font-bold text-emerald-500 text-xs uppercase tracking-wide px-3 py-3 bg-gray-50/30 w-24">الربح %</th>
+                      <th className="text-center font-bold text-amber-500 text-xs uppercase tracking-wide px-3 py-3 bg-gray-50/30 w-20">ضريبة %</th>
+                      <th className="text-center font-bold text-gray-500 text-xs uppercase tracking-wide px-5 py-3 bg-gray-50/30 w-32">الإجمالي</th>
+                      {!isViewMode && <th className="w-10 bg-gray-50/30"></th>}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {items.map((item, idx) => (
+                      <tr key={item.id} className={cn("group hover:bg-blue-50/30 transition-colors", idx % 2 === 0 ? "bg-white" : "bg-gray-50/20")}>
+                        <td className="px-5 py-3">
+                          <div className="flex flex-col gap-0.5">
+                            <span className="font-bold text-gray-800 text-sm">{item.description}</span>
+                            <span className="text-[10px] text-gray-400 font-mono">#{item.productId}</span>
+                          </div>
+                        </td>
+                        <td className="px-3 py-3 text-center">
+                          <span
+                            className={cn(
+                              "inline-flex items-center justify-center min-w-[3rem] px-2 py-1 rounded-lg text-xs font-bold",
+                              (item.stockBalance || 0) <= 0 ? "bg-red-50 text-red-600 border border-red-100" : "bg-blue-50 text-blue-600 border border-blue-100",
+                            )}
+                          >
+                            {Math.max(0, item.stockBalance || 0).toLocaleString()}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3">
+                          <Input
+                            type="number"
+                            step="any"
+                            value={item.quantity || ""}
+                            onChange={(e) => updateItem(idx, "quantity", e.target.value)}
+                            disabled={isViewMode}
+                            className="h-9 text-center font-bold rounded-lg border-gray-200 bg-gray-50 focus:bg-white transition-colors w-full"
+                            required={!isViewMode}
+                          />
+                        </td>
+                        <td className="px-3 py-3">
+                          <Input
+                            type="number"
+                            step="any"
+                            value={item.unitPrice || ""}
+                            onChange={(e) => updateItem(idx, "unitPrice", e.target.value)}
+                            disabled={isViewMode}
+                            className="h-9 text-center font-bold rounded-lg border-gray-200 bg-gray-50 focus:bg-white transition-colors w-full"
+                            required={!isViewMode}
+                          />
+                        </td>
+                        <td className="px-3 py-3">
+                          <Input
+                            type="number"
+                            step="any"
+                            value={item.sellingPrice || ""}
+                            onChange={(e) => updateItem(idx, "sellingPrice", e.target.value)}
+                            disabled={isViewMode}
+                            className="h-9 text-center font-bold rounded-lg border-blue-200 bg-blue-50 focus:bg-white transition-colors w-full text-blue-700"
+                          />
+                        </td>
+                        <td className="px-3 py-3">
+                          <Input
+                            type="number"
+                            step="any"
+                            value={item.profitMargin || ""}
+                            onChange={(e) => updateItem(idx, "profitMargin", e.target.value)}
+                            disabled={isViewMode}
+                            className="h-9 text-center font-bold rounded-lg border-emerald-200 bg-emerald-50 focus:bg-white transition-colors w-full text-emerald-700"
+                          />
+                        </td>
+                        <td className="px-3 py-3">
+                          <Input
+                            type="number"
+                            step="any"
+                            value={item.taxRate}
+                            onChange={(e) => updateItem(idx, "taxRate", e.target.value)}
+                            disabled={isViewMode}
+                            className="h-9 text-center font-bold rounded-lg border-amber-200 bg-amber-50 focus:bg-white transition-colors w-full"
+                          />
+                        </td>
+                        <td className="px-5 py-3 text-center">
+                          <span className="font-black text-gray-800 whitespace-nowrap">
+                            {item.total.toLocaleString("ar-EG")}
+                            <span className="text-xs text-gray-400 font-normal mr-1">{settings?.currencyCode || "ج.م"}</span>
+                          </span>
+                        </td>
+                        {!isViewMode && (
+                          <td className="px-2 py-3">
+                            <button
+                              type="button"
+                              onClick={() => removeItem(idx)}
+                              disabled={items.length === 1}
+                              className="opacity-0 group-hover:opacity-100 transition-opacity inline-flex items-center justify-center w-7 h-7 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 disabled:opacity-20 disabled:cursor-not-allowed"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* ── Section 3: Notes + Summary ── */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+            <div className="lg:col-span-2">
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden h-full">
+                <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100 bg-gray-50/50">
+                  <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-purple-100">
+                    <StickyNote className="h-4 w-4 text-purple-600" />
+                  </div>
+                  <h2 className="font-bold text-gray-800 text-sm">الملاحظات</h2>
+                </div>
+                <div className="p-4">
+                  <DynamicNotes
+                    title={notesTitle}
+                    onTitleChange={setNotesTitle}
+                    notes={notes}
+                    onChange={setNotes}
+                    disabled={isViewMode}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="lg:col-span-1">
+              <div className="bg-gray-900 rounded-2xl shadow-xl overflow-hidden h-full">
+                <div className="px-5 py-4 border-b border-white/10">
+                  <h3 className="font-bold text-white flex items-center gap-2 text-sm">
+                    <Calculator className="h-4 w-4 text-blue-400" />
+                    ملخص الفاتورة
+                  </h3>
+                </div>
+                <div className="px-5 py-4 space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-400 text-xs">رقم الفاتورة</span>
+                    <span className="text-white font-mono font-bold text-sm">#{invoiceNumber}</span>
+                  </div>
+                  <div className="h-px bg-white/10" />
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-400 text-xs">الإجمالي قبل الضريبة</span>
+                    <span className="text-gray-200 font-mono text-sm">{subtotal.toLocaleString("ar-EG")}</span>
+                  </div>
+                  {itemsDiscount > 0 && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-400 text-xs">خصومات الأصناف</span>
+                      <span className="text-rose-400 font-mono text-sm">-{itemsDiscount.toLocaleString("ar-EG")}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-400 text-xs">إجمالي الضرائب</span>
+                    <span className="text-amber-400 font-mono text-sm">+{totalTax.toLocaleString("ar-EG")}</span>
+                  </div>
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-400 text-xs">خصم إضافي</span>
+                      <span className="text-rose-400 font-mono text-sm">-{discount.toLocaleString("ar-EG")}</span>
+                    </div>
+                    {!isViewMode && (
+                      <Input
+                        type="number"
+                        value={discount || ""}
+                        onChange={(e) => setDiscount(Math.max(0, Number(e.target.value)))}
+                        className="bg-white/5 border-white/10 h-8 text-center font-bold text-white text-sm rounded-lg placeholder-gray-500 focus:border-white/20"
+                        placeholder="أدخل قيمة الخصم..."
+                      />
+                    )}
+                  </div>
+                  {returnsCount > 0 && (
                     <>
-                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      جاري الحفظ...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="h-5 w-5" /> {isEditMode ? "تحديث الفاتورة" : "حفظ الفاتورة"}
+                      <div className="h-px bg-white/10" />
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-400 text-xs">المرتجعات ({returnsCount})</span>
+                        <span className="text-rose-400 font-mono text-sm">-{returnsTotal.toLocaleString("ar-EG")}</span>
+                      </div>
                     </>
                   )}
-                </Button>
-              )}
-            </Card>
+                  <div className="h-px bg-white/10" />
+                  <div className="pt-1">
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-gray-400 text-xs">الإجمالي النهائي</span>
+                      <div className="text-left">
+                        <span className="text-3xl font-black text-emerald-400 font-mono">
+                          {netTotal.toLocaleString("ar-EG")}
+                        </span>
+                        <span className="text-gray-400 text-xs mr-1">{settings?.currencyCode || "ج.م"}</span>
+                      </div>
+                    </div>
+                  </div>
+                  {!isViewMode && (
+                    <button
+                      type="submit"
+                      disabled={!canSave}
+                      className="w-full mt-2 flex items-center justify-center gap-2 py-3.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 font-bold text-white transition-all active:scale-95 shadow-lg shadow-blue-900/30 text-sm"
+                    >
+                      {saving ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          جاري الحفظ...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="h-4 w-4" />
+                          {isEditMode ? "تحديث الفاتورة" : "حفظ الفاتورة"}
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         </form>
       </div>
@@ -850,17 +1043,19 @@ function InvoiceFormStep({
         invoiceNumber={invoiceNumber}
         prefix={settings?.purchasePrefix}
         date={invoiceDate}
+        dueDate={dueDate || undefined}
         partnerName={supplier?.name || ""}
-        partnerLabel="المورد"
+        phone={supplier?.phone || undefined}
+        address={supplier?.address || undefined}
         title={printableTitle}
         paymentStatus={paymentType}
         returns={returns}
-        items={items.map(item => ({
+        items={items.map((item) => ({
           description: item.description,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
           discount: item.discount || 0,
-          total: item.total
+          total: item.total,
         }))}
         subtotal={subtotal}
         discount={itemsDiscount + discount}
@@ -875,8 +1070,10 @@ function InvoiceFormStep({
         companyNameEn={settings?.companyNameEn}
         companyLogo={settings?.companyLogo}
         companyStamp={settings?.companyStamp}
+        companyBarcode={(settings as any)?.companyBarcode}
         showLogo={settings?.showLogoOnPrint}
         showStamp={settings?.showStampOnPrint}
+        showBarcode={(settings as any)?.showBarcodeOnPrint ?? true}
         termsAndConditions={settings?.termsAndConditions}
       />
     </div>
@@ -903,15 +1100,16 @@ export default function CreatePurchaseInvoicePage() {
         .then((invoice) => {
           if (invoice) {
             getSuppliers().then((suppliers) => {
-              const fullSupplier = (suppliers as Supplier[]).find(s => s.id === invoice.supplierId);
-              setInitialSupplier((fullSupplier as Supplier) || {
-                id: invoice.supplierId,
-                name: invoice.supplierName,
-                code: 0,
-                phone: null,
-                address: null,
-                category: null
-              });
+              const fullSupplier = (suppliers as Supplier[]).find((s) => s.id === invoice.supplierId);
+              setInitialSupplier(
+                fullSupplier || {
+                  id: invoice.supplierId,
+                  name: invoice.supplierName,
+                  code: 0,
+                  phone: null,
+                  address: null,
+                },
+              );
             });
           }
         })
@@ -923,10 +1121,15 @@ export default function CreatePurchaseInvoicePage() {
     return (
       <>
         <Navbar title="فاتورة مشتريات" />
-        <div className="flex-1 flex items-center justify-center p-6 bg-slate-50/50 min-h-[calc(100vh-64px)]">
-          <div className="flex flex-col items-center gap-3">
-            <Loader2 className="h-12 w-12 animate-spin text-primary" />
-            <p className="text-sm text-muted-foreground font-medium">جاري تحميل بيانات الفاتورة...</p>
+        <div className="flex-1 flex items-center justify-center p-6 bg-gray-50 min-h-[calc(100vh-64px)]">
+          <div className="flex flex-col items-center gap-4">
+            <div className="relative">
+              <div className="w-16 h-16 rounded-2xl bg-blue-50 flex items-center justify-center">
+                <FileText className="h-8 w-8 text-blue-400" />
+              </div>
+              <div className="absolute -inset-1 rounded-2xl border-2 border-blue-200 border-t-blue-500 animate-spin" />
+            </div>
+            <p className="text-sm text-gray-400 font-medium">جاري تحميل بيانات الفاتورة...</p>
           </div>
         </div>
       </>
@@ -935,8 +1138,16 @@ export default function CreatePurchaseInvoicePage() {
 
   return (
     <>
-      <Navbar title={isViewMode ? "عرض فاتورة مشتريات" : (invoiceId && invoiceId !== "create" ? "تعديل فاتورة مشتريات" : "فاتورة مشتريات جديدة")} />
-      <div className="min-h-screen bg-slate-50/50 pb-12">
+      <Navbar
+        title={
+          isViewMode
+            ? "عرض فاتورة مشتريات"
+            : invoiceId && invoiceId !== "create"
+              ? "تعديل فاتورة مشتريات"
+              : "فاتورة مشتريات جديدة"
+        }
+      />
+      <div className="min-h-screen bg-gray-50 pb-12">
         <InvoiceFormStep
           supplier={initialSupplier}
           onBack={() => router.push("/purchase-invoices")}
@@ -947,5 +1158,3 @@ export default function CreatePurchaseInvoicePage() {
     </>
   );
 }
-
-import { Loader2 } from "lucide-react";

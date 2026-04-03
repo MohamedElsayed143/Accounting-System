@@ -28,6 +28,7 @@ import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { getJournalSelectableAccounts, getNextEntryNumber, saveJournalEntry } from "@/app/actions/journal";
 import { useManagementMode } from "@/hooks/use-management-mode";
+import { useFormDraft } from "@/hooks/useFormDraft";
 import { PasswordProtectionGate } from "@/components/shared/PasswordProtectionGate";
 import {
   Command,
@@ -69,16 +70,21 @@ export function JournalEntryForm() {
   const [loading, setLoading] = useState(false);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [entryNumber, setEntryNumber] = useState<number | string>("...");
-  const [date, setDate] = useState<string>(() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  });
-  const [description, setDescription] = useState("");
-  const [reference, setReference] = useState("");
-  const [lines, setLines] = useState<JournalLine[]>([
-    { accountId: null, accountName: "", accountCode: "", accountType: "", description: "", debit: 0, credit: 0 },
-    { accountId: null, accountName: "", accountCode: "", accountType: "", description: "", debit: 0, credit: 0 },
-  ]);
+  const initialDraft = useMemo(() => ({
+    date: (() => {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    })(),
+    description: "",
+    reference: "",
+    lines: [
+      { accountId: null, accountName: "", accountCode: "", accountType: "", description: "", debit: 0, credit: 0 },
+      { accountId: null, accountName: "", accountCode: "", accountType: "", description: "", debit: 0, credit: 0 },
+    ] as JournalLine[]
+  }), []);
+
+  const { draft, setDraft, clearDraft, removeDraftOnly } = useFormDraft("journal_entry_new", initialDraft);
+  const { date, description, reference, lines } = draft;
 
   const { isManagementActive, toggleManagementMode } = useManagementMode();
   const [isPassGateOpen, setIsPassGateOpen] = useState(false);
@@ -96,7 +102,10 @@ export function JournalEntryForm() {
   }, [lines]);
 
   const addLine = () => {
-    setLines([...lines, { accountId: null, accountName: "", accountCode: "", accountType: "", description: "", debit: 0, credit: 0 }]);
+    setDraft(prev => ({
+      ...prev,
+      lines: [...prev.lines, { accountId: null, accountName: "", accountCode: "", accountType: "", description: "", debit: 0, credit: 0 }]
+    }));
   };
 
   const removeLine = (index: number) => {
@@ -106,7 +115,7 @@ export function JournalEntryForm() {
     }
     const newLines = [...lines];
     newLines.splice(index, 1);
-    setLines(newLines);
+    setDraft(prev => ({ ...prev, lines: newLines }));
   };
 
   const updateLine = (index: number, updates: Partial<JournalLine>) => {
@@ -120,7 +129,7 @@ export function JournalEntryForm() {
       newLines[index].debit = 0;
     }
     
-    setLines(newLines);
+    setDraft(prev => ({ ...prev, lines: newLines }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -151,6 +160,7 @@ export function JournalEntryForm() {
       });
 
       if (result.success) {
+        removeDraftOnly();
         toast.success("تم حفظ القيد بنجاح");
         router.push("/journal");
       } else {
@@ -180,12 +190,24 @@ export function JournalEntryForm() {
       <Card className="border-0 shadow-2xl bg-white/50 dark:bg-slate-900/50 backdrop-blur-xl ring-1 ring-slate-200 dark:ring-slate-800">
         <CardHeader className="border-b border-slate-100 dark:border-slate-800 pb-6">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="space-y-1">
-              <CardTitle className="text-2xl font-black flex items-center gap-3">
-                <div className="p-2.5 rounded-2xl bg-primary/10 text-primary shadow-sm border border-primary/20">
-                  <History className="w-6 h-6" />
+            <div className="space-y-1 flex-1">
+              <CardTitle className="text-2xl font-black flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-2xl bg-primary/10 text-primary shadow-sm border border-primary/20">
+                    <History className="w-6 h-6" />
+                  </div>
+                  إضافة قيد يومية يدوي
                 </div>
-                إضافة قيد يومية يدوي
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={clearDraft}
+                  size="sm"
+                  className="gap-2 text-red-500 border-red-200 hover:bg-red-50 hover:text-red-600 font-bold"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  مسح البيانات
+                </Button>
               </CardTitle>
               <CardDescription className="text-sm font-medium">نظام القيود المزدوجة - يرجى التأكد من توازن القيد قبل الحفظ</CardDescription>
             </div>
@@ -230,7 +252,7 @@ export function JournalEntryForm() {
               <Input 
                 type="date" 
                 value={date} 
-                onChange={(e) => setDate(e.target.value)}
+                onChange={(e) => setDraft(prev => ({ ...prev, date: e.target.value }))}
                 className="h-12 rounded-xl bg-slate-50 border-slate-200 focus:ring-primary/20"
               />
             </div>
@@ -241,7 +263,7 @@ export function JournalEntryForm() {
               <Input 
                 placeholder="ادخل وصفاً موجزاً للعملية..." 
                 value={description}
-                onChange={(e) => setDescription(e.target.value)}
+                onChange={(e) => setDraft(prev => ({ ...prev, description: e.target.value }))}
                 className="h-12 rounded-xl bg-slate-50 border-slate-200 focus:ring-primary/20"
               />
             </div>
@@ -425,7 +447,8 @@ export function JournalEntryForm() {
         </div>
       </Card>
 
-      <div className="flex justify-end pt-4">
+
+      <div className="flex justify-end pt-4 gap-4">
         <Button 
           onClick={handleSubmit}
           disabled={loading || !totals.isBalanced || !isManagementActive}
