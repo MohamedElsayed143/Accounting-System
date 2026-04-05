@@ -14,7 +14,6 @@ export async function getJournalSelectableAccounts() {
   const accounts = await prisma.account.findMany({
     where: {
       isTerminal: true,
-      level: 4,
     },
     orderBy: { code: "asc" },
     select: {
@@ -184,16 +183,16 @@ export async function saveJournalEntry(data: {
     );
   }
 
-  // 1.7. Enforce Level 4 only — reject any account not at Level 4
-  const levelCheck = await prisma.account.findMany({
-    where: { id: { in: accountIds }, NOT: { level: 4 } },
+  // 1.7. Enforce terminal only — reject any account not terminal
+  const terminalCheck = await prisma.account.findMany({
+    where: { id: { in: accountIds }, isTerminal: false },
     select: { name: true, level: true },
   });
-  if (levelCheck.length > 0) {
+  if (terminalCheck.length > 0) {
     return {
       success: false,
       error:
-        "عذراً، لا يمكن إضافة قيود إلا على الحسابات الفرعية في المستوى الرابع فقط",
+        "عذراً، لا يمكن إضافة قيود إلا على الحسابات النهائية (Terminal) فقط",
     };
   }
 
