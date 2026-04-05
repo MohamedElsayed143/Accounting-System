@@ -359,10 +359,20 @@ export async function createSalesInvoice(data: {
         }
 
         if (actualDeduct > 0) {
-          await tx.product.update({
+          const updatedProduct = await tx.product.update({
             where: { id: item.productId },
             data: { currentStock: { decrement: actualDeduct } },
+            select: { name: true, currentStock: true, minStock: true },
           });
+
+          if (updatedProduct) {
+            pendingAlerts.push({
+              type: "stock",
+              name: updatedProduct.name,
+              value: updatedProduct.currentStock,
+              limit: updatedProduct.minStock,
+            });
+          }
         }
       }
 
@@ -486,64 +496,7 @@ export async function createSalesInvoice(data: {
       }
     }
 
-    // 4. إنشاء حركات مخزون وتحديث الرصيد الحالي
-    if (data.status !== "pending") {
-      for (const item of data.items) {
-        // فحص الرصيد الحالي قبل التخصيم
-        const product = await tx.product.findUnique({
-          where: { id: item.productId },
-          select: { currentStock: true },
-        });
-        const currentVal = product?.currentStock ?? 0;
-        const actualDeduct = Math.min(currentVal, item.quantity);
-        const shortage = item.quantity - actualDeduct;
-
-        // الحركة الأساسية (المبيعات) - تسجل بالكامل للتقارير
-        await tx.stockMovement.create({
-          data: {
-            productId: item.productId,
-            movementType: "SALE",
-            quantity: -item.quantity,
-            unitPrice: item.unitPrice,
-            reference: `فاتورة بيع #${data.invoiceNumber}`,
-            salesInvoiceId: invoice.id,
-          },
-        });
-
-        // حركة تسوية تعويضية إذا كان الرصيد سينخفض عن الصفر
-        if (shortage > 0) {
-          await tx.stockMovement.create({
-            data: {
-              productId: item.productId,
-              movementType: "ADJUSTMENT",
-              quantity: shortage,
-              unitPrice: 0,
-              reference: `تعديل تلقائي رصيد سالب #${data.invoiceNumber}`,
-              notes: "تمت التسوية آلياً لأن الرصيد لا يمكن أن يقل عن الصفر",
-              salesInvoiceId: invoice.id,
-            },
-          });
-        }
-
-        // تحديث الرصيد الفعلي (لا يقل عن الصفر)
-        if (actualDeduct > 0) {
-          const updatedProduct = await tx.product.update({
-            where: { id: item.productId },
-            data: { currentStock: { decrement: actualDeduct } },
-            select: { name: true, currentStock: true, minStock: true },
-          });
-
-          if (updatedProduct) {
-            pendingAlerts.push({
-              type: "stock",
-              name: updatedProduct.name,
-              value: updatedProduct.currentStock,
-              limit: updatedProduct.minStock,
-            });
-          }
-        }
-      }
-    }
+    // حركات المخزون والرصيد تم تنفيذها أثناء حساب تكلفة البضاعة المباعة أعلاه (خطوة 3.3)
 
     revalidatePath("/sales-invoices");
     revalidatePath("/inventory/stock");
