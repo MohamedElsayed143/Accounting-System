@@ -181,17 +181,35 @@ export async function getCustomerTransactions(
     const settings = await prisma.companySettings.findUnique({ where: { id: 1 } });
 
     // تحويل الفواتير
-    const invoiceTransactions: TransactionType[] = (invoices || []).map(inv => ({
-      id: `inv-${inv.id}`,
-      date: inv.invoiceDate,
-      createdAt: inv.createdAt,
-      type: inv.status === 'pending' ? 'مسودة' : 'فاتورة',
-      documentId: `${settings?.salesPrefix || 'INV'}-${String(inv.invoiceNumber).padStart(4, "0")}`,
-      description: inv.description || (inv.status === 'pending' ? `مسودة فاتورة بيع للعميل ${inv.customerName}` : `فاتورة بيع للعميل ${inv.customerName}`),
-      paymentMethod: inv.status === 'cash' ? 'نقدي' : inv.status === 'credit' ? 'آجل' : 'معلقة',
-      debit: inv.status === 'pending' ? 0 : inv.total,
-      credit: 0,
-    }));
+    const invoiceTransactions: TransactionType[] = [];
+    (invoices || []).forEach(inv => {
+      invoiceTransactions.push({
+        id: `inv-${inv.id}`,
+        date: inv.invoiceDate,
+        createdAt: inv.createdAt,
+        type: inv.status === 'pending' ? 'مسودة' : 'فاتورة',
+        documentId: `${settings?.salesPrefix || 'INV'}-${String(inv.invoiceNumber).padStart(4, "0")}`,
+        description: inv.description || (inv.status === 'pending' ? `مسودة فاتورة بيع للعميل ${inv.customerName}` : `فاتورة بيع للعميل ${inv.customerName}`),
+        paymentMethod: inv.status === 'cash' ? 'نقدي' : inv.status === 'credit' ? 'آجل' : 'معلقة',
+        debit: inv.status === 'pending' ? 0 : inv.total,
+        credit: 0,
+      });
+
+      // إدراج سداد آلي للفواتير النقدية ليتطابق التقرير مع القيود المحاسبية
+      if (inv.status === 'cash') {
+        invoiceTransactions.push({
+          id: `auto-rec-${inv.id}`,
+          date: inv.invoiceDate,
+          createdAt: new Date(inv.createdAt.getTime() + 1000), // add 1 ms offset for display consistency
+          type: 'سند قبض',
+          documentId: `SET-${String(inv.invoiceNumber).padStart(4, "0")}`,
+          description: `تسوية أوتوماتيكية لفاتورة المبيعات النقدية #${inv.invoiceNumber}`,
+          paymentMethod: 'نقدي',
+          debit: 0,
+          credit: inv.total,
+        });
+      }
+    });
 
     // تحويل سندات القبض
     const receiptTransactions: TransactionType[] = receipts.map(rec => ({
@@ -219,8 +237,33 @@ export async function getCustomerTransactions(
       credit: ret.total,
     }));
 
+    // جلب القيود اليدوية للعميل
+    const customer = await prisma.customer.findUnique({ where: { id: customerId } });
+    const manualEntries = customer?.accountId ? await prisma.journalItem.findMany({
+      where: {
+        accountId: customer.accountId,
+        journalEntry: {
+          sourceType: "MANUAL",
+          ...(fromDate && toDate ? { date: { gte: fromDate, lte: toDate } } : {})
+        }
+      },
+      include: { journalEntry: true }
+    }) : [];
+
+    const manualTransactions: TransactionType[] = manualEntries.map(item => ({
+      id: `manual-${item.id}`,
+      date: item.journalEntry.date,
+      createdAt: item.journalEntry.createdAt,
+      type: "قيد يدوي",
+      documentId: `JV-${item.journalEntry.entryNumber}`,
+      description: item.description || item.journalEntry.description || "قيد يدوي",
+      paymentMethod: "أخرى",
+      debit: item.debit,
+      credit: item.credit,
+    }));
+
     // دمج جميع المعاملات
-    let allTransactions = [...invoiceTransactions, ...receiptTransactions, ...returnTransactions];
+    let allTransactions = [...invoiceTransactions, ...receiptTransactions, ...returnTransactions, ...manualTransactions];
 
     // ترتيب تنازلي حسب التاريخ والوقت (الأحدث أولاً)
     allTransactions.sort((a, b) => {
@@ -303,17 +346,34 @@ export async function getSupplierTransactions(
     const settings = await prisma.companySettings.findUnique({ where: { id: 1 } });
 
     // تحويل الفواتير
-    const invoiceTransactions: TransactionType[] = invoices.map(inv => ({
-      id: `purch-${inv.id}`,
-      date: inv.invoiceDate,
-      createdAt: inv.createdAt,
-      type: inv.status === 'pending' ? 'مسودة' : 'فاتورة',
-      documentId: `${settings?.purchasePrefix || 'PUR'}-${String(inv.invoiceNumber).padStart(4, "0")}`,
-      description: inv.description || (inv.status === 'pending' ? `مسودة فاتورة شراء من المورد ${inv.supplierName}` : `فاتورة شراء من المورد ${inv.supplierName}`),
-      paymentMethod: inv.status === 'cash' ? 'نقدي' : inv.status === 'credit' ? 'آجل' : 'معلقة',
-      debit: inv.status === 'pending' ? 0 : inv.total,
-      credit: 0,
-    }));
+    const invoiceTransactions: TransactionType[] = [];
+    invoices.forEach(inv => {
+      invoiceTransactions.push({
+        id: `purch-${inv.id}`,
+        date: inv.invoiceDate,
+        createdAt: inv.createdAt,
+        type: inv.status === 'pending' ? 'مسودة' : 'فاتورة',
+        documentId: `${settings?.purchasePrefix || 'PUR'}-${String(inv.invoiceNumber).padStart(4, "0")}`,
+        description: inv.description || (inv.status === 'pending' ? `مسودة فاتورة شراء من المورد ${inv.supplierName}` : `فاتورة شراء من المورد ${inv.supplierName}`),
+        paymentMethod: inv.status === 'cash' ? 'نقدي' : inv.status === 'credit' ? 'آجل' : 'معلقة',
+        debit: inv.status === 'pending' ? 0 : inv.total, // Suppliers are Liabilities: adding to their balance is a credit originally, but in reports we flip it so debit = bill, credit = payment
+        credit: 0,
+      });
+
+      if (inv.status === 'cash') {
+        invoiceTransactions.push({
+          id: `auto-pay-${inv.id}`,
+          date: inv.invoiceDate,
+          createdAt: new Date(inv.createdAt.getTime() + 1000), // add 1 ms offset for display consistency
+          type: 'سند صرف',
+          documentId: `SET-${String(inv.invoiceNumber).padStart(4, "0")}`,
+          description: `تسوية أوتوماتيكية لفاتورة المشتريات النقدية #${inv.invoiceNumber}`,
+          paymentMethod: 'نقدي',
+          debit: 0,
+          credit: inv.total,
+        });
+      }
+    });
 
     // تحويل سندات الصرف
     const paymentTransactions: TransactionType[] = payments.map(pay => ({
@@ -341,8 +401,33 @@ export async function getSupplierTransactions(
       credit: ret.total,
     }));
 
+    // جلب القيود اليدوية للمورد
+    const supplier = await prisma.supplier.findUnique({ where: { id: supplierId } });
+    const manualEntries = supplier?.accountId ? await prisma.journalItem.findMany({
+      where: {
+        accountId: supplier.accountId,
+        journalEntry: {
+          sourceType: "MANUAL",
+          ...(fromDate && toDate ? { date: { gte: fromDate, lte: toDate } } : {})
+        }
+      },
+      include: { journalEntry: true }
+    }) : [];
+
+    const manualTransactions: TransactionType[] = manualEntries.map(item => ({
+      id: `manual-${item.id}`,
+      date: item.journalEntry.date,
+      createdAt: item.journalEntry.createdAt,
+      type: "قيد يدوي",
+      documentId: `JV-${item.journalEntry.entryNumber}`,
+      description: item.description || item.journalEntry.description || "قيد يدوي",
+      paymentMethod: "أخرى",
+      debit: item.credit,   // Reversed for supplier (Suppliers are Liability) -> Credit means we owe them more, so treating like a bill (debit in report)
+      credit: item.debit,   // Debit means we owe them less, so treating like a payment (credit in report)
+    }));
+
     // دمج جميع المعاملات
-    let allTransactions = [...invoiceTransactions, ...paymentTransactions, ...returnTransactions];
+    let allTransactions = [...invoiceTransactions, ...paymentTransactions, ...returnTransactions, ...manualTransactions];
 
     // ترتيب تنازلي حسب التاريخ والوقت (الأحدث أولاً)
     allTransactions.sort((a, b) => {

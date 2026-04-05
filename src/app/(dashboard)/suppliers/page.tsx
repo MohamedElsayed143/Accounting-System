@@ -93,6 +93,12 @@ export default function SuppliersPage() {
 
   useEffect(() => {
     loadSuppliers();
+
+    // Re-fetch whenever the user returns to this page/tab
+    // This ensures supplier balances stay up-to-date after invoices/vouchers
+    const handleFocus = () => loadSuppliers();
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
   }, []);
 
   /* ========================= */

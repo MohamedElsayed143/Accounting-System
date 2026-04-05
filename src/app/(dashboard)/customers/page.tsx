@@ -96,6 +96,12 @@ export default function CustomersPage() {
 
   useEffect(() => {
     loadCustomers();
+
+    // Re-fetch whenever the user returns to this page/tab
+    // This ensures customer balances stay up-to-date after invoices/vouchers
+    const handleFocus = () => loadCustomers();
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
   }, []);
 
   /* ========================= */
