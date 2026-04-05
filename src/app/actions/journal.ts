@@ -129,20 +129,23 @@ export async function saveJournalEntry(data: {
     throw new Error("يجب أن يحتوي القيد على سطرين على الأقل");
   }
 
-  // 1.5. Prevent manual entries on Customer/Supplier accounts
   const accountIds = data.items.map((item) => item.accountId);
-  const linkedAccounts = await prisma.account.findMany({
-    where: {
-      id: { in: accountIds },
-      OR: [{ customer: { isNot: null } }, { supplier: { isNot: null } }],
-    } as any,
-    select: { name: true },
-  });
 
-  if (linkedAccounts.length > 0) {
-    throw new Error(
-      `لا يمكن إضافة قيد يدوي على حسابات العملاء أو الموردين (${linkedAccounts.map((a) => a.name).join(", ")}). فضلاً استخدم الفواتير أو السندات.`,
-    );
+  // 1.5. Prevent manual entries on Customer/Supplier accounts UNLESS in Admin Mode
+  if (!data.isAdminMode) {
+    const linkedAccounts = await prisma.account.findMany({
+      where: {
+        id: { in: accountIds },
+        OR: [{ customer: { isNot: null } }, { supplier: { isNot: null } }],
+      } as any,
+      select: { name: true },
+    });
+
+    if (linkedAccounts.length > 0) {
+      throw new Error(
+        `لا يمكن إضافة قيد يدوي على حسابات العملاء أو الموردين (${linkedAccounts.map((a) => a.name).join(", ")}). فضلاً استخدم الفواتير أو السندات، أو فعل وضع الإدارة للمحاسبين.`,
+      );
+    }
   }
 
   // 1.5.1 Prevent manual journal entries on inventory asset account 120301 unless the user has inventory_manage permission.

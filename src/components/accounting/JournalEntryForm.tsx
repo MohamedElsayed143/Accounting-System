@@ -128,6 +128,19 @@ export function JournalEntryForm() {
     } else if ('credit' in updates && (updates.credit || 0) > 0) {
       newLines[index].debit = 0;
     }
+
+    // Auto-balance logic: suggest value to balance the entry when selecting an account
+    if ('accountId' in updates && updates.accountId && !newLines[index].debit && !newLines[index].credit) {
+      const otherDebit = newLines.reduce((sum, l, i) => i === index ? sum : sum + (l.debit || 0), 0);
+      const otherCredit = newLines.reduce((sum, l, i) => i === index ? sum : sum + (l.credit || 0), 0);
+      const diff = otherDebit - otherCredit;
+      
+      if (diff > 0) {
+        newLines[index].credit = diff;
+      } else if (diff < 0) {
+        newLines[index].debit = Math.abs(diff);
+      }
+    }
     
     setDraft(prev => ({ ...prev, lines: newLines }));
   };
@@ -175,11 +188,11 @@ export function JournalEntryForm() {
 
   const getAccountNature = (type: string) => {
     switch (type) {
-      case "ASSET": return { label: "أصل - مدين", color: "text-emerald-500 bg-emerald-500/10" };
-      case "LIABILITY": return { label: "التزام - دائن", color: "text-rose-500 bg-rose-500/10" };
-      case "EQUITY": return { label: "حقوق ملكية - دائن", color: "text-amber-500 bg-amber-500/10" };
-      case "REVENUE": return { label: "إيراد - دائن", color: "text-blue-500 bg-blue-500/10" };
-      case "EXPENSE": return { label: "مصروف - مدين", color: "text-indigo-500 bg-indigo-500/10" };
+      case "ASSET": return { label: "طبيعة الحساب: مدين (أصول)", color: "text-emerald-500 bg-emerald-500/10" };
+      case "LIABILITY": return { label: "طبيعة الحساب: دائن (خصوم)", color: "text-rose-500 bg-rose-500/10" };
+      case "EQUITY": return { label: "طبيعة الحساب: دائن (حقوق ملكية)", color: "text-amber-500 bg-amber-500/10" };
+      case "REVENUE": return { label: "طبيعة الحساب: دائن (إيرادات)", color: "text-blue-500 bg-blue-500/10" };
+      case "EXPENSE": return { label: "طبيعة الحساب: مدين (مصروفات)", color: "text-indigo-500 bg-indigo-500/10" };
       default: return null;
     }
   };
@@ -309,6 +322,19 @@ export function JournalEntryForm() {
                           <div className="w-1.5 h-1.5 rounded-full bg-current opacity-50" />
                           {getAccountNature(line.accountType)?.label}
                         </div>
+
+                        {/* Transaction Side Label - Requested by user */}
+                        {(line.debit > 0 || line.credit > 0) && (
+                          <div className={cn(
+                            "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black tracking-wide shadow-sm ring-1 ring-inset animate-in fade-in zoom-in duration-300",
+                            line.debit > 0 
+                              ? "bg-emerald-600 text-white ring-emerald-500/50" 
+                              : "bg-rose-600 text-white ring-rose-500/50"
+                          )}>
+                            <CheckCircle2 className="w-3 h-3" />
+                            {line.debit > 0 ? "طرف مدين" : "طرف دائن"}
+                          </div>
+                        )}
                         
                         {/* Balance Warning */}
                         {line.accountId && accounts.find(a => a.id === line.accountId) && (

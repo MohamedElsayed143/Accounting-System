@@ -1,0 +1,12 @@
+[33m10ae62d[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;32mcurrent-work-backup[m[33m)[m HEAD@{0}: commit: save current status
+[33ma619f8c[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m HEAD@{1}: reset: moving to HEAD
+[33ma619f8c[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m HEAD@{2}: commit: update v0.8
+[33m5e6943b[m HEAD@{3}: commit: update v0.7
+[33m5c98cb9[m HEAD@{4}: commit: update v0.6
+[33m843d19f[m HEAD@{5}: commit: update coa v0.6
+[33me648bad[m HEAD@{6}: commit: Update coa v0.5
+[33m2823e02[m HEAD@{7}: commit: update coa v0.4
+[33m0a8cdb8[m HEAD@{8}: commit: update acc part v0.2
+[33mbddf74b[m HEAD@{9}: commit: update tree
+[33mab303dc[m HEAD@{10}: commit: update v0.4
+[33mca3929b[m HEAD@{11}: commit: Add Accounting Part
