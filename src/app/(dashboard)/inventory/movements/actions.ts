@@ -19,7 +19,7 @@ export interface MovementRow {
 
 export async function getMovements(): Promise<MovementRow[]> {
   const movements = await prisma.stockMovement.findMany({
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: 500,
     include: {
       product: { select: { name: true, code: true } },
@@ -44,7 +44,7 @@ export async function getMovements(): Promise<MovementRow[]> {
 export async function getMovementsByProduct(productId: number): Promise<MovementRow[]> {
   const movements = await prisma.stockMovement.findMany({
     where: { productId },
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     include: {
       product: { select: { name: true, code: true } },
     },

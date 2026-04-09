@@ -63,7 +63,7 @@ export async function getPurchaseReturns(
         invoice: { select: { invoiceNumber: true } },
         items: true,
       },
-      orderBy: { returnDate: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     });
     return { success: true, data: returns };
   } catch (error) {

@@ -8,13 +8,13 @@ export async function getPendingInvoices() {
   const sales = await prisma.salesInvoice.findMany({
     where: { status: "pending" },
     include: { customer: { select: { name: true } }, items: true },
-    orderBy: { invoiceDate: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
   });
 
   const purchases = await prisma.purchaseInvoice.findMany({
     where: { status: "pending" },
     include: { supplier: { select: { name: true } }, items: true },
-    orderBy: { invoiceDate: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
   });
 
   return { sales, purchases };

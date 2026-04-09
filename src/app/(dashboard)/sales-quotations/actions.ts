@@ -21,7 +21,7 @@ export async function getNextQuotationCode(): Promise<string> {
 export async function getQuotations() {
   try {
     const quotations = await prisma.quotation.findMany({
-      orderBy: { date: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       include: {
         customer: {
           select: { id: true, name: true, code: true },

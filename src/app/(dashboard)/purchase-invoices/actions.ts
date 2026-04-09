@@ -58,7 +58,7 @@ export async function getPurchaseInvoices() {
   if (!canView) return [];
 
   const invoices = await prisma.purchaseInvoice.findMany({
-    orderBy: { invoiceDate: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     include: {
       items: true,
       purchaseReturns: {

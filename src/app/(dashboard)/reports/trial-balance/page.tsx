@@ -121,8 +121,7 @@ export default function TrialBalancePage() {
 
         {/* Print Stamp Section (Hidden on Screen) */}
         {companySettings?.companyStamp && (
-          <div className="hidden print:flex flex-col items-end mt-16 px-12">
-            <p className="font-black text-lg mb-4 text-black">ختم الشركة المعتمد</p>
+          <div className="hidden print:flex flex-col items-end mt-4 px-12">
             <img src={companySettings.companyStamp} alt="Company Stamp" className="h-32 w-auto opacity-90 mix-blend-multiply" />
           </div>
         )}

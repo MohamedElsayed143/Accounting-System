@@ -35,7 +35,7 @@ export async function getSalesInvoices() {
 
   try {
     const invoices = await prisma.salesInvoice.findMany({
-      orderBy: { invoiceDate: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       include: {
         _count: {
           select: { salesReturns: true },
@@ -378,7 +378,7 @@ export async function createSalesInvoice(data: {
 
       if (salesCogsValue > 0) {
         const cogsAccount = await tx.account.findUnique({
-          where: { code: "6101" },
+          where: { code: "610101" },
         });
         if (!cogsAccount)
           throw new Error("حساب تكلفة البضاعة المباعة 6101 غير موجود");
@@ -931,6 +931,61 @@ export async function updateSalesInvoice(
             });
           }
         }
+      }
+    }
+
+    // 4.1. إعادة إنشاء قيد تكلفة البضاعة المباعة (COGS)
+    const inventoryAccount = await tx.account.findUnique({
+      where: { code: "120301" },
+    });
+    const cogsAccount = await tx.account.findUnique({
+      where: { code: "610101" },
+    });
+
+    if (inventoryAccount && cogsAccount) {
+      let salesCogsValue = 0;
+      for (const item of data.items) {
+        const product = await tx.product.findUnique({
+          where: { id: item.productId },
+          select: { buyPrice: true },
+        });
+        const unitCost = product?.buyPrice ?? 0;
+        salesCogsValue += item.quantity * unitCost;
+      }
+
+      if (salesCogsValue > 0) {
+        const lastCogsEntry = await tx.journalEntry.findFirst({
+          orderBy: { entryNumber: "desc" },
+          select: { entryNumber: true },
+        });
+        const nextCogsEntry = (lastCogsEntry?.entryNumber || 0) + 1;
+
+        await tx.journalEntry.create({
+          data: {
+            entryNumber: nextCogsEntry,
+            date: new Date(data.invoiceDate),
+            description: `قيد تكلفة البضاعة المباعة لفاتورة مبيعات رقم ${data.invoiceNumber} (معدلة)`,
+            reference: `فاتورة بيع #${data.invoiceNumber}`,
+            sourceType: "SALES_INVOICE",
+            sourceId: invoice.id,
+            items: {
+              create: [
+                {
+                  accountId: cogsAccount.id,
+                  debit: salesCogsValue,
+                  credit: 0,
+                  description: "تكلفة البضاعة المباعة",
+                },
+                {
+                  accountId: inventoryAccount.id,
+                  debit: 0,
+                  credit: salesCogsValue,
+                  description: "إخراج من مخزون البضاعة",
+                },
+              ],
+            },
+          },
+        });
       }
     }
 

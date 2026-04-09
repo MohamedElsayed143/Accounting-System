@@ -79,7 +79,7 @@ export default function NewSalesReturnPage() {
   const [invoiceTotal, setInvoiceTotal] = useState(0);
   const [nextReturnNumber, setNextReturnNumber] = useState<number>(0);
 
-  const { draft: formData, setDraft: setFormData, clearDraft, isLoaded } = useFormDraft("sales_return_new", INITIAL_SALES_RETURN_FORM);
+  const { draft: formData, setDraft: setFormData, clearDraft, clearDraftSilently, isLoaded } = useFormDraft("sales_return_new", INITIAL_SALES_RETURN_FORM);
 
   useEffect(() => {
     Promise.all([
@@ -288,7 +288,7 @@ export default function NewSalesReturnPage() {
 
       const result = await createSalesReturn(input);
       if (result.success) {
-        clearDraft();
+        clearDraftSilently();
         toast.success("تم إنشاء المرتجع بنجاح");
         router.push("/sales-returns");
       } else {

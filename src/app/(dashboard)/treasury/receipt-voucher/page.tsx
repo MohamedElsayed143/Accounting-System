@@ -45,7 +45,7 @@ const INITIAL_RECEIPT_FORM = {
 };
 
 export default function ReceiptVoucherPage() {
-  const { draft: formData, setDraft: setFormData, clearDraft, removeDraftOnly, isLoaded } = useFormDraft("receipt_voucher_new", INITIAL_RECEIPT_FORM);
+  const { draft: formData, setDraft: setFormData, clearDraft, clearDraftSilently, isLoaded } = useFormDraft("receipt_voucher_new", INITIAL_RECEIPT_FORM);
 
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [safes, setSafes] = useState<Account[]>([]);
@@ -140,7 +140,7 @@ export default function ReceiptVoucherPage() {
       });
 
       if (result.success) {
-        removeDraftOnly();
+        clearDraftSilently();
         if ((result as any).pending) {
           toast.success(result.message || "✅ تم إرسال الطلب للمدير للموافقة");
         } else {

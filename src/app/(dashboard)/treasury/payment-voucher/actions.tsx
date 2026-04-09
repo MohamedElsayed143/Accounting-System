@@ -34,15 +34,52 @@ export async function getInitialData(): Promise<InitialData> {
       prisma.treasurySafe.findMany({ 
         where: { isActive: true },
         orderBy: { name: "asc" },
-        select: { id: true, name: true, balance: true }
+        include: {
+          account: {
+            include: {
+              journalItems: {
+                select: { debit: true, credit: true }
+              }
+            }
+          }
+        }
       }),
       prisma.treasuryBank.findMany({ 
         where: { isActive: true },
         orderBy: { name: "asc" },
-        select: { id: true, name: true, balance: true }
+        include: {
+          account: {
+            include: {
+              journalItems: {
+                select: { debit: true, credit: true }
+              }
+            }
+          }
+        }
       }),
     ]);
-    return { suppliers, safes, banks };
+
+    const processedSafes = safes.map(s => {
+      let balance = s.balance;
+      if (s.account) {
+        const totalDebit = s.account.journalItems.reduce((sum: number, item: { debit: number; credit: number }) => sum + (Number(item.debit) || 0), 0);
+        const totalCredit = s.account.journalItems.reduce((sum: number, item: { debit: number; credit: number }) => sum + (Number(item.credit) || 0), 0);
+        balance = totalDebit - totalCredit;
+      }
+      return { id: s.id, name: s.name, balance };
+    });
+
+    const processedBanks = banks.map(b => {
+      let balance = b.balance;
+      if (b.account) {
+        const totalDebit = b.account.journalItems.reduce((sum: number, item: { debit: number; credit: number }) => sum + (Number(item.debit) || 0), 0);
+        const totalCredit = b.account.journalItems.reduce((sum: number, item: { debit: number; credit: number }) => sum + (Number(item.credit) || 0), 0);
+        balance = totalDebit - totalCredit;
+      }
+      return { id: b.id, name: b.name, balance };
+    });
+    
+    return { suppliers: suppliers as any, safes: processedSafes, banks: processedBanks };
   } catch (error) {
     console.error("Error fetching initial data:", error);
     return { suppliers: [], safes: [], banks: [] };

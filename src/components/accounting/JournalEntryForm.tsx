@@ -83,7 +83,7 @@ export function JournalEntryForm() {
     ] as JournalLine[]
   }), []);
 
-  const { draft, setDraft, clearDraft, removeDraftOnly } = useFormDraft("journal_entry_new", initialDraft);
+  const { draft, setDraft, clearDraft, clearDraftSilently, isLoaded } = useFormDraft("journal_entry_new", initialDraft);
   const { date, description, reference, lines } = draft;
 
   const { isManagementActive, toggleManagementMode } = useManagementMode();
@@ -173,7 +173,7 @@ export function JournalEntryForm() {
       });
 
       if (result.success) {
-        removeDraftOnly();
+        clearDraftSilently();
         toast.success("تم حفظ القيد بنجاح");
         router.push("/journal");
       } else {

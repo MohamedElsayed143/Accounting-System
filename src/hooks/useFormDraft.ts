@@ -1,9 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
 
 export function useFormDraft<T>(key: string, initialData: T) {
   const [draft, setDraft] = useState<T>(initialData);
   const [isLoaded, setIsLoaded] = useState(false);
+  const isSubmitting = useRef(false);
 
   // Load draft on mount
   useEffect(() => {
@@ -20,7 +21,7 @@ export function useFormDraft<T>(key: string, initialData: T) {
 
   // Save draft whenever it changes (debounced by React effect scheduling)
   useEffect(() => {
-    if (!isLoaded) return;
+    if (!isLoaded || isSubmitting.current) return;
     
     // Only save if it's different from initial (string comparison is naive but works for standard JSON)
     const currentJson = JSON.stringify(draft);
@@ -36,6 +37,8 @@ export function useFormDraft<T>(key: string, initialData: T) {
   // Handle beforeunload to warn user
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isSubmitting.current) return;
+
       const currentJson = JSON.stringify(draft);
       const initialJson = JSON.stringify(initialData);
       
@@ -57,6 +60,12 @@ export function useFormDraft<T>(key: string, initialData: T) {
     toast.success("تم تصفية البيانات المؤقتة بنجاح", { position: "bottom-center" });
   };
 
+  const clearDraftSilently = () => {
+    isSubmitting.current = true;
+    setDraft(initialData);
+    localStorage.removeItem(`formDraft_${key}`);
+  };
+
   const removeDraftOnly = () => {
     localStorage.removeItem(`formDraft_${key}`);
   };
@@ -75,6 +84,7 @@ export function useFormDraft<T>(key: string, initialData: T) {
     draft,
     setDraft: updateDraft,
     clearDraft,
+    clearDraftSilently,
     removeDraftOnly,
     isLoaded
   };

@@ -253,6 +253,6 @@ export async function getJournalEntries() {
         },
       },
     },
-    orderBy: { entryNumber: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
   });
 }

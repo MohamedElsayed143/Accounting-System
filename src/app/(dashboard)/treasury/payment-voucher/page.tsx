@@ -27,7 +27,7 @@ const INITIAL_PAYMENT_FORM = {
 };
 
 export default function PaymentVoucherPage() {
-  const { draft: formData, setDraft: setFormData, clearDraft, removeDraftOnly, isLoaded } = useFormDraft("payment_voucher_new", INITIAL_PAYMENT_FORM);
+  const { draft: formData, setDraft: setFormData, clearDraft, clearDraftSilently, isLoaded } = useFormDraft("payment_voucher_new", INITIAL_PAYMENT_FORM);
 
   const [data, setData] = useState<InitialData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -139,7 +139,7 @@ export default function PaymentVoucherPage() {
       });
       
       if (res.success) {
-        removeDraftOnly();
+        clearDraftSilently();
         if ((res as any).pending) {
           toast.success(res.message || "✅ تم إرسال الطلب للمدير للموافقة");
         } else {

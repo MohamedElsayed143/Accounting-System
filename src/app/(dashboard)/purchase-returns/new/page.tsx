@@ -47,7 +47,7 @@ export default function NewPurchaseReturnPage() {
   const [products, setProducts] = useState<ProductData[]>([]);
   const [items, setItems] = useState<any[]>([]);
   const [invoiceTotal, setInvoiceTotal] = useState(0);
-  const { draft: formData, setDraft: setFormData, clearDraft, isLoaded } = useFormDraft("purchase_return_new", INITIAL_PURCHASE_RETURN_FORM);
+  const { draft: formData, setDraft: setFormData, clearDraft, clearDraftSilently, isLoaded } = useFormDraft("purchase_return_new", INITIAL_PURCHASE_RETURN_FORM);
 
   useEffect(() => {
     Promise.all([
@@ -222,7 +222,7 @@ export default function NewPurchaseReturnPage() {
 
       const result = await createPurchaseReturn(input);
       if (result.success) {
-        clearDraft();
+        clearDraftSilently();
         toast.success("تم إنشاء المرتجع بنجاح");
         router.push("/purchase-returns");
       } else {

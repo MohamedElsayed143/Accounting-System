@@ -617,16 +617,52 @@ export async function getInitialData(): Promise<InitialData> {
       prisma.treasurySafe.findMany({ 
         where: { isActive: true },
         orderBy: { name: "asc" },
-        select: { id: true, name: true, balance: true }
+        include: {
+          account: {
+            include: {
+              journalItems: {
+                select: { debit: true, credit: true }
+              }
+            }
+          }
+        }
       }),
       prisma.treasuryBank.findMany({ 
-        where: { isActive: true }, // البنوك النشطة فقط
+        where: { isActive: true },
         orderBy: { name: "asc" },
-        select: { id: true, name: true, balance: true }
+        include: {
+          account: {
+            include: {
+              journalItems: {
+                select: { debit: true, credit: true }
+              }
+            }
+          }
+        }
       }),
     ]);
+
+    const processedSafes = safes.map(s => {
+      let balance = s.balance;
+      if (s.account) {
+        const totalDebit = s.account.journalItems.reduce((sum: number, item: { debit: number; credit: number }) => sum + (Number(item.debit) || 0), 0);
+        const totalCredit = s.account.journalItems.reduce((sum: number, item: { debit: number; credit: number }) => sum + (Number(item.credit) || 0), 0);
+        balance = totalDebit - totalCredit;
+      }
+      return { id: s.id, name: s.name, balance };
+    });
+
+    const processedBanks = banks.map(b => {
+      let balance = b.balance;
+      if (b.account) {
+        const totalDebit = b.account.journalItems.reduce((sum: number, item: { debit: number; credit: number }) => sum + (Number(item.debit) || 0), 0);
+        const totalCredit = b.account.journalItems.reduce((sum: number, item: { debit: number; credit: number }) => sum + (Number(item.credit) || 0), 0);
+        balance = totalDebit - totalCredit;
+      }
+      return { id: b.id, name: b.name, balance };
+    });
     
-    return { suppliers, safes, banks };
+    return { suppliers, safes: processedSafes, banks: processedBanks };
   } catch (error) {
     console.error("Error fetching initial data:", error);
     return { suppliers: [], safes: [], banks: [] };
@@ -1335,17 +1371,55 @@ export async function getArchivedAccounts() {
       prisma.treasuryBank.findMany({
         where: { isActive: false },
         orderBy: { updatedAt: 'desc' },
+        include: {
+          account: {
+            include: {
+              journalItems: {
+                select: { debit: true, credit: true }
+              }
+            }
+          }
+        }
       }),
       prisma.treasurySafe.findMany({
         where: { isActive: false },
         orderBy: { updatedAt: 'desc' },
+        include: {
+          account: {
+            include: {
+              journalItems: {
+                select: { debit: true, credit: true }
+              }
+            }
+          }
+        }
       })
     ]);
 
+    const processedBanks = banks.map(b => {
+      let balance = b.balance;
+      if (b.account) {
+        const totalDebit = b.account.journalItems.reduce((sum, item) => sum + (Number(item.debit) || 0), 0);
+        const totalCredit = b.account.journalItems.reduce((sum, item) => sum + (Number(item.credit) || 0), 0);
+        balance = totalDebit - totalCredit;
+      }
+      return { ...b, balance, type: 'bank' as const };
+    });
+
+    const processedSafes = safes.map(s => {
+      let balance = s.balance;
+      if (s.account) {
+        const totalDebit = s.account.journalItems.reduce((sum, item) => sum + (Number(item.debit) || 0), 0);
+        const totalCredit = s.account.journalItems.reduce((sum, item) => sum + (Number(item.credit) || 0), 0);
+        balance = totalDebit - totalCredit;
+      }
+      return { ...s, balance, type: 'safe' as const };
+    });
+
     return { 
       success: true, 
-      banks: banks.map(b => ({ ...b, type: 'bank' as const })), 
-      safes: safes.map(s => ({ ...s, type: 'safe' as const })) 
+      banks: processedBanks, 
+      safes: processedSafes 
     };
   } catch (error) {
     console.error("Error fetching archived accounts:", error);
@@ -1399,16 +1473,52 @@ export async function getReceiptInitialData() {
       prisma.treasurySafe.findMany({ 
         where: { isActive: true },
         orderBy: { name: "asc" },
-        select: { id: true, name: true, balance: true }
+        include: {
+          account: {
+            include: {
+              journalItems: {
+                select: { debit: true, credit: true }
+              }
+            }
+          }
+        }
       }),
       prisma.treasuryBank.findMany({ 
-        where: { isActive: true }, // البنوك النشطة فقط
+        where: { isActive: true },
         orderBy: { name: "asc" },
-        select: { id: true, name: true, balance: true }
+        include: {
+          account: {
+            include: {
+              journalItems: {
+                select: { debit: true, credit: true }
+              }
+            }
+          }
+        }
       }),
     ]);
+
+    const processedSafes = safes.map(s => {
+      let balance = s.balance;
+      if (s.account) {
+        const totalDebit = s.account.journalItems.reduce((sum: number, item: { debit: number; credit: number }) => sum + (Number(item.debit) || 0), 0);
+        const totalCredit = s.account.journalItems.reduce((sum: number, item: { debit: number; credit: number }) => sum + (Number(item.credit) || 0), 0);
+        balance = totalDebit - totalCredit;
+      }
+      return { id: s.id, name: s.name, balance };
+    });
+
+    const processedBanks = banks.map(b => {
+      let balance = b.balance;
+      if (b.account) {
+        const totalDebit = b.account.journalItems.reduce((sum: number, item: { debit: number; credit: number }) => sum + (Number(item.debit) || 0), 0);
+        const totalCredit = b.account.journalItems.reduce((sum: number, item: { debit: number; credit: number }) => sum + (Number(item.credit) || 0), 0);
+        balance = totalDebit - totalCredit;
+      }
+      return { id: b.id, name: b.name, balance };
+    });
     
-    return { customers, safes, banks };
+    return { customers, safes: processedSafes, banks: processedBanks };
   } catch (error) {
     console.error("Error fetching receipt initial data:", error);
     return { customers: [], safes: [], banks: [] };
@@ -1580,8 +1690,28 @@ export async function getBanks(activeOnly: boolean = true) {
     const banks = await prisma.treasuryBank.findMany({
       where: activeOnly ? { isActive: true } : {},
       orderBy: { name: 'asc' },
+      include: {
+        account: {
+          include: {
+            journalItems: {
+              select: { debit: true, credit: true }
+            }
+          }
+        }
+      }
     });
-    return banks;
+
+    const processedBanks = banks.map(b => {
+      let balance = b.balance;
+      if (b.account) {
+        const totalDebit = b.account.journalItems.reduce((sum, item) => sum + (Number(item.debit) || 0), 0);
+        const totalCredit = b.account.journalItems.reduce((sum, item) => sum + (Number(item.credit) || 0), 0);
+        balance = totalDebit - totalCredit;
+      }
+      return { ...b, balance };
+    });
+
+    return processedBanks;
   } catch (error) {
     console.error("Error fetching banks:", error);
     return [];

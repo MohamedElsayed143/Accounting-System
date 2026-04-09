@@ -69,7 +69,7 @@ export async function getSalesReturns(
         invoice: { select: { invoiceNumber: true } },
         items: true,
       },
-      orderBy: { returnDate: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     });
     return { success: true, data: returns };
   } catch (error) {
@@ -290,6 +290,100 @@ export async function createSalesReturn(data: SalesReturnInput) {
         });
       }
 
+      // ✅ الترحيل للمحاسبة (Accounting Posting)
+      const lastEntry = await tx.journalEntry.findFirst({
+        orderBy: { entryNumber: "desc" },
+        select: { entryNumber: true },
+      });
+      let nextEntryNum = (lastEntry?.entryNumber || 0) + 1;
+
+      // 1. عكس الإيراد والضريبة
+      const revenueAccount = await tx.account.findUnique({ where: { code: "4101" } });
+      const customer = await tx.customer.findUnique({ where: { id: data.customerId }, select: { accountId: true } });
+      
+      let refundAccountId: number | null = null;
+      if (data.refundMethod === "cash" || data.refundMethod === "safe") {
+        const safe = await tx.treasurySafe.findUnique({ where: { id: data.safeId! }, select: { accountId: true } });
+        refundAccountId = safe?.accountId || null;
+      } else if (data.refundMethod === "bank") {
+        const bank = await tx.treasuryBank.findUnique({ where: { id: data.bankId! }, select: { accountId: true } });
+        refundAccountId = bank?.accountId || null;
+      } else {
+        refundAccountId = customer?.accountId || null;
+      }
+
+      if (revenueAccount && refundAccountId) {
+        await tx.journalEntry.create({
+          data: {
+            entryNumber: nextEntryNum++,
+            date: data.returnDate,
+            description: `مرتجع مبيعات #${returnNumber} - فاتورة #${invoice.invoiceNumber}`,
+            sourceType: "SALES_RETURN",
+            sourceId: salesReturn.id,
+            items: {
+              create: [
+                {
+                  accountId: revenueAccount.id,
+                  debit: data.total,
+                  credit: 0,
+                  description: `عكس إيراد مرتجع مبيعات #${returnNumber}`,
+                },
+                {
+                  accountId: refundAccountId,
+                  debit: 0,
+                  credit: data.total,
+                  description: `رد قيمة مرتجع مبيعات #${returnNumber}`,
+                },
+              ],
+            },
+          },
+        });
+      }
+
+      // 2. عكس التكلفة (إعادة للمخزون)
+      const inventoryAccount = await tx.account.findUnique({ where: { code: "120301" } });
+      const cogsAccount = await tx.account.findUnique({ where: { code: "610101" } });
+
+      if (inventoryAccount && cogsAccount) {
+        let returnCogsValue = 0;
+        for (const item of data.items) {
+          if (!item.invoiceItemId) continue;
+          const invItem = invoice.items.find(i => i.id === item.invoiceItemId);
+          if (invItem?.productId) {
+            const product = await tx.product.findUnique({ where: { id: invItem.productId }, select: { buyPrice: true } });
+            returnCogsValue += item.quantity * (product?.buyPrice || 0);
+          }
+        }
+
+        if (returnCogsValue > 0) {
+          await tx.journalEntry.create({
+            data: {
+              entryNumber: nextEntryNum++,
+              date: data.returnDate,
+              description: `عكس تكلفة بضاعة مرتجعة #${returnNumber}`,
+              sourceType: "SALES_RETURN",
+              sourceId: salesReturn.id,
+              items: {
+                create: [
+                  {
+                    accountId: inventoryAccount.id,
+                    debit: returnCogsValue,
+                    credit: 0,
+                    description: "إعادة بضاعة للمخزون",
+                  },
+                  {
+                    accountId: cogsAccount.id,
+                    debit: 0,
+                    credit: returnCogsValue,
+                    description: "عكس تكلفة البضاعة المباعة",
+                  },
+                ],
+              },
+            },
+          });
+        }
+      }
+
       return {
         salesReturn,
         updatedAccount: (isSafeRefund && data.safeId ? await tx.treasurySafe.findUnique({ where: { id: data.safeId }, select: { name: true, balance: true } }) : (data.refundMethod === 'bank' && data.bankId ? await tx.treasuryBank.findUnique({ where: { id: data.bankId }, select: { name: true, balance: true } }) : null))
@@ -382,7 +476,8 @@ export async function deleteSalesReturn(id: number) {
         });
       }
 
-      // 4. حذف حركات المخزون وحذف المرتجع نفسه
+      // 4. حذف حركات المخزون وحذف المرتجع نفسه والقيود المحاسبية
+      await tx.journalEntry.deleteMany({ where: { sourceType: "SALES_RETURN", sourceId: id } });
       await tx.stockMovement.deleteMany({ where: { salesReturnId: id } });
       await tx.salesReturn.delete({ where: { id } });
     });
