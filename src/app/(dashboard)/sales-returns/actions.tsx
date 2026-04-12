@@ -342,7 +342,7 @@ export async function createSalesReturn(data: SalesReturnInput) {
 
       // 2. عكس التكلفة (إعادة للمخزون)
       const inventoryAccount = await tx.account.findUnique({ where: { code: "120301" } });
-      const cogsAccount = await tx.account.findUnique({ where: { code: "610101" } });
+      const cogsAccount = await tx.account.findUnique({ where: { code: "6101" } });
 
       if (inventoryAccount && cogsAccount) {
         let returnCogsValue = 0;

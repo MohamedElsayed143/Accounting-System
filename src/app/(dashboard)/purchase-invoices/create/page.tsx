@@ -249,6 +249,15 @@ function InvoiceFormStep({
             setInvoiceDate(new Date(invoice.invoiceDate).toISOString().split("T")[0]);
             if ((invoice as any).dueDate) setDueDate(new Date((invoice as any).dueDate).toISOString().split("T")[0]);
             setDiscount(invoice.discount || 0);
+
+            if (invoice.safeId) {
+              setTreasuryType("safe");
+              setSelectedSafeId(String(invoice.safeId));
+            } else if (invoice.bankId) {
+              setTreasuryType("bank");
+              setSelectedBankId(String(invoice.bankId));
+            }
+
             if ((invoice as any).supplier) {
               setSupplier({
                 id: (invoice as any).supplier.id,

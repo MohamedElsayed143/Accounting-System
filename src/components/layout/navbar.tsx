@@ -140,24 +140,7 @@ export function Navbar({ title }: NavbarProps) {
   return (
     <header className="sticky top-0 z-40 flex h-16 items-center gap-4 border-b border-border/40 bg-background/95 px-6 backdrop-blur supports-[backdrop-filter]:bg-background/60 shadow-sm print:hidden">
       <SidebarTrigger className="md:hidden hover:bg-primary/10 transition-all" />
-
-      {/* System Logo — fixed branding on the right (RTL start) */}
-      <div className="flex items-center gap-2 flex-shrink-0">
-        {systemLogo ? (
-          <img
-            src={systemLogo}
-            alt={systemName}
-            className="w-7 h-7 rounded-lg object-contain"
-          />
-        ) : (
-          <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center shadow-sm">
-            <Zap className="w-4 h-4 text-white" />
-          </div>
-        )}
-        <span className="hidden lg:block text-xs font-black text-muted-foreground/60 tracking-tight">
-          {systemName}
-        </span>
-      </div>
+      
 
       {/* Separator */}
       <div className="hidden md:block w-px h-5 bg-border/60" />
@@ -240,48 +223,14 @@ export function Navbar({ title }: NavbarProps) {
           </Button>
         </Link>
 
-        <DropdownMenu dir="rtl">
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                className="relative h-9 w-9 rounded-full p-0 hover:bg-primary/10 transition-all"
-              >
-                <Avatar className="h-9 w-9 ring-2 ring-primary/20 hover:ring-primary/40 transition-all">
-                  {companyLogo && <AvatarImage src={companyLogo} alt="Company Logo" className="object-cover" />}
-                  <AvatarFallback className="bg-primary/10 text-primary text-sm font-bold uppercase">
-                    {user ? user.username.charAt(0) : "U"}
-                  </AvatarFallback>
-                </Avatar>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-56" align="end" forceMount>
-              <DropdownMenuLabel className="font-normal">
-                <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-bold leading-none">
-                    {user ? user.username : "جاري التحميل..."}
-                  </p>
-                  <p className="text-xs leading-none text-muted-foreground font-medium">
-                    {user ? (user.role === "ADMIN" ? "مدير النظام" : "موظف") : ""}
-                  </p>
-                </div>
-              </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <Link href="/settings">
-              <DropdownMenuItem className="cursor-pointer hover:bg-primary/10 transition-all gap-2">
-                <SettingsIcon className="h-4 w-4" />
-                <span className="font-medium">الإعدادات</span>
-              </DropdownMenuItem>
-            </Link>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem 
-              className="cursor-pointer hover:bg-destructive/10 text-destructive transition-all gap-2"
-              onClick={handleLogout}
-            >
-              <LogOut className="h-4 w-4" />
-              <span className="font-medium">تسجيل الخروج</span>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <div className="flex items-center justify-center p-0 transition-all ml-2">
+          <Avatar className="h-9 w-9 ring-2 ring-primary/20 transition-all">
+            {systemLogo && <AvatarImage src={systemLogo} alt="System Logo" className="object-cover bg-white" />}
+            <AvatarFallback className="bg-primary/10 text-primary text-sm font-bold uppercase">
+              {user ? user.username.charAt(0) : "U"}
+            </AvatarFallback>
+          </Avatar>
+        </div>
       </div>
     </header>
   );

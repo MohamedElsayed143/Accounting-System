@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import prisma from "./prisma";
 import crypto from "crypto";
+import { cache } from "react";
 
 // For hashing passwords in Node.js (salt + hash)
 export function hashPassword(password: string): string {
@@ -31,7 +32,7 @@ export async function setSessionCookie(sessionId: string) {
   });
 }
 
-export async function getSession() {
+export const getSession = cache(async () => {
   const cookieStore = await cookies();
   const sessionId = cookieStore.get("fast_session")?.value;
   if (!sessionId) return null;
@@ -53,7 +54,7 @@ export async function getSession() {
   } catch (error) {
     return null;
   }
-}
+});
 
 export async function clearSessionCookie() {
   const cookieStore = await cookies();

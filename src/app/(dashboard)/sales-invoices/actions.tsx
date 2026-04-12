@@ -378,7 +378,7 @@ export async function createSalesInvoice(data: {
 
       if (salesCogsValue > 0) {
         const cogsAccount = await tx.account.findUnique({
-          where: { code: "610101" },
+          where: { code: "6101" },
         });
         if (!cogsAccount)
           throw new Error("حساب تكلفة البضاعة المباعة 6101 غير موجود");
@@ -773,11 +773,11 @@ export async function updateSalesInvoice(
           orderBy: { entryNumber: "desc" },
           select: { entryNumber: true },
         });
-        const entryNumber = (lastEntry?.entryNumber || 0) + 1;
+        let currentEntryNo = (lastEntry?.entryNumber || 0) + 1;
 
         await tx.journalEntry.create({
           data: {
-            entryNumber,
+            entryNumber: currentEntryNo++,
             date: invoice.invoiceDate,
             description: `تعديل فاتورة مبيعات #${invoice.invoiceNumber} - ${invoice.customerName}`,
             sourceType: "SALES_INVOICE",
@@ -818,15 +818,9 @@ export async function updateSalesInvoice(
           }
 
           if (treasuryAccountId) {
-            const lastEntryCash = await tx.journalEntry.findFirst({
-              orderBy: { entryNumber: "desc" },
-              select: { entryNumber: true },
-            });
-            const entryNumberCash = (lastEntryCash?.entryNumber || 0) + 1;
-
             await tx.journalEntry.create({
               data: {
-                entryNumber: entryNumberCash,
+                entryNumber: currentEntryNo++,
                 date: invoice.invoiceDate,
                 description: `سداد نقدي فاتورة #${invoice.invoiceNumber} - ${invoice.customerName}`,
                 sourceType: "RECEIPT_VOUCHER",
@@ -939,7 +933,7 @@ export async function updateSalesInvoice(
       where: { code: "120301" },
     });
     const cogsAccount = await tx.account.findUnique({
-      where: { code: "610101" },
+      where: { code: "6101" },
     });
 
     if (inventoryAccount && cogsAccount) {

@@ -325,6 +325,14 @@ function InvoiceFormStep({
             }
             setDiscount(invoice.discount || 0);
 
+            if (invoice.safeId) {
+              setTreasuryType("safe");
+              setSelectedSafeId(String(invoice.safeId));
+            } else if (invoice.bankId) {
+              setTreasuryType("bank");
+              setSelectedBankId(String(invoice.bankId));
+            }
+
             if (invoice.customer) {
               setCustomer({
                 id: invoice.customer.id,
@@ -399,7 +407,10 @@ function InvoiceFormStep({
 
   useEffect(() => {
     if (!isEditMode && !isViewMode) {
-      getNextInvoiceNumber().then(setInvoiceNumber);
+      // Add error handling so loading never gets stuck
+      getNextInvoiceNumber()
+        .then((num) => setInvoiceNumber(num))
+        .catch(() => setInvoiceNumber(1)); // fallback to 1 on error
     }
   }, [isEditMode, isViewMode]);
 
@@ -409,11 +420,19 @@ function InvoiceFormStep({
 
     setCheckingNumber(true);
     const timer = setTimeout(async () => {
-      const taken = await checkInvoiceNumberExists(invoiceNumber);
-      if (isEditMode && taken) {
-        const invoice = await getSalesInvoiceWithReturns(Number(invoiceId));
-        if (invoice && invoice.invoiceNumber === invoiceNumber) {
-          setInvoiceNumberError("");
+      try {
+        const taken = await checkInvoiceNumberExists(invoiceNumber);
+        if (isEditMode && taken) {
+          const invoice = await getSalesInvoiceWithReturns(Number(invoiceId));
+          if (invoice && invoice.invoiceNumber === invoiceNumber) {
+            setInvoiceNumberError("");
+          } else {
+            setInvoiceNumberError(
+              taken
+                ? `رقم الفاتورة #${invoiceNumber} مستخدم مسبقاً، يرجى اختيار رقم آخر`
+                : "",
+            );
+          }
         } else {
           setInvoiceNumberError(
             taken
@@ -421,14 +440,12 @@ function InvoiceFormStep({
               : "",
           );
         }
-      } else {
-        setInvoiceNumberError(
-          taken
-            ? `رقم الفاتورة #${invoiceNumber} مستخدم مسبقاً، يرجى اختيار رقم آخر`
-            : "",
-        );
+      } catch (err) {
+        // If the check fails (e.g. network/DB issue), clear the error and let user proceed
+        setInvoiceNumberError("");
+      } finally {
+        setCheckingNumber(false);
       }
-      setCheckingNumber(false);
     }, 400);
     return () => clearTimeout(timer);
   }, [invoiceNumber, isEditMode, invoiceId, isViewMode]);

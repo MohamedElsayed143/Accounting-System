@@ -13,9 +13,10 @@
  */
 
 import { PrismaClient } from "@prisma/client";
+import { cache } from "react";
 import { getSession } from "./auth";
 
-// ── Connection pool (one PrismaClient per schema) ──────────────────────────
+// ── Connection pool (one PrismaClient per schema, shared globally) ───────────
 const clientCache = new Map<string, PrismaClient>();
 
 export function getPrismaForSchema(tenantSchema: string): PrismaClient {
@@ -44,18 +45,13 @@ export const publicPrisma =
 if (process.env.NODE_ENV !== "production")
   globalForPublic.publicPrisma = publicPrisma;
 
-// ── Request-scoped tenant client (reads tenantSchema from session) ─────────
-/**
- * Call inside any Server Action to get a DB client scoped to the caller's tenant.
- * Falls back to "public" schema if the user has no tenantSchema assigned yet
- * (backward-compatible with existing single-tenant data).
- */
-export async function getTenantPrisma(): Promise<PrismaClient> {
+// ── Request-scoped tenant client (cached per-request via React.cache) ───────
+export const getTenantPrisma = cache(async (): Promise<PrismaClient> => {
   const session = await getSession();
   const tenantSchema: string =
     (session?.user as any)?.tenantSchema ?? "public";
   return getPrismaForSchema(tenantSchema);
-}
+});
 
 // ── Initialise a brand-new tenant schema ──────────────────────────────────
 /**

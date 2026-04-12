@@ -28,8 +28,15 @@ export async function finalizeSalesInvoice(
     bankId?: number;
   },
 ) {
-  const result = await (await getTenantPrisma()).$transaction(async (tx) => {
-    const invoice = await tx.salesInvoice.findUnique({
+    const result = await (await getTenantPrisma()).$transaction(async (tx) => {
+      // Get the starting entry number
+      const latestEntry = await tx.journalEntry.findFirst({
+        orderBy: { entryNumber: "desc" },
+        select: { entryNumber: true },
+      });
+      let currentEntryNo = (latestEntry?.entryNumber || 0) + 1;
+
+      const invoice = await tx.salesInvoice.findUnique({
       where: { id },
       include: { items: true },
     });
@@ -49,15 +56,52 @@ export async function finalizeSalesInvoice(
 
     // 2. تحديث الخزنة/البنك إذا كان الدفع نقدي
     if (paymentData.status === "cash") {
+      let treasuryAccountId: number | null = null;
       if (paymentData.safeId) {
-        await tx.treasurySafe.update({
+        const updatedSafe = await tx.treasurySafe.update({
           where: { id: paymentData.safeId },
           data: { balance: { increment: invoice.total } },
         });
+        treasuryAccountId = updatedSafe.accountId;
       } else if (paymentData.bankId) {
-        await tx.treasuryBank.update({
+        const updatedBank = await tx.treasuryBank.update({
           where: { id: paymentData.bankId },
           data: { balance: { increment: invoice.total } },
+        });
+        treasuryAccountId = updatedBank.accountId;
+      }
+
+      // Add missing cash receipt journal entry
+      const customer = await tx.customer.findUnique({
+        where: { id: invoice.customerId },
+        select: { accountId: true }
+      });
+
+      if (treasuryAccountId && customer?.accountId) {
+        await tx.journalEntry.create({
+          data: {
+            entryNumber: currentEntryNo++,
+            date: new Date(),
+            description: `سداد نقدي (تأكيد) فاتورة #${invoice.invoiceNumber}`,
+            sourceType: "RECEIPT_VOUCHER",
+            sourceId: invoice.id,
+            items: {
+              create: [
+                {
+                  accountId: treasuryAccountId,
+                  debit: invoice.total,
+                  credit: 0,
+                  description: `تحصيل نقدي فاتورة #${invoice.invoiceNumber}`,
+                },
+                {
+                  accountId: customer.accountId,
+                  debit: 0,
+                  credit: invoice.total,
+                  description: `تسوية سداد فاتورة #${invoice.invoiceNumber}`,
+                },
+              ],
+            },
+          },
         });
       }
     }
@@ -123,14 +167,9 @@ export async function finalizeSalesInvoice(
     }
 
     if (salesCogsValue > 0) {
-      const lastEntry = await tx.journalEntry.findFirst({
-        orderBy: { entryNumber: "desc" },
-        select: { entryNumber: true },
-      });
-      const nextEntryNumber = (lastEntry?.entryNumber || 0) + 1;
       await tx.journalEntry.create({
         data: {
-          entryNumber: nextEntryNumber,
+          entryNumber: currentEntryNo++,
           date: new Date(),
           description: `قيد تكلفة البضاعة المباعة لفاتورة بيع رقم ${invoice.invoiceNumber}`,
           reference: `فاتورة بيع #${invoice.invoiceNumber}`,
@@ -200,6 +239,7 @@ export async function finalizeSalesInvoice(
   }
 
   revalidatePath("/pending-invoices");
+  return result;
 }
 
 export async function finalizePurchaseInvoice(
@@ -211,6 +251,13 @@ export async function finalizePurchaseInvoice(
   },
 ) {
   const result = await (await getTenantPrisma()).$transaction(async (tx) => {
+    // Get starting entry number
+    const latestEntry = await tx.journalEntry.findFirst({
+      orderBy: { entryNumber: "desc" },
+      select: { entryNumber: true },
+    });
+    let currentEntryNo = (latestEntry?.entryNumber || 0) + 1;
+
     const invoice = await tx.purchaseInvoice.findUnique({
       where: { id },
       include: {
@@ -350,14 +397,9 @@ export async function finalizePurchaseInvoice(
       }
 
       if (paymentAccountId) {
-        const lastEntry = await tx.journalEntry.findFirst({
-          orderBy: { entryNumber: "desc" },
-          select: { entryNumber: true },
-        });
-        const nextEntryNumber = (lastEntry?.entryNumber || 0) + 1;
         await tx.journalEntry.create({
           data: {
-            entryNumber: nextEntryNumber,
+            entryNumber: currentEntryNo++,
             date: new Date(),
             description: `قيد مخزون مشتريات فاتورة شراء رقم ${invoice.invoiceNumber}`,
             reference: `فاتورة شراء #${invoice.invoiceNumber}`,
@@ -428,4 +470,5 @@ export async function finalizePurchaseInvoice(
   }
 
   revalidatePath("/pending-invoices");
+  return result;
 }

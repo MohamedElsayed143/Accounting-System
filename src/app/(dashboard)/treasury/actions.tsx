@@ -477,8 +477,8 @@ export async function createBank(data: { name: string; accountNumber: string; br
       });
 
       if (data.initialBalance > 0) {
-        const openingBalanceAccount = await tx.account.findFirst({ where: { code: '3101' } });
-        const cap = await tx.account.findUnique({ where: { code: '31' } });
+        const openingBalanceAccount = await tx.account.findFirst({ where: { code: '31' } });
+        const cap = await tx.account.findUnique({ where: { code: '3' } });
         let openingAccId = openingBalanceAccount?.id;
         if (!openingAccId && cap) {
           const newAcc = await tx.account.create({
@@ -1594,13 +1594,13 @@ export async function createSafe(data: { name: string; initialBalance: number; d
       });
 
       if (data.initialBalance > 0) {
-        const openingBalanceAccount = await tx.account.findFirst({ where: { code: '3101' } });
-        const cap = await tx.account.findUnique({ where: { code: '31' } });
+        const openingBalanceAccount = await tx.account.findFirst({ where: { code: '31' } });
+        const cap = await tx.account.findUnique({ where: { code: '3' } });
         let openingAccId = openingBalanceAccount?.id;
         if (!openingAccId && cap) {
           const newAcc = await tx.account.create({
             data: {
-              code: '3101', name: 'الأرصدة الافتتاحية', type: 'EQUITY',
+              code: '31', name: 'الأرصدة الافتتاحية', type: 'EQUITY',
               parentId: cap.id, level: 3, isSelectable: true, isTerminal: true
             }
           });

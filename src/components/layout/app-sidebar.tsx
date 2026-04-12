@@ -45,6 +45,14 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useCompany } from "@/hooks/use-company";
@@ -215,26 +223,54 @@ export function AppSidebar() {
   return (
     <Sidebar className="border-l border-border/40 shadow-sm print:hidden">
       <SidebarHeader className="border-b border-border/40 px-4 py-4 bg-gradient-to-b from-primary/5 to-transparent">
-        <Link 
-          href={user?.role === "WORKER" ? "/sales-invoices" : "/statistics"} 
-          className="flex items-center gap-3 group"
-        >
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 shadow-md group-hover:shadow-lg transition-all overflow-hidden">
-            {company?.logo ? (
-              <img src={company.logo} alt="Logo" className="h-full w-full object-cover" />
-            ) : (
-              <Zap className="h-5 w-5 text-white" />
-            )}
-          </div>
-          <div className="flex flex-col">
-            <span className="text-xl font-black text-blue-600 dark:text-blue-500">
-              فاست
-            </span>
-            <span className="text-[10px] text-slate-500 font-bold tracking-tight truncate max-w-[120px]" title={company?.name}>
-              {company?.name || "Fast System"}
-            </span>
-          </div>
-        </Link>
+        <DropdownMenu dir="rtl">
+          <DropdownMenuTrigger asChild>
+            <div className="flex items-center gap-3 group cursor-pointer">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl shadow-md group-hover:shadow-lg transition-all overflow-hidden bg-white">
+                {company?.logo ? (
+                  <img src={company.logo} alt="Logo" className="h-full w-full object-cover" />
+                ) : (
+                  <div className="bg-blue-600 w-full h-full flex items-center justify-center"><Zap className="h-5 w-5 text-white" /></div>
+                )}
+              </div>
+              <div className="flex flex-col">
+                <span className="text-sm font-black text-blue-600 dark:text-blue-500 truncate max-w-[140px]">
+                  {company?.name || "فاست"}
+                </span>
+                <span className="text-[10px] text-slate-500 font-bold tracking-tight truncate max-w-[140px]" title={company?.nameEn}>
+                  {company?.nameEn || "Fast System"}
+                </span>
+              </div>
+            </div>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent className="w-56" align="start" forceMount>
+            <DropdownMenuLabel className="font-normal">
+              <div className="flex flex-col space-y-1">
+                <p className="text-sm font-bold leading-none">
+                  {user ? user.username : "جاري التحميل..."}
+                </p>
+                <p className="text-xs leading-none text-muted-foreground font-medium">
+                  {user ? (user.role === "ADMIN" ? "مدير النظام" : "موظف") : ""}
+                </p>
+              </div>
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <Link href="/settings">
+              <DropdownMenuItem className="cursor-pointer hover:bg-primary/10 transition-all gap-2">
+                <Settings className="h-4 w-4" />
+                <span className="font-medium">الإعدادات</span>
+              </DropdownMenuItem>
+            </Link>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem 
+              className="cursor-pointer hover:bg-destructive/10 text-destructive transition-all gap-2"
+              onClick={handleLogout}
+            >
+              <LogOut className="h-4 w-4" />
+              <span className="font-medium">تسجيل الخروج</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </SidebarHeader>
 
       <SidebarContent className="px-2 py-4">
@@ -679,30 +715,6 @@ export function AppSidebar() {
           </SidebarGroup>
         )}
       </SidebarContent>
-
-      <SidebarFooter className="border-t border-border/40 p-4 bg-gradient-to-t from-primary/5 to-transparent flex flex-row items-center justify-between">
-        <div className="flex items-center gap-3 group cursor-pointer hover:bg-primary/5 p-2 rounded-lg transition-all">
-          <Avatar className="h-10 w-10 ring-2 ring-primary/20 group-hover:ring-primary/40 transition-all">
-            {company?.logo && <AvatarImage src={company.logo} alt="Company Logo" className="object-cover" />}
-            <AvatarFallback className="bg-primary/10 text-primary text-sm font-bold">
-              {user ? user.username.charAt(0).toUpperCase() : "U"}
-            </AvatarFallback>
-          </Avatar>
-          <div className="flex flex-col">
-            <span className="text-sm font-bold">{user ? user.username : "جاري التحميل..."}</span>
-            <span className="text-xs text-muted-foreground font-medium">
-              {user ? (user.role === "ADMIN" ? "مدير النظام" : "موظف") : ""}
-            </span>
-          </div>
-        </div>
-        <button 
-          onClick={handleLogout}
-          className="p-2 text-slate-400 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors"
-          title="تسجيل الخروج"
-        >
-          <LogOut className="w-5 h-5" />
-        </button>
-      </SidebarFooter>
     </Sidebar>
   );
 }

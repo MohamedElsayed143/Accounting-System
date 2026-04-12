@@ -310,15 +310,16 @@ export async function createPurchaseInvoice(data: {
     const supplierAccountId = invoice.supplier?.accountId;
     if (!supplierAccountId) throw new Error("المورد غير مربوط بحساب محاسبي");
 
+    // جلب رقم القيد مرة واحدة واستخدام عداد محلي
     const lastEntry = await tx.journalEntry.findFirst({
       orderBy: { entryNumber: "desc" },
       select: { entryNumber: true },
     });
-    const entryNumber = (lastEntry?.entryNumber || 0) + 1;
+    let currentEntryNo = (lastEntry?.entryNumber || 0) + 1;
 
     await tx.journalEntry.create({
       data: {
-        entryNumber,
+        entryNumber: currentEntryNo++,
         date: invoice.invoiceDate,
         description: `فاتورة مشتريات #${invoice.invoiceNumber} - ${invoice.supplierName}`,
         sourceType: "PURCHASE_INVOICE",
@@ -360,15 +361,9 @@ export async function createPurchaseInvoice(data: {
       }
 
       if (treasuryAccountId) {
-        const lastEntryCash = await tx.journalEntry.findFirst({
-          orderBy: { entryNumber: "desc" },
-          select: { entryNumber: true },
-        });
-        const entryNumberCash = (lastEntryCash?.entryNumber || 0) + 1;
-
         await tx.journalEntry.create({
           data: {
-            entryNumber: entryNumberCash,
+            entryNumber: currentEntryNo++,
             date: invoice.invoiceDate,
             description: `سداد نقدي فاتورة مشتريات #${invoice.invoiceNumber} - ${invoice.supplierName}`,
             sourceType: "PAYMENT_VOUCHER",
@@ -704,18 +699,19 @@ export async function updatePurchaseInvoice(
     const supplierAccountId = invoice.supplier?.accountId;
     if (supplierAccountId) {
       const purchasesAccount = await tx.account.findUnique({
-        where: { code: "610401" },
+        where: { code: "6104" },
       });
       if (purchasesAccount) {
+        // جلب رقم القيد مرة واحدة واستخدام عداد محلي
         const lastEntry = await tx.journalEntry.findFirst({
           orderBy: { entryNumber: "desc" },
           select: { entryNumber: true },
         });
-        const entryNumber = (lastEntry?.entryNumber || 0) + 1;
+        let currentEntryNo = (lastEntry?.entryNumber || 0) + 1;
 
         await tx.journalEntry.create({
           data: {
-            entryNumber,
+            entryNumber: currentEntryNo++,
             date: invoice.invoiceDate,
             description: `تعديل فاتورة مشتريات #${invoice.invoiceNumber} - ${invoice.supplierName}`,
             sourceType: "PURCHASE_INVOICE",
@@ -756,15 +752,9 @@ export async function updatePurchaseInvoice(
           }
 
           if (treasuryAccountId) {
-            const lastEntryCash = await tx.journalEntry.findFirst({
-              orderBy: { entryNumber: "desc" },
-              select: { entryNumber: true },
-            });
-            const entryNumberCash = (lastEntryCash?.entryNumber || 0) + 1;
-
             await tx.journalEntry.create({
               data: {
-                entryNumber: entryNumberCash,
+                entryNumber: currentEntryNo++,
                 date: invoice.invoiceDate,
                 description: `سداد نقدي فاتورة مشتريات #${invoice.invoiceNumber} - ${invoice.supplierName}`,
                 sourceType: "PAYMENT_VOUCHER",

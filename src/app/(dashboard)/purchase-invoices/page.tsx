@@ -181,34 +181,9 @@ export default function PurchaseInvoicesPage() {
             </p>
           </div>
           <div className="flex gap-2 items-center">
-          {isUserAdmin && (
-            <Button
-              variant={isManagementActive ? "destructive" : "outline"}
-              onClick={() => {
-                if (isManagementActive) {
-                  toggleManagementMode(false);
-                  toast.info("تم إغلاق وضع الإدارة");
-                } else {
-                  setIsPassGateOpen(true);
-                }
-              }}
-              className="gap-2 border-dashed border-2 transition-all"
-            >
-              {isManagementActive ? (
-                <>
-                  <ShieldAlert className="h-4 w-4" />
-                  إغلاق وضع الإدارة
-                </>
-              ) : (
-                <>
-                  <ShieldCheck className="h-4 w-4" />
-                  قائمة الحذف والتعديل
-                </>
-              )}
-            </Button>
-          )}
 
-            {isManagementActive && hasPermission("purchase_create") && (
+
+            {hasPermission("purchase_create") && (
               <Button
                 asChild
                 className="gap-2 shadow-md hover:shadow-lg transition-all"
@@ -343,28 +318,7 @@ export default function PurchaseInvoicesPage() {
                                   </Link>
                                 </Button>
                                 
-                                {isManagementActive && (
-                                  <>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-8 w-8 text-amber-600 hover:text-amber-700 hover:bg-amber-50"
-                                      asChild
-                                    >
-                                      <Link href={`/purchase-invoices/create?id=${invoice.id}`}>
-                                        <Edit className="h-4 w-4" />
-                                      </Link>
-                                    </Button>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-8 w-8 text-destructive hover:text-destructive/90 hover:bg-destructive/10"
-                                      onClick={() => openDeleteDialog(invoice)}
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                    </Button>
-                                  </>
-                                )}
+
                               </div>
                             </TableCell>
                           </TableRow>

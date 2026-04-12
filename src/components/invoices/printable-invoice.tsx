@@ -275,6 +275,12 @@ export const PrintableInvoice = React.forwardRef<HTMLDivElement, PrintableInvoic
                     <span>{tax.toLocaleString("ar-EG")} {currencyCode}</span>
                   </div>
                 )}
+                {returnsTotal > 0 && (
+                  <div className="flex justify-between text-[11px] font-bold text-red-600">
+                    <span>إجمالي المرتجعات</span>
+                    <span>-{returnsTotal.toLocaleString("ar-EG")} {currencyCode}</span>
+                  </div>
+                )}
                 <div className="border-t border-slate-300 pt-1 mt-1 flex justify-between items-center">
                   <span className="text-sm font-black text-slate-900">الصافي</span>
                   <div className="text-right">
@@ -310,6 +316,15 @@ export const PrintableInvoice = React.forwardRef<HTMLDivElement, PrintableInvoic
             
           </div>
         </div>
+        {/* Branding Row */}
+<div className="mt-8 pt-4 border-t border-gray-100 flex justify-between items-center opacity-40 select-none grayscale">
+  <p className="text-[10px] font-medium tracking-widest text-gray-500">
+    POWERED BY <span className="font-bold text-black">FAST SYSTEM</span>
+  </p>
+  <p className="text-[10px] italic text-gray-400">
+    دقة في الأداء.. سرعة في الإنجاز
+  </p>
+</div>
       </div>
     );
   }
