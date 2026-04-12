@@ -1,5 +1,5 @@
 "use server";
-import { prisma } from "@/lib/prisma";
+import { getTenantPrisma, publicPrisma } from "@/lib/tenant-prisma";
 import { revalidatePath } from "next/cache";
 
 // أنواع البيانات
@@ -35,7 +35,7 @@ export type TransactionType = {
 // 1. جلب العملاء (مع إمكانية البحث)
 export async function getCustomers(search?: string) {
   try {
-    const customers = await prisma.customer.findMany({
+    const customers = await (await getTenantPrisma()).customer.findMany({
       where: search ? {
         OR: [
           { name: { contains: search, mode: 'insensitive' } },
@@ -62,7 +62,7 @@ export async function getCustomers(search?: string) {
 // 1.1 جلب عميل محدد
 export async function getCustomerById(id: number) {
   try {
-    const customer = await prisma.customer.findUnique({
+    const customer = await (await getTenantPrisma()).customer.findUnique({
       where: { id },
       select: {
         id: true,
@@ -81,7 +81,7 @@ export async function getCustomerById(id: number) {
 // 2. جلب الموردين (مع إمكانية البحث)
 export async function getSuppliers(search?: string) {
   try {
-    const suppliers = await prisma.supplier.findMany({
+    const suppliers = await (await getTenantPrisma()).supplier.findMany({
       where: search ? {
         OR: [
           { name: { contains: search, mode: 'insensitive' } },
@@ -108,7 +108,7 @@ export async function getSuppliers(search?: string) {
 // 2.1 جلب مورد محدد
 export async function getSupplierById(id: number) {
   try {
-    const supplier = await prisma.supplier.findUnique({
+    const supplier = await (await getTenantPrisma()).supplier.findUnique({
       where: { id },
       select: {
         id: true,
@@ -133,7 +133,7 @@ export async function getCustomerTransactions(
 ) {
   try {
     // جلب فواتير البيع
-    const invoices = await prisma.salesInvoice.findMany({
+    const invoices = await (await getTenantPrisma()).salesInvoice.findMany({
       where: {
         customerId,
         ...(fromDate && toDate ? {
@@ -148,7 +148,7 @@ export async function getCustomerTransactions(
     });
 
     // جلب سندات القبض
-    const receipts = await prisma.receiptVoucher.findMany({
+    const receipts = await (await getTenantPrisma()).receiptVoucher.findMany({
       where: {
         customerId,
         ...(fromDate && toDate ? {
@@ -163,7 +163,7 @@ export async function getCustomerTransactions(
     });
 
     // جلب مرتجعات المبيعات
-    const returns = await prisma.salesReturn.findMany({
+    const returns = await (await getTenantPrisma()).salesReturn.findMany({
       where: {
         customerId,
         ...(fromDate && toDate ? {
@@ -178,7 +178,7 @@ export async function getCustomerTransactions(
     });
 
     // جلب إعدادات الشركة للبادئات
-    const settings = await prisma.companySettings.findUnique({ where: { id: 1 } });
+    const settings = await (await getTenantPrisma()).companySettings.findUnique({ where: { id: 1 } });
 
     // تحويل الفواتير
     const invoiceTransactions: TransactionType[] = [];
@@ -238,8 +238,8 @@ export async function getCustomerTransactions(
     }));
 
     // جلب القيود اليدوية للعميل
-    const customer = await prisma.customer.findUnique({ where: { id: customerId } });
-    const manualEntries = customer?.accountId ? await prisma.journalItem.findMany({
+    const customer = await (await getTenantPrisma()).customer.findUnique({ where: { id: customerId } });
+    const manualEntries = customer?.accountId ? await (await getTenantPrisma()).journalItem.findMany({
       where: {
         accountId: customer.accountId,
         journalEntry: {
@@ -298,7 +298,7 @@ export async function getSupplierTransactions(
 ) {
   try {
     // جلب فواتير الشراء
-    const invoices = await prisma.purchaseInvoice.findMany({
+    const invoices = await (await getTenantPrisma()).purchaseInvoice.findMany({
       where: {
         supplierId,
         ...(fromDate && toDate ? {
@@ -313,7 +313,7 @@ export async function getSupplierTransactions(
     });
 
     // جلب سندات الصرف
-    const payments = await prisma.paymentVoucher.findMany({
+    const payments = await (await getTenantPrisma()).paymentVoucher.findMany({
       where: {
         supplierId,
         ...(fromDate && toDate ? {
@@ -328,7 +328,7 @@ export async function getSupplierTransactions(
     });
 
     // جلب مرتجعات المشتريات
-    const purchaseReturns = await prisma.purchaseReturn.findMany({
+    const purchaseReturns = await (await getTenantPrisma()).purchaseReturn.findMany({
       where: {
         supplierId,
         ...(fromDate && toDate ? {
@@ -343,7 +343,7 @@ export async function getSupplierTransactions(
     });
 
     // جلب إعدادات الشركة للبادئات
-    const settings = await prisma.companySettings.findUnique({ where: { id: 1 } });
+    const settings = await (await getTenantPrisma()).companySettings.findUnique({ where: { id: 1 } });
 
     // تحويل الفواتير
     const invoiceTransactions: TransactionType[] = [];
@@ -402,8 +402,8 @@ export async function getSupplierTransactions(
     }));
 
     // جلب القيود اليدوية للمورد
-    const supplier = await prisma.supplier.findUnique({ where: { id: supplierId } });
-    const manualEntries = supplier?.accountId ? await prisma.journalItem.findMany({
+    const supplier = await (await getTenantPrisma()).supplier.findUnique({ where: { id: supplierId } });
+    const manualEntries = supplier?.accountId ? await (await getTenantPrisma()).journalItem.findMany({
       where: {
         accountId: supplier.accountId,
         journalEntry: {
@@ -456,7 +456,7 @@ export async function getSupplierTransactions(
 // 5. جلب الخزائن
 export async function getSafes() {
   try {
-    return await prisma.treasurySafe.findMany({
+    return await (await getTenantPrisma()).treasurySafe.findMany({
       where: { isActive: true },
       orderBy: { name: 'asc' },
       select: { id: true, name: true, balance: true, accountId: true }
@@ -470,7 +470,7 @@ export async function getSafes() {
 // 6. جلب البنوك
 export async function getBanks() {
   try {
-    return await prisma.treasuryBank.findMany({
+    return await (await getTenantPrisma()).treasuryBank.findMany({
       where: { isActive: true },
       orderBy: { name: 'asc' },
       select: { id: true, name: true, balance: true, accountNumber: true, accountId: true }
@@ -485,9 +485,9 @@ export async function getBanks() {
 export async function getAccountById(id: number, type: 'safe' | 'bank') {
   try {
     if (type === 'safe') {
-      return await prisma.treasurySafe.findUnique({ where: { id } });
+      return await (await getTenantPrisma()).treasurySafe.findUnique({ where: { id } });
     } else {
-      return await prisma.treasuryBank.findUnique({ where: { id } });
+      return await (await getTenantPrisma()).treasuryBank.findUnique({ where: { id } });
     }
   } catch (error) {
     console.error("Error fetching account:", error);
@@ -511,11 +511,11 @@ export async function getAccountTransactions(
     // جلب الـ accountId الخاص بالخزنة أو البنك
     const account =
       accountType === "safe"
-        ? await prisma.treasurySafe.findUnique({
+        ? await (await getTenantPrisma()).treasurySafe.findUnique({
             where: { id: accountId },
             select: { accountId: true },
           })
-        : await prisma.treasuryBank.findUnique({
+        : await (await getTenantPrisma()).treasuryBank.findUnique({
             where: { id: accountId },
             select: { accountId: true },
           });
@@ -536,31 +536,31 @@ export async function getAccountTransactions(
         prevPurchInvoices,
         prevManualEntries,
       ] = await Promise.all([
-        prisma.receiptVoucher.aggregate({
+        (await getTenantPrisma()).receiptVoucher.aggregate({
           where: { ...whereAccount, date: { lt: fromDate } },
           _sum: { amount: true },
         }),
-        prisma.paymentVoucher.aggregate({
+        (await getTenantPrisma()).paymentVoucher.aggregate({
           where: { ...whereAccount, date: { lt: fromDate } },
           _sum: { amount: true },
         }),
-        prisma.salesReturn.aggregate({
+        (await getTenantPrisma()).salesReturn.aggregate({
           where: { ...whereAccount, returnDate: { lt: fromDate } },
           _sum: { total: true },
         }),
-        prisma.purchaseReturn.aggregate({
+        (await getTenantPrisma()).purchaseReturn.aggregate({
           where: { ...whereAccount, returnDate: { lt: fromDate } },
           _sum: { total: true },
         }),
-        prisma.treasuryTransfer.aggregate({
+        (await getTenantPrisma()).treasuryTransfer.aggregate({
           where: { ...whereAccountFrom, date: { lt: fromDate } },
           _sum: { amount: true },
         }),
-        prisma.treasuryTransfer.aggregate({
+        (await getTenantPrisma()).treasuryTransfer.aggregate({
           where: { ...whereAccountTo, date: { lt: fromDate } },
           _sum: { amount: true },
         }),
-        prisma.salesInvoice.aggregate({
+        (await getTenantPrisma()).salesInvoice.aggregate({
           where: {
             ...whereAccount,
             invoiceDate: { lt: fromDate },
@@ -568,7 +568,7 @@ export async function getAccountTransactions(
           },
           _sum: { total: true },
         }),
-        prisma.purchaseInvoice.aggregate({
+        (await getTenantPrisma()).purchaseInvoice.aggregate({
           where: {
             ...whereAccount,
             invoiceDate: { lt: fromDate },
@@ -576,7 +576,7 @@ export async function getAccountTransactions(
           },
           _sum: { total: true },
         }),
-        prisma.journalItem.aggregate({
+        (await getTenantPrisma()).journalItem.aggregate({
           where: {
             accountId: safeBankAccountId,
             journalEntry: {
@@ -624,47 +624,47 @@ export async function getAccountTransactions(
       purchaseInvoices,
       manualItems,
     ] = await Promise.all([
-      prisma.receiptVoucher.findMany({
+      (await getTenantPrisma()).receiptVoucher.findMany({
         where: { ...whereAccount, ...dateFilterVoucher },
         include: { customer: { select: { name: true } } },
         orderBy: { date: "asc" },
       }),
-      prisma.paymentVoucher.findMany({
+      (await getTenantPrisma()).paymentVoucher.findMany({
         where: { ...whereAccount, ...dateFilterVoucher },
         include: { supplier: { select: { name: true } } },
         orderBy: { date: "asc" },
       }),
-      prisma.salesReturn.findMany({
+      (await getTenantPrisma()).salesReturn.findMany({
         where: { ...whereAccount, ...dateFilterReturn },
         include: { customer: { select: { name: true } } },
         orderBy: { returnDate: "asc" },
       }),
-      prisma.purchaseReturn.findMany({
+      (await getTenantPrisma()).purchaseReturn.findMany({
         where: { ...whereAccount, ...dateFilterReturn },
         include: { supplier: { select: { name: true } } },
         orderBy: { returnDate: "asc" },
       }),
-      prisma.treasuryTransfer.findMany({
+      (await getTenantPrisma()).treasuryTransfer.findMany({
         where: { ...whereAccountFrom, ...dateFilterVoucher },
         include: { toSafe: true, toBank: true },
         orderBy: { date: "asc" },
       }),
-      prisma.treasuryTransfer.findMany({
+      (await getTenantPrisma()).treasuryTransfer.findMany({
         where: { ...whereAccountTo, ...dateFilterVoucher },
         include: { fromSafe: true, fromBank: true },
         orderBy: { date: "asc" },
       }),
-      prisma.salesInvoice.findMany({
+      (await getTenantPrisma()).salesInvoice.findMany({
         where: { ...whereAccount, ...dateFilterInvoice, status: "cash" },
         include: { customer: { select: { name: true } } },
         orderBy: { invoiceDate: "asc" },
       }),
-      prisma.purchaseInvoice.findMany({
+      (await getTenantPrisma()).purchaseInvoice.findMany({
         where: { ...whereAccount, ...dateFilterInvoice, status: "cash" },
         include: { supplier: { select: { name: true } } },
         orderBy: { invoiceDate: "asc" },
       }),
-      prisma.journalItem.findMany({
+      (await getTenantPrisma()).journalItem.findMany({
         where: {
           accountId: safeBankAccountId,
           journalEntry: {
@@ -680,7 +680,7 @@ export async function getAccountTransactions(
     ]);
 
     // جلب إعدادات الشركة للبادئات
-    const settings = await prisma.companySettings.findUnique({
+    const settings = await (await getTenantPrisma()).companySettings.findUnique({
       where: { id: 1 },
     });
 

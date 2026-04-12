@@ -1,7 +1,7 @@
 // app/(dashboard)/purchase-invoices/actions.ts
 "use server";
 
-import { prisma } from "@/lib/prisma";
+import { getTenantPrisma, publicPrisma } from "@/lib/tenant-prisma";
 import { revalidatePath } from "next/cache";
 import { getSession } from "@/lib/auth";
 import { hasPermission } from "@/lib/permissions";
@@ -57,7 +57,7 @@ export async function getPurchaseInvoices() {
   const canView = await hasPermission(session.userId, "purchase_view");
   if (!canView) return [];
 
-  const invoices = await prisma.purchaseInvoice.findMany({
+  const invoices = await (await getTenantPrisma()).purchaseInvoice.findMany({
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     include: {
       items: true,
@@ -84,7 +84,7 @@ export async function getPurchaseInvoices() {
 
 // ─── جلب فاتورة واحدة بواسطة المعرف (مع المرتجعات) ──────────────────────────
 export async function getPurchaseInvoiceById(id: number) {
-  const invoice = await prisma.purchaseInvoice.findUnique({
+  const invoice = await (await getTenantPrisma()).purchaseInvoice.findUnique({
     where: { id },
     include: {
       items: true,
@@ -112,7 +112,7 @@ export async function getPurchaseInvoiceById(id: number) {
 
 // ─── الحصول على رقم الفاتورة التالي (تلقائي) ───────────────────────────────
 export async function getNextPurchaseInvoiceNumber(): Promise<number> {
-  const last = await prisma.purchaseInvoice.findFirst({
+  const last = await (await getTenantPrisma()).purchaseInvoice.findFirst({
     orderBy: { invoiceNumber: "desc" },
     select: { invoiceNumber: true },
   });
@@ -123,7 +123,7 @@ export async function getNextPurchaseInvoiceNumber(): Promise<number> {
 export async function checkPurchaseInvoiceNumberExists(
   invoiceNumber: number,
 ): Promise<boolean> {
-  const found = await prisma.purchaseInvoice.findUnique({
+  const found = await (await getTenantPrisma()).purchaseInvoice.findUnique({
     where: { invoiceNumber },
     select: { id: true },
   });
@@ -188,7 +188,7 @@ export async function createPurchaseInvoice(data: {
     limit?: number;
   }[] = [];
 
-  const result = await (prisma as any).$transaction(async (tx: any) => {
+  const result = await (await getTenantPrisma() as any).$transaction(async (tx: any) => {
     // 1. التحقق من رقم الفاتورة
     const taken = await tx.purchaseInvoice.findUnique({
       where: { invoiceNumber: data.invoiceNumber },
@@ -525,7 +525,7 @@ export async function updatePurchaseInvoice(
     }
   }
 
-  const result = await (prisma as any).$transaction(async (tx: any) => {
+  const result = await (await getTenantPrisma() as any).$transaction(async (tx: any) => {
     const existingInvoice = await tx.purchaseInvoice.findUnique({
       where: { id },
       select: {
@@ -902,7 +902,7 @@ export async function deletePurchaseInvoice(id: number) {
 
   const pendingAlerts: { type: "treasury"; name: string; value: number }[] = [];
 
-  await prisma.$transaction(async (tx) => {
+  await (await getTenantPrisma()).$transaction(async (tx) => {
     // 0. جلب بيانات الفاتورة لمعرفة حالتها וחساباتها
     const invoice = await tx.purchaseInvoice.findUnique({
       where: { id },
@@ -958,19 +958,19 @@ export async function deletePurchaseInvoice(id: number) {
     }
 
     // تحقق من وجود معاملات مرتبطة
-    const relatedVouchers = await prisma.paymentVoucher.count({
+    const relatedVouchers = await (await getTenantPrisma()).paymentVoucher.count({
       where: { bankId: invoice?.bankId || -1 }, // Use a placeholder if bankId is null
     });
 
-    const relatedReceipts = await prisma.receiptVoucher.count({
+    const relatedReceipts = await (await getTenantPrisma()).receiptVoucher.count({
       where: { bankId: invoice?.bankId || -1 },
     });
 
-    const relatedSalesInvoices = await prisma.salesInvoice.count({
+    const relatedSalesInvoices = await (await getTenantPrisma()).salesInvoice.count({
       where: { bankId: invoice?.bankId || -1, status: "cash" },
     });
 
-    const relatedPurchaseInvoices = await prisma.purchaseInvoice.count({
+    const relatedPurchaseInvoices = await (await getTenantPrisma()).purchaseInvoice.count({
       where: { bankId: invoice?.bankId || -1, status: "cash" },
     });
 
@@ -1019,7 +1019,7 @@ export async function deletePurchaseInvoice(id: number) {
 
 // ─── جلب فاتورة معينة مع أصنافها ومرتجعاتها (لصفحة العرض) ───────────────────
 export async function getPurchaseInvoiceWithReturns(id: number) {
-  return prisma.purchaseInvoice.findUnique({
+  return (await getTenantPrisma()).purchaseInvoice.findUnique({
     where: { id },
     include: {
       items: {
@@ -1035,7 +1035,7 @@ export async function getPurchaseInvoiceWithReturns(id: number) {
 
 // ─── جلب فواتير مورد معين (للمرتجعات) ──────────────────────────────────────
 export async function getPurchaseInvoicesBySupplier(supplierId: number) {
-  return prisma.purchaseInvoice.findMany({
+  return (await getTenantPrisma()).purchaseInvoice.findMany({
     where: { supplierId },
     orderBy: { invoiceDate: "desc" },
     select: {

@@ -1,6 +1,6 @@
 "use server";
 
-import { prisma } from "@/lib/prisma";
+import { getTenantPrisma, publicPrisma } from "@/lib/tenant-prisma";
 import { revalidatePath } from "next/cache";
 import { getSession } from "@/lib/auth";
 import { hasPermission } from "@/lib/permissions";
@@ -42,17 +42,17 @@ export interface InitialData {
 
 // دالة مساعدة للتأكد من وجود الخزنة الرئيسية
 async function ensureMainSafe() {
-  const safe = await prisma.treasurySafe.findFirst({
+  const safe = await (await getTenantPrisma()).treasurySafe.findFirst({
     where: { isPrimary: true },
     include: { account: true }
   });
   
   if (!safe || !safe.accountId) {
     // 1. Ensure COA Parent exists
-    const parent = await prisma.account.findUnique({ where: { code: '1201' } });
+    const parent = await (await getTenantPrisma()).account.findUnique({ where: { code: '1201' } });
     if (!parent) throw new Error("Parent COA account 1201 missing");
 
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await (await getTenantPrisma()).$transaction(async (tx) => {
       let existingSafe = await tx.treasurySafe.findFirst({
         where: { OR: [{ isPrimary: true }, { name: "الخزنة الرئيسية" }] }
       });
@@ -118,7 +118,7 @@ export async function getTreasuryData() {
     recentTransfers,
     recentManualEntries,
   ] = await Promise.all([
-    prisma.treasurySafe.findMany({ 
+    (await getTenantPrisma()).treasurySafe.findMany({ 
       where: { isActive: true },
       orderBy: { createdAt: 'desc' },
       include: {
@@ -131,7 +131,7 @@ export async function getTreasuryData() {
         }
       }
     }),
-    prisma.treasuryBank.findMany({ 
+    (await getTenantPrisma()).treasuryBank.findMany({ 
       where: { isActive: true },
       orderBy: { createdAt: 'desc' },
       include: {
@@ -144,7 +144,7 @@ export async function getTreasuryData() {
         }
       }
     }),
-    prisma.receiptVoucher.findMany({
+    (await getTenantPrisma()).receiptVoucher.findMany({
       take: 20,
       orderBy: { date: 'desc' },
       include: {
@@ -153,7 +153,7 @@ export async function getTreasuryData() {
         bank: { select: { name: true } },
       }
     }),
-    prisma.paymentVoucher.findMany({
+    (await getTenantPrisma()).paymentVoucher.findMany({
       take: 20,
       orderBy: { date: 'desc' },
       include: {
@@ -162,7 +162,7 @@ export async function getTreasuryData() {
         bank: { select: { name: true } },
       }
     }),
-    prisma.salesInvoice.findMany({
+    (await getTenantPrisma()).salesInvoice.findMany({
       where: { status: 'cash' },
       take: 20,
       orderBy: { invoiceDate: 'desc' },
@@ -171,7 +171,7 @@ export async function getTreasuryData() {
         bank: { select: { name: true } },
       }
     }),
-    prisma.purchaseInvoice.findMany({
+    (await getTenantPrisma()).purchaseInvoice.findMany({
       where: { status: 'cash' },
       take: 20,
       orderBy: { invoiceDate: 'desc' },
@@ -180,7 +180,7 @@ export async function getTreasuryData() {
         bank: { select: { name: true } },
       }
     }),
-    prisma.salesReturn.findMany({
+    (await getTenantPrisma()).salesReturn.findMany({
       where: { refundMethod: { in: ['cash', 'safe', 'bank'] } },
       take: 20,
       orderBy: { returnDate: 'desc' },
@@ -190,7 +190,7 @@ export async function getTreasuryData() {
         bank: { select: { name: true } },
       }
     }),
-    prisma.purchaseReturn.findMany({
+    (await getTenantPrisma()).purchaseReturn.findMany({
       where: { refundMethod: { in: ['cash', 'safe', 'bank'] } },
       take: 20,
       orderBy: { returnDate: 'desc' },
@@ -200,7 +200,7 @@ export async function getTreasuryData() {
         bank: { select: { name: true } },
       }
     }),
-    prisma.treasuryTransfer.findMany({
+    (await getTenantPrisma()).treasuryTransfer.findMany({
       take: 20,
       orderBy: { date: "desc" },
       include: {
@@ -210,7 +210,7 @@ export async function getTreasuryData() {
         toBank: { select: { name: true } },
       },
     }),
-    prisma.journalEntry.findMany({
+    (await getTenantPrisma()).journalEntry.findMany({
       where: {
         sourceType: "MANUAL",
         items: {
@@ -418,9 +418,9 @@ export async function createBank(data: { name: string; accountNumber: string; br
 
   // Approval Interception
   if (!skipApproval) {
-    const settings = await (prisma as any).generalSettings.findUnique({ where: { id: 1 } });
+    const settings = await (await getTenantPrisma() as any).generalSettings.findUnique({ where: { id: 1 } });
     if (session.user.role === "WORKER" && (settings as any)?.requireApprovalForBankCreation) {
-      await (prisma as any).treasuryActionRequest.create({
+      await (await getTenantPrisma() as any).treasuryActionRequest.create({
         data: {
           type: "CREATE_BANK",
           data: data as any,
@@ -433,7 +433,7 @@ export async function createBank(data: { name: string; accountNumber: string; br
   }
 
   try {
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await (await getTenantPrisma()).$transaction(async (tx) => {
       // 1. Find Bank Parent Account
       const parent = await tx.account.findUnique({
         where: { code: '1205' }
@@ -541,7 +541,7 @@ export async function archiveBank(bankId: number) {
     console.log("Archiving bank:", bankId);
     
     // تحقق من وجود البنك
-    const bank = await prisma.treasuryBank.findUnique({
+    const bank = await (await getTenantPrisma()).treasuryBank.findUnique({
       where: { id: bankId }
     });
 
@@ -550,11 +550,11 @@ export async function archiveBank(bankId: number) {
     }
 
     // تحقق من وجود معاملات مرتبطة
-    const relatedVouchers = await prisma.paymentVoucher.count({
+    const relatedVouchers = await (await getTenantPrisma()).paymentVoucher.count({
       where: { bankId }
     });
 
-    const relatedReceipts = await prisma.receiptVoucher.count({
+    const relatedReceipts = await (await getTenantPrisma()).receiptVoucher.count({
       where: { bankId }
     });
 
@@ -562,7 +562,7 @@ export async function archiveBank(bankId: number) {
 
     if (!hasTransactions) {
       // لو مفيش معاملات، اقدر أحذفه فعلاً
-      await prisma.treasuryBank.delete({
+      await (await getTenantPrisma()).treasuryBank.delete({
         where: { id: bankId }
       });
       
@@ -574,7 +574,7 @@ export async function archiveBank(bankId: number) {
       };
     } else {
       // لو في معاملات، اعمل أرشفة
-      await prisma.treasuryBank.update({
+      await (await getTenantPrisma()).treasuryBank.update({
         where: { id: bankId },
         data: { isActive: false }
       });
@@ -610,11 +610,11 @@ export async function getInitialData(): Promise<InitialData> {
     await ensureMainSafe();
     
     const [suppliers, safes, banks] = await Promise.all([
-      prisma.supplier.findMany({ 
+      (await getTenantPrisma()).supplier.findMany({ 
         orderBy: { name: "asc" },
         select: { id: true, name: true, code: true }
       }),
-      prisma.treasurySafe.findMany({ 
+      (await getTenantPrisma()).treasurySafe.findMany({ 
         where: { isActive: true },
         orderBy: { name: "asc" },
         include: {
@@ -627,7 +627,7 @@ export async function getInitialData(): Promise<InitialData> {
           }
         }
       }),
-      prisma.treasuryBank.findMany({ 
+      (await getTenantPrisma()).treasuryBank.findMany({ 
         where: { isActive: true },
         orderBy: { name: "asc" },
         include: {
@@ -678,9 +678,9 @@ export async function createPaymentVoucher(data: PaymentVoucherInput, skipApprov
 
   // Approval Interception
   if (!skipApproval) {
-    const settings = await (prisma as any).generalSettings.findUnique({ where: { id: 1 } });
+    const settings = await (await getTenantPrisma() as any).generalSettings.findUnique({ where: { id: 1 } });
     if (session.user.role === "WORKER" && settings?.requireApprovalForVouchers) {
-      await (prisma as any).treasuryActionRequest.create({
+      await (await getTenantPrisma() as any).treasuryActionRequest.create({
         data: {
           type: "PAYMENT_VOUCHER",
           data: data as any,
@@ -742,7 +742,7 @@ export async function createPaymentVoucher(data: PaymentVoucherInput, skipApprov
 
     const pendingAlerts: { type: 'treasury', name: string, balance: number }[] = [];
 
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await (await getTenantPrisma()).$transaction(async (tx) => {
       
       if (accountType === "safe") {
         const safe = await tx.treasurySafe.findUnique({ 
@@ -846,7 +846,7 @@ export async function getAccountDetails(id: number, type: 'safe' | 'bank') {
 
   try {
     if (type === 'safe') {
-      const safe = await prisma.treasurySafe.findUnique({
+      const safe = await (await getTenantPrisma()).treasurySafe.findUnique({
         where: { id },
         include: {
           receiptVouchers: {
@@ -969,7 +969,7 @@ export async function getAccountDetails(id: number, type: 'safe' | 'bank') {
           description: v.description || "تحويل وارد",
           createdAt: v.createdAt,
         })),
-        ...(await prisma.journalEntry.findMany({
+        ...(await (await getTenantPrisma()).journalEntry.findMany({
           where: {
             sourceType: "MANUAL",
             items: { some: { accountId: safe.accountId || 0 } },
@@ -1009,7 +1009,7 @@ export async function getAccountDetails(id: number, type: 'safe' | 'bank') {
         transactions,
       };
     } else {
-      const bank = await prisma.treasuryBank.findUnique({
+      const bank = await (await getTenantPrisma()).treasuryBank.findUnique({
         where: { id },
         include: {
           receiptVouchers: {
@@ -1132,7 +1132,7 @@ export async function getAccountDetails(id: number, type: 'safe' | 'bank') {
           description: v.description || "تحويل وارد",
           createdAt: v.createdAt,
         })),
-        ...(await prisma.journalEntry.findMany({
+        ...(await (await getTenantPrisma()).journalEntry.findMany({
           where: {
             sourceType: "MANUAL",
             items: { some: { accountId: bank.accountId || 0 } },
@@ -1185,7 +1185,7 @@ export type AccountDetails = Awaited<ReturnType<typeof getAccountDetails>>;
 // 7. جلب العملاء لسند القبض
 export async function getCustomers() {
   try {
-    const customers = await prisma.customer.findMany({
+    const customers = await (await getTenantPrisma()).customer.findMany({
       orderBy: { name: "asc" },
       select: { id: true, name: true, code: true }
     });
@@ -1211,9 +1211,9 @@ export async function createReceiptVoucher(data: {
 
   // Approval Interception
   if (!skipApproval) {
-    const settings = await (prisma as any).generalSettings.findUnique({ where: { id: 1 } });
+    const settings = await (await getTenantPrisma() as any).generalSettings.findUnique({ where: { id: 1 } });
     if (session.user.role === "WORKER" && settings?.requireApprovalForVouchers) {
-      await (prisma as any).treasuryActionRequest.create({
+      await (await getTenantPrisma() as any).treasuryActionRequest.create({
         data: {
           type: "RECEIPT_VOUCHER",
           data: data as any,
@@ -1245,7 +1245,7 @@ export async function createReceiptVoucher(data: {
 
     const pendingAlerts: { type: 'treasury', name: string, balance: number }[] = [];
 
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await (await getTenantPrisma()).$transaction(async (tx) => {
       // 1. Get current entry number
       const lastEntry = await tx.journalEntry.findFirst({
         orderBy: { entryNumber: 'desc' },
@@ -1368,7 +1368,7 @@ export async function createReceiptVoucher(data: {
 export async function getArchivedAccounts() {
   try {
     const [banks, safes] = await Promise.all([
-      prisma.treasuryBank.findMany({
+      (await getTenantPrisma()).treasuryBank.findMany({
         where: { isActive: false },
         orderBy: { updatedAt: 'desc' },
         include: {
@@ -1381,7 +1381,7 @@ export async function getArchivedAccounts() {
           }
         }
       }),
-      prisma.treasurySafe.findMany({
+      (await getTenantPrisma()).treasurySafe.findMany({
         where: { isActive: false },
         orderBy: { updatedAt: 'desc' },
         include: {
@@ -1432,7 +1432,7 @@ export async function restoreAccount(id: number, type: 'safe' | 'bank') {
   const session = await getSession();
   try {
     if (type === 'bank') {
-        const account = await prisma.treasuryBank.update({
+        const account = await (await getTenantPrisma()).treasuryBank.update({
           where: { id },
           data: { isActive: true }
         });
@@ -1440,7 +1440,7 @@ export async function restoreAccount(id: number, type: 'safe' | 'bank') {
           await triggerStaffActivityAlert(session.user, "استعادة حساب", `تم استعادة البنك: ${account.name}`);
         }
     } else {
-        const account = await prisma.treasurySafe.update({
+        const account = await (await getTenantPrisma()).treasurySafe.update({
           where: { id },
           data: { isActive: true }
         });
@@ -1466,11 +1466,11 @@ export async function getReceiptInitialData() {
     await ensureMainSafe();
     
     const [customers, safes, banks] = await Promise.all([
-      prisma.customer.findMany({ 
+      (await getTenantPrisma()).customer.findMany({ 
         orderBy: { name: "asc" },
         select: { id: true, name: true, code: true }
       }),
-      prisma.treasurySafe.findMany({ 
+      (await getTenantPrisma()).treasurySafe.findMany({ 
         where: { isActive: true },
         orderBy: { name: "asc" },
         include: {
@@ -1483,7 +1483,7 @@ export async function getReceiptInitialData() {
           }
         }
       }),
-      prisma.treasuryBank.findMany({ 
+      (await getTenantPrisma()).treasuryBank.findMany({ 
         where: { isActive: true },
         orderBy: { name: "asc" },
         include: {
@@ -1535,9 +1535,9 @@ export async function createSafe(data: { name: string; initialBalance: number; d
 
   // Approval Interception
   if (!skipApproval) {
-    const settings = await (prisma as any).generalSettings.findUnique({ where: { id: 1 } });
+    const settings = await (await getTenantPrisma() as any).generalSettings.findUnique({ where: { id: 1 } });
     if (session.user.role === "WORKER" && (settings as any)?.requireApprovalForSafeCreation) {
-      await (prisma as any).treasuryActionRequest.create({
+      await (await getTenantPrisma() as any).treasuryActionRequest.create({
         data: {
           type: "CREATE_SAFE",
           data: data as any,
@@ -1550,7 +1550,7 @@ export async function createSafe(data: { name: string; initialBalance: number; d
   }
 
   try {
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await (await getTenantPrisma()).$transaction(async (tx) => {
       // 1. Find Safe Parent Account
       const parent = await tx.account.findUnique({
         where: { code: '1201' }
@@ -1649,7 +1649,7 @@ export async function createSafe(data: { name: string; initialBalance: number; d
 // 13. أرشفة خزنة
 export async function archiveSafe(safeId: number) {
   try {
-    const safe = await prisma.treasurySafe.findUnique({
+    const safe = await (await getTenantPrisma()).treasurySafe.findUnique({
       where: { id: safeId }
     });
 
@@ -1657,19 +1657,19 @@ export async function archiveSafe(safeId: number) {
     if (safe.isPrimary) return { success: false, error: "لا يمكن أرشفة الخزنة الرئيسية" };
 
     // تحقق من وجود معاملات
-    const relatedVouchers = await prisma.paymentVoucher.count({ where: { safeId } });
-    const relatedReceipts = await prisma.receiptVoucher.count({ where: { safeId } });
-    const relatedSalesInvoices = await prisma.salesInvoice.count({ where: { safeId, status: 'cash' } });
-    const relatedPurchaseInvoices = await prisma.purchaseInvoice.count({ where: { safeId, status: 'cash' } });
+    const relatedVouchers = await (await getTenantPrisma()).paymentVoucher.count({ where: { safeId } });
+    const relatedReceipts = await (await getTenantPrisma()).receiptVoucher.count({ where: { safeId } });
+    const relatedSalesInvoices = await (await getTenantPrisma()).salesInvoice.count({ where: { safeId, status: 'cash' } });
+    const relatedPurchaseInvoices = await (await getTenantPrisma()).purchaseInvoice.count({ where: { safeId, status: 'cash' } });
     
     const hasTransactions = relatedVouchers > 0 || relatedReceipts > 0 || relatedSalesInvoices > 0 || relatedPurchaseInvoices > 0;
 
     if (!hasTransactions) {
-      await prisma.treasurySafe.delete({ where: { id: safeId } });
+      await (await getTenantPrisma()).treasurySafe.delete({ where: { id: safeId } });
       revalidatePath("/treasury");
       return { success: true, message: "تم حذف الخزنة نهائياً", deleted: true };
     } else {
-      const archivedSafe = await prisma.treasurySafe.update({
+      const archivedSafe = await (await getTenantPrisma()).treasurySafe.update({
         where: { id: safeId },
         data: { isActive: false }
       });
@@ -1687,7 +1687,7 @@ export async function archiveSafe(safeId: number) {
 }
 export async function getBanks(activeOnly: boolean = true) {
   try {
-    const banks = await prisma.treasuryBank.findMany({
+    const banks = await (await getTenantPrisma()).treasuryBank.findMany({
       where: activeOnly ? { isActive: true } : {},
       orderBy: { name: 'asc' },
       include: {

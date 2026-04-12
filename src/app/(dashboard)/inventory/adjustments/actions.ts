@@ -1,6 +1,6 @@
 "use server";
 
-import { prisma } from "@/lib/prisma";
+import { getTenantPrisma, publicPrisma } from "@/lib/tenant-prisma";
 import { revalidatePath } from "next/cache";
 import { MovementType } from "@prisma/client";
 import { getSession } from "@/lib/auth";
@@ -12,13 +12,13 @@ export async function getCurrentStock(
   warehouseId?: number,
 ): Promise<number> {
   if (!warehouseId) {
-    const product = await prisma.product.findUnique({
+    const product = await (await getTenantPrisma()).product.findUnique({
       where: { id: productId },
       select: { currentStock: true },
     });
     return product?.currentStock ?? 0;
   }
-  const result = await prisma.stockMovement.aggregate({
+  const result = await (await getTenantPrisma()).stockMovement.aggregate({
     where: {
       productId,
       warehouseId,
@@ -29,14 +29,14 @@ export async function getCurrentStock(
 }
 
 export async function reconcileInventoryLedger() {
-  const inventoryAccount = await prisma.account.findUnique({
+  const inventoryAccount = await (await getTenantPrisma()).account.findUnique({
     where: { code: "120301" },
   });
   if (!inventoryAccount) {
     throw new Error("حساب مخزون البضاعة 120301 غير موجود");
   }
 
-  const journalTotals = await prisma.journalItem.aggregate({
+  const journalTotals = await (await getTenantPrisma()).journalItem.aggregate({
     where: { accountId: inventoryAccount.id },
     _sum: {
       debit: true,
@@ -46,7 +46,7 @@ export async function reconcileInventoryLedger() {
 
   const ledgerBalance =
     (journalTotals._sum.debit ?? 0) - (journalTotals._sum.credit ?? 0);
-  const products = await prisma.product.findMany({
+  const products = await (await getTenantPrisma()).product.findMany({
     select: { currentStock: true, buyPrice: true },
   });
   const physicalStockValue = products.reduce(
@@ -80,7 +80,7 @@ export async function createAdjustment(data: {
   if (!canManage) throw new Error("ليس لديك صلاحية إجراء تسوية للمخزون");
 
   // التحقق من وجود المنتج
-  const product = await prisma.product.findUnique({
+  const product = await (await getTenantPrisma()).product.findUnique({
     where: { id: data.productId, isActive: true },
     select: { id: true, name: true, buyPrice: true },
   });
@@ -93,7 +93,7 @@ export async function createAdjustment(data: {
   const currentStock = await getCurrentStock(data.productId, data.warehouseId);
   const diff = data.newQty - currentStock;
 
-  await prisma.$transaction(async (tx) => {
+  await (await getTenantPrisma()).$transaction(async (tx) => {
     // تسجيل الحركة
     const movement = await tx.stockMovement.create({
       data: {

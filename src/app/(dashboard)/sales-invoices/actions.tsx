@@ -1,7 +1,7 @@
 // app/(dashboard)/sales-invoices/actions.tsx
 "use server";
 
-import { prisma } from "@/lib/prisma";
+import { getTenantPrisma, publicPrisma } from "@/lib/tenant-prisma";
 import type { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { getSystemSettings } from "@/app/(dashboard)/settings/actions";
@@ -18,7 +18,7 @@ async function getCurrentStock(
   productId: number,
   tx?: Prisma.TransactionClient,
 ) {
-  const client = tx || prisma;
+  const client = tx || await getTenantPrisma();
   const result = await client.stockMovement.aggregate({
     where: { productId },
     _sum: { quantity: true },
@@ -34,7 +34,7 @@ export async function getSalesInvoices() {
   if (!canView) return [];
 
   try {
-    const invoices = await prisma.salesInvoice.findMany({
+    const invoices = await (await getTenantPrisma()).salesInvoice.findMany({
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       include: {
         _count: {
@@ -70,14 +70,14 @@ export async function getSalesInvoices() {
 }
 
 export async function getSalesInvoiceWithItems(id: number) {
-  return prisma.salesInvoice.findUnique({
+  return (await getTenantPrisma()).salesInvoice.findUnique({
     where: { id },
     include: { items: true },
   });
 }
 
 export async function getSalesInvoiceWithReturns(id: number) {
-  const invoice = await prisma.salesInvoice.findUnique({
+  const invoice = await (await getTenantPrisma()).salesInvoice.findUnique({
     where: { id },
     include: {
       items: {
@@ -93,14 +93,14 @@ export async function getSalesInvoiceWithReturns(id: number) {
 }
 
 export async function getSalesInvoiceById(id: number) {
-  return prisma.salesInvoice.findUnique({
+  return (await getTenantPrisma()).salesInvoice.findUnique({
     where: { id },
     include: { items: true },
   });
 }
 
 export async function getNextInvoiceNumber(): Promise<number> {
-  const last = await prisma.salesInvoice.findFirst({
+  const last = await (await getTenantPrisma()).salesInvoice.findFirst({
     orderBy: { invoiceNumber: "desc" },
     select: { invoiceNumber: true },
   });
@@ -108,7 +108,7 @@ export async function getNextInvoiceNumber(): Promise<number> {
 }
 
 export async function checkInvoiceNumberExists(num: number): Promise<boolean> {
-  const found = await prisma.salesInvoice.findUnique({
+  const found = await (await getTenantPrisma()).salesInvoice.findUnique({
     where: { invoiceNumber: num },
     select: { id: true },
   });
@@ -116,7 +116,7 @@ export async function checkInvoiceNumberExists(num: number): Promise<boolean> {
 }
 
 export async function getSalesInvoicesByCustomer(customerId: number) {
-  return prisma.salesInvoice.findMany({
+  return (await getTenantPrisma()).salesInvoice.findMany({
     where: { customerId },
     orderBy: { invoiceDate: "desc" },
     select: {
@@ -190,7 +190,7 @@ export async function createSalesInvoice(data: {
     limit?: number;
   }[] = [];
 
-  const result = await prisma.$transaction(async (tx) => {
+  const result = await (await getTenantPrisma()).$transaction(async (tx) => {
     // 1. التحقق من رقم الفاتورة
     const taken = await tx.salesInvoice.findUnique({
       where: { invoiceNumber: data.invoiceNumber },
@@ -590,7 +590,7 @@ export async function updateSalesInvoice(
     limit?: number;
   }[] = [];
 
-  const result = await prisma.$transaction(async (tx) => {
+  const result = await (await getTenantPrisma()).$transaction(async (tx) => {
     const existingInvoice = await tx.salesInvoice.findUnique({
       where: { id },
       select: {
@@ -1041,7 +1041,7 @@ export async function deleteSalesInvoice(id: number) {
     limit?: number;
   }[] = [];
 
-  const result = await prisma.$transaction(async (tx) => {
+  const result = await (await getTenantPrisma()).$transaction(async (tx) => {
     // 0. جلب بيانات الفاتورة لمعرفة حالتها וחساباتها
     const invoice = await tx.salesInvoice.findUnique({
       where: { id },

@@ -1,11 +1,11 @@
 "use server";
 
-import { prisma } from "@/lib/prisma";
+import { getTenantPrisma, publicPrisma } from "@/lib/tenant-prisma";
 import { revalidatePath } from "next/cache";
 
 // ─── توليد رقم عرض السعر التالي ───
 export async function getNextQuotationCode(): Promise<string> {
-  const last = await prisma.quotation.findFirst({
+  const last = await (await getTenantPrisma()).quotation.findFirst({
     orderBy: { id: "desc" },
     select: { code: true },
   });
@@ -20,7 +20,7 @@ export async function getNextQuotationCode(): Promise<string> {
 // ─── جلب جميع عروض الأسعار ───
 export async function getQuotations() {
   try {
-    const quotations = await prisma.quotation.findMany({
+    const quotations = await (await getTenantPrisma()).quotation.findMany({
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       include: {
         customer: {
@@ -50,7 +50,7 @@ export async function getQuotations() {
 
 // ─── جلب عرض سعر واحد مع الأصناف ───
 export async function getQuotationById(id: number) {
-  return prisma.quotation.findUnique({
+  return (await getTenantPrisma()).quotation.findUnique({
     where: { id },
     include: {
       items: {
@@ -94,7 +94,7 @@ export async function createQuotation(data: {
   // التحقق من أن جميع المنتجات نشطة (فقط إذا كان هناك productId)
   for (const item of data.items) {
     if (item.productId) {
-      const product = await prisma.product.findUnique({
+      const product = await (await getTenantPrisma()).product.findUnique({
         where: { id: item.productId, isActive: true } as any,
         select: { name: true },
       });
@@ -104,7 +104,7 @@ export async function createQuotation(data: {
 
   const code = await getNextQuotationCode();
 
-  const quotation = await prisma.quotation.create({
+  const quotation = await (await getTenantPrisma()).quotation.create({
     data: {
       code,
       customerId: data.customerId || null,
@@ -165,7 +165,7 @@ export async function updateQuotation(
   // التحقق من أن جميع المنتجات نشطة (فقط إذا كان هناك productId)
   for (const item of data.items) {
     if (item.productId) {
-      const product = await prisma.product.findUnique({
+      const product = await (await getTenantPrisma()).product.findUnique({
         where: { id: item.productId, isActive: true } as any,
         select: { name: true },
       });
@@ -173,7 +173,7 @@ export async function updateQuotation(
     }
   }
 
-  const quotation = await prisma.quotation.update({
+  const quotation = await (await getTenantPrisma()).quotation.update({
     where: { id },
     data: {
       customerId: data.customerId || null,
@@ -207,7 +207,7 @@ export async function updateQuotation(
 
 // ─── حذف عرض سعر ───
 export async function deleteQuotation(id: number) {
-  await prisma.quotation.delete({ where: { id } });
+  await (await getTenantPrisma()).quotation.delete({ where: { id } });
   revalidatePath("/sales-quotations");
 }
 
@@ -216,7 +216,7 @@ export async function updateQuotationStatus(
   id: number,
   status: "Draft" | "Sent" | "Approved" | "Rejected"
 ) {
-  await prisma.quotation.update({
+  await (await getTenantPrisma()).quotation.update({
     where: { id },
     data: { status },
   });

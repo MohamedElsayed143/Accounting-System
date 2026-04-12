@@ -64,7 +64,7 @@ export async function loginAction(formData: FormData, deviceId?: string) {
 
     await setSessionCookie(session.id);
 
-    return { success: true, role: user.role };
+    return { success: true, role: user.role, isDeveloper: user.email === 'mohmadelkhadry@gmail.com' };
   } catch (error: any) {
     console.error("Login error:", error);
     return { error: `حدث خطأ غير متوقع: ${error?.message || "يرجى المحاولة لاحقاً."}` };

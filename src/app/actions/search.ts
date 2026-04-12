@@ -1,6 +1,6 @@
 "use server";
 
-import { prisma } from "@/lib/prisma";
+import { getTenantPrisma, publicPrisma } from "@/lib/tenant-prisma";
 import { getSession } from "@/lib/auth";
 
 export type SearchResult = {
@@ -42,7 +42,7 @@ export async function globalSearchAction(query: string): Promise<SearchResult[]>
 
   try {
     const [products, customers, suppliers, salesInvoices, purchaseInvoices] = await Promise.all([
-      prisma.product.findMany({
+      (await getTenantPrisma()).product.findMany({
         where: {
           OR: [
             { name: { contains: trimmedQueryString, mode: 'insensitive' } },
@@ -52,7 +52,7 @@ export async function globalSearchAction(query: string): Promise<SearchResult[]>
         take: 5,
         select: { id: true, name: true },
       }),
-      prisma.customer.findMany({
+      (await getTenantPrisma()).customer.findMany({
         where: {
           OR: [
             { name: { contains: trimmedQueryString, mode: 'insensitive' } },
@@ -63,7 +63,7 @@ export async function globalSearchAction(query: string): Promise<SearchResult[]>
         take: 5,
         select: { id: true, name: true },
       }),
-      prisma.supplier.findMany({
+      (await getTenantPrisma()).supplier.findMany({
         where: {
           OR: [
             { name: { contains: trimmedQueryString, mode: 'insensitive' } },
@@ -74,12 +74,12 @@ export async function globalSearchAction(query: string): Promise<SearchResult[]>
         take: 5,
         select: { id: true, name: true },
       }),
-      prisma.salesInvoice.findMany({
+      (await getTenantPrisma()).salesInvoice.findMany({
         where: isNumeric ? { invoiceNumber: queryAsNumber } : { id: -1 }, // Only search by number if numeric
         take: 5,
         select: { id: true, invoiceNumber: true },
       }),
-      prisma.purchaseInvoice.findMany({
+      (await getTenantPrisma()).purchaseInvoice.findMany({
         where: isNumeric ? { invoiceNumber: queryAsNumber } : { id: -1 }, // Only search by number if numeric
         take: 5,
         select: { id: true, invoiceNumber: true },

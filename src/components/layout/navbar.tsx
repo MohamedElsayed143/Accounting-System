@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, Search, LogOut, User, Settings as SettingsIcon, Package, Users, Truck, FileText, ShoppingCart, ArrowLeft, ArrowRight } from "lucide-react";
+import { Bell, Search, LogOut, User, Settings as SettingsIcon, Package, Users, Truck, FileText, ShoppingCart, ArrowLeft, ArrowRight, Zap } from "lucide-react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +21,7 @@ import Link from "next/link";
 import { getUnreadNotificationsCount } from "@/app/(dashboard)/notifications/actions";
 import { getCompanySettingsAction } from "@/app/(dashboard)/settings/actions";
 import { globalSearchAction, SearchResult } from "@/app/actions/search";
+import { getPublicSystemConfig } from "@/app/actions/system-config";
 
 interface NavbarProps {
   title?: string;
@@ -31,6 +32,8 @@ export function Navbar({ title }: NavbarProps) {
   const [user, setUser] = useState<{ username: string; role: string } | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const [companyLogo, setCompanyLogo] = useState<string | null>(null);
+  const [systemLogo, setSystemLogo] = useState<string | null>(null);
+  const [systemName, setSystemName] = useState("فاست");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -39,9 +42,10 @@ export function Navbar({ title }: NavbarProps) {
 
   useEffect(() => {
     const loadData = async () => {
-      const [session, settings] = await Promise.all([
+      const [session, settings, sysConfig] = await Promise.all([
         getAuthSession(),
         getCompanySettingsAction(),
+        getPublicSystemConfig(),
       ]);
 
       if (session?.user) {
@@ -58,6 +62,9 @@ export function Navbar({ title }: NavbarProps) {
       if (settings?.companyLogo) {
         setCompanyLogo(settings.companyLogo);
       }
+
+      setSystemLogo(sysConfig.systemLogo);
+      setSystemName(sysConfig.systemName);
     };
     loadData();
 
@@ -133,7 +140,28 @@ export function Navbar({ title }: NavbarProps) {
   return (
     <header className="sticky top-0 z-40 flex h-16 items-center gap-4 border-b border-border/40 bg-background/95 px-6 backdrop-blur supports-[backdrop-filter]:bg-background/60 shadow-sm print:hidden">
       <SidebarTrigger className="md:hidden hover:bg-primary/10 transition-all" />
-      
+
+      {/* System Logo — fixed branding on the right (RTL start) */}
+      <div className="flex items-center gap-2 flex-shrink-0">
+        {systemLogo ? (
+          <img
+            src={systemLogo}
+            alt={systemName}
+            className="w-7 h-7 rounded-lg object-contain"
+          />
+        ) : (
+          <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center shadow-sm">
+            <Zap className="w-4 h-4 text-white" />
+          </div>
+        )}
+        <span className="hidden lg:block text-xs font-black text-muted-foreground/60 tracking-tight">
+          {systemName}
+        </span>
+      </div>
+
+      {/* Separator */}
+      <div className="hidden md:block w-px h-5 bg-border/60" />
+
       {/* Global Back Button */}
       <Button
         variant="ghost"
@@ -142,7 +170,7 @@ export function Navbar({ title }: NavbarProps) {
         className="hidden md:flex hover:bg-primary/10 hover:text-primary transition-all rounded-full w-9 h-9 border border-border/40"
         title="رجوع"
       >
-        <ArrowRight className="h-4 w-4" /> {/* Standard RTL direction back arrow */}
+        <ArrowRight className="h-4 w-4" />
       </Button>
 
       <div className="flex flex-1 items-center gap-4">

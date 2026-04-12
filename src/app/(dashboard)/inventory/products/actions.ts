@@ -1,7 +1,7 @@
 // app/(dashboard)/inventory/products/actions.ts
 "use server";
 
-import { prisma } from "@/lib/prisma";
+import { getTenantPrisma, publicPrisma } from "@/lib/tenant-prisma";
 import { revalidatePath } from "next/cache";
 import type { Product } from "@prisma/client";
 import { getSession } from "@/lib/auth";
@@ -16,7 +16,7 @@ export interface ProductData extends Product {
 
 // دالة مساعدة لتوليد كود فريد للمنتج
 export async function getNextProductCode(): Promise<string> {
-  const products = await prisma.product.findMany({
+  const products = await (await getTenantPrisma()).product.findMany({
     where: { code: { startsWith: 'PRD-' } },
     select: { code: true },
   });
@@ -37,7 +37,7 @@ export async function getNextProductCode(): Promise<string> {
 
 // التحقق من وجود كود (للاستخدام قبل الإنشاء أو التحديث)
 export async function checkProductCodeExists(code: string, excludeId?: number): Promise<boolean> {
-  const existing = await prisma.product.findFirst({
+  const existing = await (await getTenantPrisma()).product.findFirst({
     where: {
       code,
       NOT: excludeId ? { id: excludeId } : undefined,
@@ -54,7 +54,7 @@ export async function getProducts(): Promise<ProductData[]> {
   const canView = await hasPermission(session.userId, "inventory_view");
   if (!canView) return [];
 
-  const products = await prisma.product.findMany({
+  const products = await (await getTenantPrisma()).product.findMany({
     where: { isActive: true },
     orderBy: { name: "asc" },
     include: {
@@ -66,7 +66,7 @@ export async function getProducts(): Promise<ProductData[]> {
 }
 
 export async function getProductById(id: number): Promise<ProductData | null> {
-  const product = await prisma.product.findUnique({
+  const product = await (await getTenantPrisma()).product.findUnique({
     where: { id, isActive: true },
     include: {
       category: { select: { id: true, name: true } },
@@ -98,7 +98,7 @@ export async function createProduct(data: {
   if (data.buyPrice <= 0) throw new Error("سعر الشراء يجب أن يكون أكبر من صفر");
   if (data.sellPrice <= 0) throw new Error("سعر البيع يجب أن يكون أكبر من صفر");
 
-  return prisma.$transaction(async (tx) => {
+  return (await getTenantPrisma()).$transaction(async (tx) => {
     const exists = await tx.product.findFirst({
       where: { code: data.code.trim() },
     });
@@ -149,7 +149,7 @@ export async function updateProduct(
   if (data.buyPrice <= 0) throw new Error("سعر الشراء يجب أن يكون أكبر من صفر");
   if (data.sellPrice <= 0) throw new Error("سعر البيع يجب أن يكون أكبر من صفر");
 
-  const product = await prisma.product.update({
+  const product = await (await getTenantPrisma()).product.update({
     where: { id },
     data: {
       name: data.name.trim(),
@@ -175,7 +175,7 @@ export async function deleteProduct(id: number) {
   const isAdmin = session.user.role === "ADMIN";
   if (!isAdmin) throw new Error("صلاحية أرشفة أو حذف الصنف هي للأدمن فقط");
 
-  return prisma.$transaction(async (tx) => {
+  return (await getTenantPrisma()).$transaction(async (tx) => {
     // 1. فحص الرصيد الحالي
     const stockAgg = await tx.stockMovement.aggregate({
       where: { productId: id },
@@ -200,7 +200,7 @@ export async function deleteProduct(id: number) {
 }
 
 export async function getProductCurrentStock(productId: number): Promise<number> {
-  const result = await prisma.product.findUnique({
+  const result = await (await getTenantPrisma()).product.findUnique({
     where: { id: productId },
     select: { currentStock: true },
   });
@@ -209,7 +209,7 @@ export async function getProductCurrentStock(productId: number): Promise<number>
 
 // دالة البحث عن الأصناف (للكمال التلقائي)
 export async function searchProducts(query: string, onlyInStock: boolean = false): Promise<ProductData[]> {
-  const products = await prisma.product.findMany({
+  const products = await (await getTenantPrisma()).product.findMany({
     where: {
       isActive: true,
       ...(onlyInStock ? { currentStock: { gt: 0 } } : {}),
@@ -234,7 +234,7 @@ export async function searchProducts(query: string, onlyInStock: boolean = false
  */
 export async function getProductPricingHistory(productId: number) {
   try {
-    const product = await prisma.product.findUnique({
+    const product = await (await getTenantPrisma()).product.findUnique({
       where: { id: productId },
       select: { sellPrice: true, profitMargin: true },
     });
@@ -244,14 +244,14 @@ export async function getProductPricingHistory(productId: number) {
     }
 
     // Attempt to find the last sales invoice item for the last selling price
-    const lastSale = await prisma.salesInvoiceItem.findFirst({
+    const lastSale = await (await getTenantPrisma()).salesInvoiceItem.findFirst({
       where: { productId },
       orderBy: { invoice: { invoiceDate: "desc" } },
       select: { unitPrice: true },
     });
 
     // Attempt to find the last purchase invoice item for the last profit margin
-    const lastPurchase = await prisma.purchaseInvoiceItem.findFirst({
+    const lastPurchase = await (await getTenantPrisma()).purchaseInvoiceItem.findFirst({
       where: { productId },
       orderBy: { invoice: { invoiceDate: "desc" } },
       select: { profitMargin: true },

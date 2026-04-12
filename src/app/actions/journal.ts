@@ -1,6 +1,6 @@
 "use server";
 
-import { prisma } from "@/lib/prisma";
+import { getTenantPrisma, publicPrisma } from "@/lib/tenant-prisma";
 import { startOfDay, endOfDay } from "date-fns";
 import { revalidatePath } from "next/cache";
 import { getSession } from "@/lib/auth";
@@ -11,7 +11,7 @@ import { AccountType } from "@prisma/client";
  * Fetches leaf accounts (selectable) for journal entries, including their current balance.
  */
 export async function getJournalSelectableAccounts() {
-  const accounts = await prisma.account.findMany({
+  const accounts = await (await getTenantPrisma()).account.findMany({
     where: {
       isTerminal: true,
       level: 4, // Only Level-4 accounts can have journal entries posted to them
@@ -84,7 +84,7 @@ export async function getJournalSelectableAccounts() {
  * Gets the next entry number for a manual journal entry.
  */
 export async function getNextEntryNumber() {
-  const lastEntry = await prisma.journalEntry.findFirst({
+  const lastEntry = await (await getTenantPrisma()).journalEntry.findFirst({
     orderBy: { entryNumber: "desc" },
     select: { entryNumber: true },
   });
@@ -133,7 +133,7 @@ export async function saveJournalEntry(data: {
 
   // 1.5. Prevent manual entries on Customer/Supplier accounts UNLESS in Admin Mode
   if (!data.isAdminMode) {
-    const linkedAccounts = await prisma.account.findMany({
+    const linkedAccounts = await (await getTenantPrisma()).account.findMany({
       where: {
         id: { in: accountIds },
         OR: [{ customer: { isNot: null } }, { supplier: { isNot: null } }],
@@ -149,7 +149,7 @@ export async function saveJournalEntry(data: {
   }
 
   // 1.5.1 Prevent manual journal entries on inventory asset account 120301 unless the user has inventory_manage permission.
-  const inventoryAccount = await prisma.account.findFirst({
+  const inventoryAccount = await (await getTenantPrisma()).account.findFirst({
     where: {
       id: { in: accountIds },
       code: "120301",
@@ -170,7 +170,7 @@ export async function saveJournalEntry(data: {
   }
 
   // 1.6. Prohibit direct Revenue vs Expense offset
-  const accountDetails = await prisma.account.findMany({
+  const accountDetails = await (await getTenantPrisma()).account.findMany({
     where: { id: { in: accountIds } },
     select: { id: true, type: true },
   });
@@ -185,7 +185,7 @@ export async function saveJournalEntry(data: {
   }
 
   // 1.7. Enforce terminal only — reject any account not terminal
-  const terminalCheck = await prisma.account.findMany({
+  const terminalCheck = await (await getTenantPrisma()).account.findMany({
     where: { id: { in: accountIds }, isTerminal: false },
     select: { name: true, level: true },
   });
@@ -201,7 +201,7 @@ export async function saveJournalEntry(data: {
   const entryNumber = await getNextEntryNumber();
 
   try {
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await (await getTenantPrisma()).$transaction(async (tx) => {
       const entry = await tx.journalEntry.create({
         data: {
           entryNumber,
@@ -245,7 +245,7 @@ export async function saveJournalEntry(data: {
  * Fetches all manual journal entries with their associated items.
  */
 export async function getJournalEntries() {
-  return await prisma.journalEntry.findMany({
+  return await (await getTenantPrisma()).journalEntry.findMany({
     where: { sourceType: "MANUAL" },
     include: {
       items: {

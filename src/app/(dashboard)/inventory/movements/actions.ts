@@ -1,6 +1,6 @@
 "use server";
 
-import { prisma } from "@/lib/prisma";
+import { getTenantPrisma, publicPrisma } from "@/lib/tenant-prisma";
 import type { StockMovement } from "@prisma/client";
 
 export interface MovementRow {
@@ -18,7 +18,7 @@ export interface MovementRow {
 }
 
 export async function getMovements(): Promise<MovementRow[]> {
-  const movements = await prisma.stockMovement.findMany({
+  const movements = await (await getTenantPrisma()).stockMovement.findMany({
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: 500,
     include: {
@@ -42,7 +42,7 @@ export async function getMovements(): Promise<MovementRow[]> {
 }
 
 export async function getMovementsByProduct(productId: number): Promise<MovementRow[]> {
-  const movements = await prisma.stockMovement.findMany({
+  const movements = await (await getTenantPrisma()).stockMovement.findMany({
     where: { productId },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     include: {

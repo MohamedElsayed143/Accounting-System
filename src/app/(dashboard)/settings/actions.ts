@@ -1,6 +1,6 @@
 "use server";
 
-import { prisma } from "@/lib/prisma";
+import { getTenantPrisma, publicPrisma } from "@/lib/tenant-prisma";
 import { getSession, hashPassword } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -55,7 +55,7 @@ async function verifyAdmin() {
  */
 export async function getSystemSettings() {
   try {
-    const record = await prisma.systemSettings.findFirst({
+    const record = await (await getTenantPrisma()).systemSettings.findFirst({
       where: { id: 1 },
     });
     
@@ -73,7 +73,7 @@ export async function getSystemSettings() {
  */
 export async function saveSystemSettings(settingsObject: any) {
   try {
-    await prisma.systemSettings.upsert({
+    await (await getTenantPrisma()).systemSettings.upsert({
       where: { id: 1 },
       update: {
         settings: settingsObject,
@@ -95,7 +95,7 @@ export async function saveSystemSettings(settingsObject: any) {
  */
 export async function getCompanySettingsAction() {
   try {
-    const settings = await prisma.companySettings.findUnique({
+    const settings = await (await getTenantPrisma()).companySettings.findUnique({
       where: { id: 1 },
     });
     return settings;
@@ -114,7 +114,7 @@ export async function updateCompanySettingsAction(data: any) {
   try {
     const validatedData = CompanySettingsSchema.parse(data);
     
-    const res = await (prisma as any).companySettings.upsert({
+    const res = await (await getTenantPrisma() as any).companySettings.upsert({
       where: { id: 1 },
       update: {
         companyName: validatedData.companyName,
@@ -177,7 +177,7 @@ export async function updateFinancialSettingsAction(data: any) {
   try {
     const validatedData = FinancialSettingsSchema.parse(data);
     
-    const res = await prisma.companySettings.upsert({
+    const res = await (await getTenantPrisma()).companySettings.upsert({
       where: { id: 1 },
       update: {
         taxEnabled: validatedData.taxEnabled,
@@ -215,7 +215,7 @@ export async function updateFinancialSettingsAction(data: any) {
 export async function getUsers() {
   await verifyAdmin();
   try {
-    return await prisma.user.findMany({
+    return await publicPrisma.user.findMany({
       select: {
         id: true,
         username: true,
@@ -236,13 +236,13 @@ export async function getUsers() {
 export async function createUser(data: { username: string; password: string; role: string }) {
   await verifyAdmin();
   try {
-    const existing = await prisma.user.findUnique({ where: { username: data.username } });
+    const existing = await publicPrisma.user.findUnique({ where: { username: data.username } });
     if (existing) {
       return { error: "اسم المستخدم موجود بالفعل" };
     }
 
     const hashed = hashPassword(data.password);
-    await prisma.user.create({
+    await publicPrisma.user.create({
       data: {
         username: data.username,
         password: hashed,
@@ -270,7 +270,7 @@ export async function deleteUser(id: number) {
   }
 
   try {
-    await prisma.user.delete({ where: { id } });
+    await publicPrisma.user.delete({ where: { id } });
     revalidatePath("/settings");
     return { success: true };
   } catch (error) {
@@ -284,12 +284,12 @@ export async function deleteUser(id: number) {
  */
 export async function getGeneralSettingsAction() {
   try {
-    let settings = await (prisma as any).generalSettings.findUnique({
+    let settings = await (await getTenantPrisma() as any).generalSettings.findUnique({
       where: { id: 1 }
     });
 
     if (!settings) {
-      settings = await (prisma as any).generalSettings.create({
+      settings = await (await getTenantPrisma() as any).generalSettings.create({
         data: { id: 1 }
       });
     }
@@ -317,7 +317,7 @@ export async function updateGeneralSettingsAction(data: {
 }) {
   await verifyAdmin();
   try {
-    const res = await (prisma as any).generalSettings.upsert({
+    const res = await (await getTenantPrisma() as any).generalSettings.upsert({
       where: { id: 1 },
       update: data,
       create: { id: 1, ...data }

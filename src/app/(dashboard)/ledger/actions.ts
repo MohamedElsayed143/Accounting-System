@@ -1,6 +1,6 @@
 "use server";
 
-import { prisma } from "@/lib/prisma";
+import { getTenantPrisma, publicPrisma } from "@/lib/tenant-prisma";
 import { startOfDay, endOfDay } from "date-fns";
 import { revalidatePath } from "next/cache";
 import { getSession } from "@/lib/auth";
@@ -10,7 +10,7 @@ import { getSession } from "@/lib/auth";
  */
 export async function getCOATree() {
   try {
-    const accounts = await prisma.account.findMany({
+    const accounts = await (await getTenantPrisma()).account.findMany({
       orderBy: { code: "asc" },
       include: {
         treasurySafe: { select: { id: true } },
@@ -21,7 +21,7 @@ export async function getCOATree() {
     });
 
     // 1. Get aggregated balances and counts from JournalItems
-    const summary = await prisma.journalItem.groupBy({
+    const summary = await (await getTenantPrisma()).journalItem.groupBy({
       by: ["accountId"],
       _sum: {
         debit: true,
@@ -115,7 +115,7 @@ export async function getCOATree() {
  * Fetches selectable (terminal leaf) accounts for dropdowns.
  */
 export async function getSelectableAccounts() {
-  return await prisma.account.findMany({
+  return await (await getTenantPrisma()).account.findMany({
     where: {
       isTerminal: true,
     },
@@ -145,7 +145,7 @@ export async function getAccountLedger(
   // 1. Calculate Opening Balance (sum of all items before startDate)
   let openingBalance = 0;
   if (sDate) {
-    const prevItems = await prisma.journalItem.aggregate({
+    const prevItems = await (await getTenantPrisma()).journalItem.aggregate({
       where: {
         accountId,
         journalEntry: {
@@ -161,7 +161,7 @@ export async function getAccountLedger(
   }
 
   // 2. Fetch Transactions within range
-  const items = await prisma.journalItem.findMany({
+  const items = await (await getTenantPrisma()).journalItem.findMany({
     where: {
       accountId,
       journalEntry: {
@@ -226,14 +226,14 @@ export async function getAccountLedger(
  * Suggests the next sequential account code based on a parent account.
  */
 export async function suggestNextAccountCode(parentId: number) {
-  const parent = await prisma.account.findUnique({
+  const parent = await (await getTenantPrisma()).account.findUnique({
     where: { id: parentId },
     select: { code: true },
   });
 
   if (!parent) throw new Error("Parent account not found");
 
-  const lastChild = await prisma.account.findFirst({
+  const lastChild = await (await getTenantPrisma()).account.findFirst({
     where: { parentId },
     orderBy: { code: "desc" },
     select: { code: true },
@@ -269,7 +269,7 @@ export async function createSubAccount(data: {
     throw new Error("يجب تفعيل وضع الإدارة لإضافة حسابات جديدة");
   }
 
-  const parent = await prisma.account.findUnique({
+  const parent = await (await getTenantPrisma()).account.findUnique({
     where: { id: data.parentId },
   });
 
@@ -298,14 +298,14 @@ export async function createSubAccount(data: {
   // to correctly detect which module this account belongs to regardless of depth.
   const ancestorCodes: string[] = [parent.code.trim()];
   if (parent.parentId) {
-    const grandparent = await prisma.account.findUnique({
+    const grandparent = await (await getTenantPrisma()).account.findUnique({
       where: { id: parent.parentId },
       select: { code: true, parentId: true },
     });
     if (grandparent) {
       ancestorCodes.push(grandparent.code.trim());
       if (grandparent.parentId) {
-        const greatGrandparent = await prisma.account.findUnique({
+        const greatGrandparent = await (await getTenantPrisma()).account.findUnique({
           where: { id: grandparent.parentId },
           select: { code: true },
         });
@@ -317,7 +317,7 @@ export async function createSubAccount(data: {
   }
 
   try {
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await (await getTenantPrisma()).$transaction(async (tx) => {
       // 1. Check if code already exists
       const existing = await tx.account.findUnique({
         where: { code: data.code },
@@ -425,7 +425,7 @@ export async function deleteAccount(accountId: number, isAdminMode: boolean) {
     throw new Error("يجب تفعيل وضع الإدارة لحذف حسابات");
   }
   try {
-    const account = await prisma.account.findUnique({
+    const account = await (await getTenantPrisma()).account.findUnique({
       where: { id: accountId },
       include: {
         _count: {
@@ -512,7 +512,7 @@ export async function deleteAccount(accountId: number, isAdminMode: boolean) {
       );
     }
 
-    await prisma.$transaction(async (tx) => {
+    await (await getTenantPrisma()).$transaction(async (tx) => {
       // Cascading checks and deletions for Sub-entities (Customers, Suppliers, Banks, Safes)
       if (account.customer) {
         if (
@@ -618,13 +618,13 @@ export async function updateAccount(data: {
   }
 
   try {
-    const account = await prisma.account.findUnique({
+    const account = await (await getTenantPrisma()).account.findUnique({
       where: { id: data.accountId },
     });
 
     if (!account) throw new Error("الحساب غير موجود");
 
-    const result = await prisma.account.update({
+    const result = await (await getTenantPrisma()).account.update({
       where: { id: data.accountId },
       data: {
         name: data.name,
@@ -641,22 +641,22 @@ export async function updateAccount(data: {
 
     // Mirror name update to the linked sub-entity to keep pages fully synchronized
     if (result.customer)
-      await prisma.customer.update({
+      await (await getTenantPrisma()).customer.update({
         where: { id: result.customer.id },
         data: { name: data.name },
       });
     if (result.supplier)
-      await prisma.supplier.update({
+      await (await getTenantPrisma()).supplier.update({
         where: { id: result.supplier.id },
         data: { name: data.name },
       });
     if (result.treasurySafe)
-      await prisma.treasurySafe.update({
+      await (await getTenantPrisma()).treasurySafe.update({
         where: { id: result.treasurySafe.id },
         data: { name: data.name },
       });
     if (result.treasuryBank)
-      await prisma.treasuryBank.update({
+      await (await getTenantPrisma()).treasuryBank.update({
         where: { id: result.treasuryBank.id },
         data: { name: data.name },
       });
@@ -681,7 +681,7 @@ export async function updateAccount(data: {
  */
 export async function getJournalEntryDetails(journalEntryId: number) {
   try {
-    const entry = await prisma.journalEntry.findUnique({
+    const entry = await (await getTenantPrisma()).journalEntry.findUnique({
       where: { id: journalEntryId },
       include: {
         items: {

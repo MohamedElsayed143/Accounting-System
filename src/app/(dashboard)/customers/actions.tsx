@@ -1,6 +1,6 @@
 "use server";
 
-import { prisma } from "@/lib/prisma";
+import { getTenantPrisma, publicPrisma } from "@/lib/tenant-prisma";
 import { revalidatePath } from "next/cache";
 import { getSession } from "@/lib/auth";
 import { hasPermission } from "@/lib/permissions";
@@ -13,14 +13,14 @@ export async function getCustomers() {
 
   const isRestricted = await hasPermission(session.userId, "customers_retail_only");
   
-  const customers = await prisma.customer.findMany({
+  const customers = await (await getTenantPrisma()).customer.findMany({
     where: isRestricted ? { category: "قطاعي" } : {},
     orderBy: { code: "asc" },
   });
 
   const accountIds = customers.map((c) => c.accountId).filter(Boolean) as number[];
   
-  const journalSums = await prisma.journalItem.groupBy({
+  const journalSums = await (await getTenantPrisma()).journalItem.groupBy({
     by: ["accountId"],
     _sum: { debit: true, credit: true },
     where: { accountId: { in: accountIds } },
@@ -59,14 +59,14 @@ export async function saveCustomer(data: {
     let existingCustomer;
 
     if (data.id) {
-      existingCustomer = await prisma.customer.findFirst({
+      existingCustomer = await (await getTenantPrisma()).customer.findFirst({
         where: {
           code: data.code,
           NOT: { id: data.id },
         },
       });
     } else {
-      existingCustomer = await prisma.customer.findFirst({
+      existingCustomer = await (await getTenantPrisma()).customer.findFirst({
         where: {
           code: data.code,
         },
@@ -79,7 +79,7 @@ export async function saveCustomer(data: {
     }
 
     if (data.id) {
-      await prisma.customer.update({
+      await (await getTenantPrisma()).customer.update({
         where: { id: data.id },
         data: {
           name: data.name,
@@ -91,12 +91,12 @@ export async function saveCustomer(data: {
       });
 
       // Update linked account name if it exists
-      const customer = await prisma.customer.findUnique({
+      const customer = await (await getTenantPrisma()).customer.findUnique({
         where: { id: data.id },
         include: { account: true }
       });
       if (customer?.accountId) {
-        await prisma.account.update({
+        await (await getTenantPrisma()).account.update({
           where: { id: customer.accountId },
           data: { name: `${customer.code} - ${customer.name}` }
         });
@@ -111,7 +111,7 @@ export async function saveCustomer(data: {
         );
       }
     } else {
-      await prisma.$transaction(async (tx) => {
+      await (await getTenantPrisma()).$transaction(async (tx) => {
         // 1. Create the account in COA first
         const custParent = await tx.account.findUnique({ where: { code: '1202' } });
         if (!custParent) throw new Error("حساب العملاء الرئيسي (1202) غير موجود");
@@ -159,9 +159,9 @@ export async function saveCustomer(data: {
 
 // حذف عميل
 export async function deleteCustomerAction(id: number) {
-  const customer = await prisma.customer.findUnique({ where: { id } });
+  const customer = await (await getTenantPrisma()).customer.findUnique({ where: { id } });
   
-  await prisma.$transaction(async (tx) => {
+  await (await getTenantPrisma()).$transaction(async (tx) => {
     await tx.customer.delete({
       where: { id },
     });

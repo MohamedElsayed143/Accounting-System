@@ -1,19 +1,19 @@
 "use server";
 
-import { prisma } from "@/lib/prisma";
+import { getTenantPrisma, publicPrisma } from "@/lib/tenant-prisma";
 import { revalidatePath } from "next/cache";
 import { getSession } from "@/lib/auth";
 import { triggerStaffActivityAlert } from "@/lib/notifications";
 
 // جلب كل الموردين مع أرصدتهم
 export async function getSuppliers() {
-  const suppliers = await prisma.supplier.findMany({
+  const suppliers = await (await getTenantPrisma()).supplier.findMany({
     orderBy: { code: "asc" },
   });
 
   const accountIds = suppliers.map((s) => s.accountId).filter(Boolean) as number[];
   
-  const journalSums = await prisma.journalItem.groupBy({
+  const journalSums = await (await getTenantPrisma()).journalItem.groupBy({
     by: ["accountId"],
     _sum: { debit: true, credit: true },
     where: { accountId: { in: accountIds } },
@@ -53,7 +53,7 @@ export async function saveSupplier(data: {
 
   if (data.id) {
     // تعديل → تجاهل المورد الحالي
-    existingSupplier = await prisma.supplier.findFirst({
+    existingSupplier = await (await getTenantPrisma()).supplier.findFirst({
       where: {
         code: data.code,
         NOT: { id: data.id },
@@ -61,7 +61,7 @@ export async function saveSupplier(data: {
     });
   } else {
     // إضافة جديد
-    existingSupplier = await prisma.supplier.findFirst({
+    existingSupplier = await (await getTenantPrisma()).supplier.findFirst({
       where: {
         code: data.code,
       },
@@ -74,7 +74,7 @@ export async function saveSupplier(data: {
 
   if (data.id) {
     // تعديل
-    await prisma.supplier.update({
+    await (await getTenantPrisma()).supplier.update({
       where: { id: data.id },
       data: {
         name: data.name,
@@ -86,12 +86,12 @@ export async function saveSupplier(data: {
     });
 
     // Update linked account name if it exists
-    const supplier = await prisma.supplier.findUnique({
+    const supplier = await (await getTenantPrisma()).supplier.findUnique({
       where: { id: data.id },
       include: { account: true }
     });
     if (supplier?.accountId) {
-      await prisma.account.update({
+      await (await getTenantPrisma()).account.update({
         where: { id: supplier.accountId },
         data: { name: `${supplier.code} - ${supplier.name}` }
       });
@@ -107,7 +107,7 @@ export async function saveSupplier(data: {
     }
   } else {
     // إضافة جديد
-    await prisma.$transaction(async (tx) => {
+    await (await getTenantPrisma()).$transaction(async (tx) => {
       // 1. Create the account in COA first
       const suppParent = await tx.account.findUnique({ where: { code: '2101' } });
       if (!suppParent) throw new Error("حساب الموردين الرئيسي (2101) غير موجود");
@@ -149,9 +149,9 @@ export async function saveSupplier(data: {
 
 // حذف مورد
 export async function deleteSupplierAction(id: number) {
-  const supplier = await prisma.supplier.findUnique({ where: { id } });
+  const supplier = await (await getTenantPrisma()).supplier.findUnique({ where: { id } });
 
-  await prisma.$transaction(async (tx) => {
+  await (await getTenantPrisma()).$transaction(async (tx) => {
     await tx.supplier.delete({
       where: { id },
     });

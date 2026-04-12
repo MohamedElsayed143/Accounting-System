@@ -1,17 +1,17 @@
 "use server";
 
-import { prisma } from "@/lib/prisma";
+import { getTenantPrisma, publicPrisma } from "@/lib/tenant-prisma";
 import { revalidatePath } from "next/cache";
 import { triggerTreasuryAlert, triggerStockAlert } from "@/lib/notifications";
 
 export async function getPendingInvoices() {
-  const sales = await prisma.salesInvoice.findMany({
+  const sales = await (await getTenantPrisma()).salesInvoice.findMany({
     where: { status: "pending" },
     include: { customer: { select: { name: true } }, items: true },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
   });
 
-  const purchases = await prisma.purchaseInvoice.findMany({
+  const purchases = await (await getTenantPrisma()).purchaseInvoice.findMany({
     where: { status: "pending" },
     include: { supplier: { select: { name: true } }, items: true },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -28,7 +28,7 @@ export async function finalizeSalesInvoice(
     bankId?: number;
   },
 ) {
-  const result = await prisma.$transaction(async (tx) => {
+  const result = await (await getTenantPrisma()).$transaction(async (tx) => {
     const invoice = await tx.salesInvoice.findUnique({
       where: { id },
       include: { items: true },
@@ -210,7 +210,7 @@ export async function finalizePurchaseInvoice(
     bankId?: number;
   },
 ) {
-  const result = await prisma.$transaction(async (tx) => {
+  const result = await (await getTenantPrisma()).$transaction(async (tx) => {
     const invoice = await tx.purchaseInvoice.findUnique({
       where: { id },
       include: {

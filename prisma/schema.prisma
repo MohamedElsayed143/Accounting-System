@@ -434,6 +434,8 @@ model User {
   id                       Int                     @id @default(autoincrement())
   username                 String                  @unique @db.VarChar(50)
   password                 String                  @db.VarChar(255)
+  email                    String?                 @unique @db.VarChar(255)
+  tenantSchema             String?                 @db.VarChar(100)
   role                     String                  @default("WORKER") @db.VarChar(20)
   authorizedDevices        String[]                @default([])
   maxDevices               Int                     @default(1)
@@ -445,6 +447,15 @@ model User {
   sessions                 Session[]
   approvedTreasuryRequests TreasuryActionRequest[] @relation("Approver")
   treasuryRequests         TreasuryActionRequest[] @relation("Requester")
+}
+
+/// Developer-controlled system branding (system name + logo).
+/// Separate from CompanySettings which belongs to the purchasing client.
+model SystemConfig {
+  id          Int      @id @default(1)
+  systemName  String   @default("نظام محاسبة فاست")
+  systemLogo  String?  @db.Text
+  updatedAt   DateTime @updatedAt
 }
 
 model Session {

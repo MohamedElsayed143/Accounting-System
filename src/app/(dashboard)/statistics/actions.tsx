@@ -1,5 +1,5 @@
 "use server";
-import { prisma } from "@/lib/prisma";
+import { getTenantPrisma, publicPrisma } from "@/lib/tenant-prisma";
 import { getSystemSettings } from "../settings/actions";
 import { getSession } from "@/lib/auth";
 import { hasPermission } from "@/lib/permissions";
@@ -33,7 +33,7 @@ export async function getStatisticsSummary(fromDate?: Date, toDate?: Date) {
       banks,
       pendingInvoicesAgg,
     ] = await Promise.all([
-      prisma.salesInvoice.aggregate({
+      (await getTenantPrisma()).salesInvoice.aggregate({
         where: {
           status: { in: ["cash", "credit"] },
           ...dateFilterInvoice,
@@ -41,7 +41,7 @@ export async function getStatisticsSummary(fromDate?: Date, toDate?: Date) {
         _sum: { total: true },
         _count: true,
       }),
-      prisma.purchaseInvoice.aggregate({
+      (await getTenantPrisma()).purchaseInvoice.aggregate({
         where: {
           status: { in: ["cash", "credit"] },
           ...dateFilterInvoice,
@@ -49,25 +49,25 @@ export async function getStatisticsSummary(fromDate?: Date, toDate?: Date) {
         _sum: { total: true },
         _count: true,
       }),
-      prisma.salesReturn.aggregate({
+      (await getTenantPrisma()).salesReturn.aggregate({
         where: { status: "completed", ...dateFilterReturn },
         _sum: { total: true },
       }),
-      prisma.purchaseReturn.aggregate({
+      (await getTenantPrisma()).purchaseReturn.aggregate({
         where: { status: "completed", ...dateFilterReturn },
         _sum: { total: true },
       }),
-      prisma.customer.count(),
-      prisma.supplier.count(),
-      prisma.treasurySafe.findMany({
+      (await getTenantPrisma()).customer.count(),
+      (await getTenantPrisma()).supplier.count(),
+      (await getTenantPrisma()).treasurySafe.findMany({
         where: { isActive: true },
         select: { accountId: true },
       }),
-      prisma.treasuryBank.findMany({
+      (await getTenantPrisma()).treasuryBank.findMany({
         where: { isActive: true },
         select: { accountId: true },
       }),
-      prisma.salesInvoice.aggregate({
+      (await getTenantPrisma()).salesInvoice.aggregate({
         where: { status: "pending", ...dateFilterInvoice },
         _sum: { total: true },
         _count: true,
@@ -83,11 +83,11 @@ export async function getStatisticsSummary(fromDate?: Date, toDate?: Date) {
     const bankAccountIds = banks.map(b => b.accountId).filter(id => id !== null) as number[];
 
     const [safeLedger, bankLedger] = await Promise.all([
-      prisma.journalItem.aggregate({
+      (await getTenantPrisma()).journalItem.aggregate({
         where: { accountId: { in: safeAccountIds } },
         _sum: { debit: true, credit: true }
       }),
-      prisma.journalItem.aggregate({
+      (await getTenantPrisma()).journalItem.aggregate({
         where: { accountId: { in: bankAccountIds } },
         _sum: { debit: true, credit: true }
       })
@@ -137,14 +137,14 @@ export async function getMonthlyTrend(year: number) {
     const end = new Date(`${year}-12-31T23:59:59.999Z`);
 
     const [salesInvoices, purchaseInvoices] = await Promise.all([
-      prisma.salesInvoice.findMany({
+      (await getTenantPrisma()).salesInvoice.findMany({
         where: {
           invoiceDate: { gte: start, lte: end },
           status: { in: ["cash", "credit"] },
         },
         select: { invoiceDate: true, total: true },
       }),
-      prisma.purchaseInvoice.findMany({
+      (await getTenantPrisma()).purchaseInvoice.findMany({
         where: {
           invoiceDate: { gte: start, lte: end },
           status: { in: ["cash", "credit"] },
@@ -192,7 +192,7 @@ export async function getTopCustomers(
         ? { invoiceDate: { gte: fromDate, lte: toDate } }
         : {};
 
-    const topCustomers = await prisma.salesInvoice.groupBy({
+    const topCustomers = await (await getTenantPrisma()).salesInvoice.groupBy({
       by: ["customerId", "customerName"],
       where: { status: { in: ["cash", "credit"] }, ...dateFilter },
       _sum: { total: true },
@@ -225,7 +225,7 @@ export async function getTopSuppliers(
         ? { invoiceDate: { gte: fromDate, lte: toDate } }
         : {};
 
-    const topSuppliers = await prisma.purchaseInvoice.groupBy({
+    const topSuppliers = await (await getTenantPrisma()).purchaseInvoice.groupBy({
       by: ["supplierId", "supplierName"],
       where: { status: { in: ["cash", "credit"] }, ...dateFilter },
       _sum: { total: true },
@@ -258,17 +258,17 @@ export async function getSalesByPaymentMethod(
         : {};
 
     const [cash, credit, pending] = await Promise.all([
-      prisma.salesInvoice.aggregate({
+      (await getTenantPrisma()).salesInvoice.aggregate({
         where: { status: "cash", ...dateFilter },
         _sum: { total: true },
         _count: true,
       }),
-      prisma.salesInvoice.aggregate({
+      (await getTenantPrisma()).salesInvoice.aggregate({
         where: { status: "credit", ...dateFilter },
         _sum: { total: true },
         _count: true,
       }),
-      prisma.salesInvoice.aggregate({
+      (await getTenantPrisma()).salesInvoice.aggregate({
         where: { status: "pending", ...dateFilter },
         _sum: { total: true },
         _count: true,
@@ -298,7 +298,7 @@ export async function getInventoryAlerts() {
     if (!alertsEnabled) return [];
 
     // جلب المنتجات النشطة
-    const products = await prisma.product.findMany({
+    const products = await (await getTenantPrisma()).product.findMany({
       where: { isActive: true },
       select: {
         id: true,
@@ -314,7 +314,7 @@ export async function getInventoryAlerts() {
     if (products.length === 0) return [];
 
     // حساب الرصيد الفعلي من الحركات للتأكد من الدقة
-    const stockGroups = await prisma.stockMovement.groupBy({
+    const stockGroups = await (await getTenantPrisma()).stockMovement.groupBy({
       by: ["productId"],
       _sum: { quantity: true },
       where: {
@@ -363,7 +363,7 @@ export async function getBestSellingProducts(
         ? { invoice: { invoiceDate: { gte: fromDate, lte: toDate } } }
         : {};
 
-    const items = await prisma.salesInvoiceItem.findMany({
+    const items = await (await getTenantPrisma()).salesInvoiceItem.findMany({
       where: {
         productId: { not: null },
         ...dateFilter,
@@ -413,7 +413,7 @@ export async function getBestSellingProducts(
 export async function getRecentActivity(limit: number = 10) {
   try {
     const [sales, purchases] = await Promise.all([
-      prisma.salesInvoice.findMany({
+      (await getTenantPrisma()).salesInvoice.findMany({
         take: limit,
         orderBy: { createdAt: "desc" },
         select: {
@@ -425,7 +425,7 @@ export async function getRecentActivity(limit: number = 10) {
           invoiceDate: true,
         },
       }),
-      prisma.purchaseInvoice.findMany({
+      (await getTenantPrisma()).purchaseInvoice.findMany({
         take: limit,
         orderBy: { createdAt: "desc" },
         select: {
@@ -476,12 +476,12 @@ export async function getReturnsSummary(fromDate?: Date, toDate?: Date) {
       fromDate && toDate ? { returnDate: { gte: fromDate, lte: toDate } } : {};
 
     const [salesReturns, purchaseReturns] = await Promise.all([
-      prisma.salesReturn.aggregate({
+      (await getTenantPrisma()).salesReturn.aggregate({
         where: { status: "completed", ...dateFilter },
         _sum: { total: true },
         _count: true,
       }),
-      prisma.purchaseReturn.aggregate({
+      (await getTenantPrisma()).purchaseReturn.aggregate({
         where: { status: "completed", ...dateFilter },
         _sum: { total: true },
         _count: true,

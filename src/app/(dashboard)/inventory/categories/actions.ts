@@ -1,6 +1,6 @@
 "use server";
 
-import { prisma } from "@/lib/prisma";
+import { getTenantPrisma, publicPrisma } from "@/lib/tenant-prisma";
 import { revalidatePath } from "next/cache";
 import type { Category } from "@prisma/client";
 import { getSession } from "@/lib/auth";
@@ -35,7 +35,7 @@ export async function getCategories(): Promise<CategoryData[]> {
   const canView = session ? await hasPermission(session.userId, "inventory_view") : false;
   if (!canView) return [];
 
-  return prisma.category.findMany({
+  return (await getTenantPrisma()).category.findMany({
     orderBy: { name: "asc" },
     include: { _count: { select: { products: true } } },
   });
@@ -48,7 +48,7 @@ export async function createCategory(data: { name: string; imageUrl?: string }) 
 
   if (!data.name.trim()) throw new Error("اسم التصنيف مطلوب");
 
-  return prisma.$transaction(async (tx) => {
+  return (await getTenantPrisma()).$transaction(async (tx) => {
     const code = await generateCategoryCode(tx);
     
     const category = await tx.category.create({
@@ -72,7 +72,7 @@ export async function updateCategory(id: number, data: { name: string; imageUrl?
 
   if (!data.name.trim()) throw new Error("اسم التصنيف مطلوب");
 
-  const category = await prisma.category.update({
+  const category = await (await getTenantPrisma()).category.update({
     where: { id },
     data: { 
       name: data.name.trim(),
@@ -87,13 +87,13 @@ export async function deleteCategory(id: number) {
   const session = await getSession();
   if (!session || session.user.role !== "ADMIN") throw new Error("صلاحية الحذف للأدمن فقط");
 
-  const hasProducts = await prisma.product.count({
+  const hasProducts = await (await getTenantPrisma()).product.count({
     where: { categoryId: id, isActive: true },
   });
   if (hasProducts > 0) {
     throw new Error("لا يمكن حذف تصنيف يحتوي على أصناف نشطة");
   }
-  await prisma.category.delete({ where: { id } });
+  await (await getTenantPrisma()).category.delete({ where: { id } });
   revalidatePath("/inventory/categories");
   return { success: true };
 }

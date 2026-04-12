@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { prisma } from "@/lib/prisma";
+import { getTenantPrisma, publicPrisma } from "@/lib/tenant-prisma";
 import { triggerTreasuryAlert } from "@/lib/notifications";
 
 // تعريف الأنواع
@@ -35,7 +35,7 @@ export type PurchaseReturnInput = {
 
 // توليد رقم مرتجع فريد
 async function generateReturnNumber(): Promise<number> {
-  const lastReturn = await prisma.purchaseReturn.findFirst({
+  const lastReturn = await (await getTenantPrisma()).purchaseReturn.findFirst({
     orderBy: { returnNumber: 'desc' },
   });
   return lastReturn ? lastReturn.returnNumber + 1 : 1;
@@ -56,7 +56,7 @@ export async function getPurchaseReturns(
       where.returnDate = { gte: fromDate, lte: toDate };
     }
 
-    const returns = await prisma.purchaseReturn.findMany({
+    const returns = await (await getTenantPrisma()).purchaseReturn.findMany({
       where,
       include: {
         supplier: { select: { name: true, code: true } },
@@ -75,7 +75,7 @@ export async function getPurchaseReturns(
 // جلب مرتجع شراء واحد بالتفاصيل
 export async function getPurchaseReturnById(id: number) {
   try {
-    const purchaseReturn = await prisma.purchaseReturn.findUnique({
+    const purchaseReturn = await (await getTenantPrisma()).purchaseReturn.findUnique({
       where: { id },
       include: {
         supplier: true,
@@ -96,14 +96,14 @@ export async function getPurchaseReturnById(id: number) {
 export async function createPurchaseReturn(data: PurchaseReturnInput) {
   try {
     // التحقق من وجود الفاتورة
-    const invoice = await prisma.purchaseInvoice.findUnique({
+    const invoice = await (await getTenantPrisma()).purchaseInvoice.findUnique({
       where: { id: data.invoiceId },
       include: { items: true },
     });
     if (!invoice) throw new Error("فاتورة الشراء غير موجودة");
 
     // ✅ التحقق من الكميات عبر مرتجعات سابقة
-    const previousReturns = await prisma.purchaseReturn.findMany({
+    const previousReturns = await (await getTenantPrisma()).purchaseReturn.findMany({
       where: { invoiceId: data.invoiceId },
       include: { items: true },
     });
@@ -150,12 +150,12 @@ export async function createPurchaseReturn(data: PurchaseReturnInput) {
 
     // التحقق من كفاية الرصيد (لأننا سنقوم بإضافة رصيد للخزنة/البنك)
     if (data.refundMethod === 'safe' && data.safeId) {
-      const safe = await prisma.treasurySafe.findUnique({
+      const safe = await (await getTenantPrisma()).treasurySafe.findUnique({
         where: { id: data.safeId },
       });
       if (!safe) throw new Error("الخزنة غير موجودة");
     } else if (data.refundMethod === 'bank' && data.bankId) {
-      const bank = await prisma.treasuryBank.findUnique({
+      const bank = await (await getTenantPrisma()).treasuryBank.findUnique({
         where: { id: data.bankId },
       });
       if (!bank) throw new Error("البنك غير موجود");
@@ -166,13 +166,13 @@ export async function createPurchaseReturn(data: PurchaseReturnInput) {
     if (returnNumber === 0) {
       returnNumber = await generateReturnNumber();
     } else {
-      const existing = await prisma.purchaseReturn.findUnique({
+      const existing = await (await getTenantPrisma()).purchaseReturn.findUnique({
         where: { returnNumber },
       });
       if (existing) throw new Error(`رقم المرتجع ${returnNumber} مستخدم مسبقاً`);
     }
 
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await (await getTenantPrisma()).$transaction(async (tx) => {
       const purchaseReturn = await tx.purchaseReturn.create({
         data: {
           returnNumber,
@@ -283,7 +283,7 @@ export async function createPurchaseReturn(data: PurchaseReturnInput) {
 // تحديث حالة مرتجع
 export async function updatePurchaseReturnStatus(id: number, status: string) {
   try {
-    const updated = await prisma.purchaseReturn.update({
+    const updated = await (await getTenantPrisma()).purchaseReturn.update({
       where: { id },
       data: { status: status as any },
     });
@@ -298,7 +298,7 @@ export async function updatePurchaseReturnStatus(id: number, status: string) {
 // حذف مرتجع
 export async function deletePurchaseReturn(id: number) {
   try {
-    await prisma.$transaction(async (tx) => {
+    await (await getTenantPrisma()).$transaction(async (tx) => {
       // 1. استرجاع بيانات المرتجع مع الأصناف
       const purchaseReturn = await tx.purchaseReturn.findUnique({
         where: { id },

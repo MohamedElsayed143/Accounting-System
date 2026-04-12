@@ -1,6 +1,6 @@
 "use server";
 
-import { prisma } from "@/lib/prisma";
+import { getTenantPrisma, publicPrisma } from "@/lib/tenant-prisma";
 import { revalidatePath } from "next/cache";
 import { getSession } from "@/lib/auth";
 
@@ -24,7 +24,7 @@ export async function getNotifications() {
     ? { OR: [{ userId: session.userId }, { userId: null }] } 
     : { userId: session.userId };
 
-  return (prisma as any).notification.findMany({
+  return (await getTenantPrisma() as any).notification.findMany({
     where,
     orderBy: { createdAt: "desc" },
     take: 50,
@@ -44,13 +44,13 @@ export async function getUnreadNotificationsCount() {
     ? { isRead: false } 
     : { isRead: false, userId: session.userId };
 
-  const notificationsCount = await (prisma as any).notification.count({
+  const notificationsCount = await (await getTenantPrisma() as any).notification.count({
     where,
   });
 
   // Only admins see the requests count in their badge
   const requestsCount = session.user.role === "ADMIN" 
-    ? await (prisma as any).treasuryActionRequest.count({ where: { status: "PENDING" } })
+    ? await (await getTenantPrisma() as any).treasuryActionRequest.count({ where: { status: "PENDING" } })
     : 0;
 
   return notificationsCount + requestsCount;
@@ -60,7 +60,7 @@ export async function markAsRead(id: number) {
   const session = await getSession();
   if (!session) throw new Error("Unauthorized");
 
-  await (prisma as any).notification.update({
+  await (await getTenantPrisma() as any).notification.update({
     where: { id },
     data: { isRead: true },
   });
@@ -77,7 +77,7 @@ export async function markAllAsRead() {
     ? { isRead: false } 
     : { isRead: false, userId: session.userId };
 
-  await (prisma as any).notification.updateMany({
+  await (await getTenantPrisma() as any).notification.updateMany({
     where,
     data: { isRead: true },
   });
@@ -90,7 +90,7 @@ export async function deleteNotification(id: number) {
   const session = await getSession();
   if (!session) throw new Error("Unauthorized");
 
-  await (prisma as any).notification.delete({
+  await (await getTenantPrisma() as any).notification.delete({
     where: { id },
   });
 
@@ -105,7 +105,7 @@ export async function getTreasuryRequests() {
     ? {} 
     : { requesterId: session.userId };
 
-  return (prisma as any).treasuryActionRequest.findMany({
+  return (await getTenantPrisma() as any).treasuryActionRequest.findMany({
     where,
     include: {
       requester: { select: { username: true } },
@@ -121,7 +121,7 @@ export async function approveTreasuryRequest(id: number) {
     throw new Error("Unauthorized");
   }
 
-  const request = await (prisma as any).treasuryActionRequest.findUnique({
+  const request = await (await getTenantPrisma() as any).treasuryActionRequest.findUnique({
     where: { id },
   });
 
@@ -155,7 +155,7 @@ export async function approveTreasuryRequest(id: number) {
       await createPaymentVoucher(data, true);
     }
 
-    await (prisma as any).treasuryActionRequest.update({
+    await (await getTenantPrisma() as any).treasuryActionRequest.update({
       where: { id },
       data: {
         status: "APPROVED",
@@ -195,13 +195,13 @@ export async function rejectTreasuryRequest(id: number, reason?: string) {
     throw new Error("Unauthorized");
   }
 
-  const request = await (prisma as any).treasuryActionRequest.findUnique({
+  const request = await (await getTenantPrisma() as any).treasuryActionRequest.findUnique({
     where: { id },
   });
 
   if (!request) throw new Error("Request not found");
 
-  await (prisma as any).treasuryActionRequest.update({
+  await (await getTenantPrisma() as any).treasuryActionRequest.update({
     where: { id },
     data: {
       status: "REJECTED",

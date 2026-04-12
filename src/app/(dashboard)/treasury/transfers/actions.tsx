@@ -1,6 +1,6 @@
 "use server";
 
-import { prisma } from "@/lib/prisma";
+import { getTenantPrisma, publicPrisma } from "@/lib/tenant-prisma";
 import { revalidatePath } from "next/cache";
 import { triggerTreasuryAlert } from "@/lib/notifications";
 import { getSession } from "@/lib/auth";
@@ -22,9 +22,10 @@ export async function createTransfer(data: TransferInput, skipApproval: boolean 
 
   // Approval Interception
   if (!skipApproval) {
-    const settings = await (prisma as any).generalSettings.findUnique({ where: { id: 1 } });
+    const db = await getTenantPrisma();
+    const settings = await (db as any).generalSettings.findUnique({ where: { id: 1 } });
     if (session.user.role === "WORKER" && (settings as any)?.requireApprovalForTransfers) {
-      await (prisma as any).treasuryActionRequest.create({
+      await (db as any).treasuryActionRequest.create({
         data: {
           type: "TRANSFER",
           data: data as any,
@@ -44,7 +45,7 @@ export async function createTransfer(data: TransferInput, skipApproval: boolean 
     throw new Error("يجب أن يكون المبلغ أكبر من صفر");
   }
 
-  const res = await prisma.$transaction(async (tx) => {
+  const res = await (await getTenantPrisma()).$transaction(async (tx) => {
     // 1. التحقق من رصيد المصدر
     if (data.fromType === "safe") {
       const safe = await tx.treasurySafe.findUnique({
@@ -162,7 +163,7 @@ export async function createTransfer(data: TransferInput, skipApproval: boolean 
 }
 
 export async function getNextTransferNumber(): Promise<string> {
-  const last = await prisma.treasuryTransfer.findFirst({
+  const last = await (await getTenantPrisma()).treasuryTransfer.findFirst({
     orderBy: { id: "desc" },
     select: { transferNumber: true }
   });

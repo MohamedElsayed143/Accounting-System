@@ -1,6 +1,6 @@
 "use server";
 
-import { prisma } from "@/lib/prisma";
+import { getTenantPrisma, publicPrisma } from "@/lib/tenant-prisma";
 import { revalidatePath } from "next/cache";
 import { triggerTreasuryAlert } from "@/lib/notifications";
 import { getSession } from "@/lib/auth";
@@ -27,11 +27,11 @@ export interface InitialData {
 export async function getInitialData(): Promise<InitialData> {
   try {
     const [suppliers, safes, banks] = await Promise.all([
-      prisma.supplier.findMany({ 
+      (await getTenantPrisma()).supplier.findMany({ 
         orderBy: { name: "asc" },
         select: { id: true, name: true, code: true }
       }),
-      prisma.treasurySafe.findMany({ 
+      (await getTenantPrisma()).treasurySafe.findMany({ 
         where: { isActive: true },
         orderBy: { name: "asc" },
         include: {
@@ -44,7 +44,7 @@ export async function getInitialData(): Promise<InitialData> {
           }
         }
       }),
-      prisma.treasuryBank.findMany({ 
+      (await getTenantPrisma()).treasuryBank.findMany({ 
         where: { isActive: true },
         orderBy: { name: "asc" },
         include: {
@@ -93,9 +93,9 @@ export async function createPaymentVoucher(data: PaymentVoucherInput, skipApprov
 
   // Approval Interception
   if (!skipApproval) {
-    const settings = await (prisma as any).generalSettings.findUnique({ where: { id: 1 } });
+    const settings = await (await getTenantPrisma() as any).generalSettings.findUnique({ where: { id: 1 } });
     if (session.user.role === "WORKER" && settings?.requireApprovalForVouchers) {
-      await (prisma as any).treasuryActionRequest.create({
+      await (await getTenantPrisma() as any).treasuryActionRequest.create({
         data: {
           type: "PAYMENT_VOUCHER",
           data: data as any,
@@ -161,7 +161,7 @@ export async function createPaymentVoucher(data: PaymentVoucherInput, skipApprov
     }
 
     // تنفيذ المعاملة
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await (await getTenantPrisma()).$transaction(async (tx) => {
       // 1. Get current entry number
       const lastEntry = await tx.journalEntry.findFirst({
         orderBy: { entryNumber: 'desc' },

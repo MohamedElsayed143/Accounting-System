@@ -1,18 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { loginAction } from "./actions";
 import { generateDeviceId } from "@/lib/device";
 import { Loader2, Zap, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
-
+import { getPublicSystemConfig } from "@/app/actions/system-config";
 
 export default function LoginPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [systemName, setSystemName] = useState("نظام محاسبة فاست");
+  const [systemLogo, setSystemLogo] = useState<string | null>(null);
+
+  useEffect(() => {
+    getPublicSystemConfig().then((cfg) => {
+      setSystemName(cfg.systemName);
+      setSystemLogo(cfg.systemLogo);
+    });
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -29,22 +38,39 @@ export default function LoginPage() {
     } else {
       toast.success("تم تسجيل الدخول بنجاح");
       localStorage.removeItem("isManagementActive");
-      const redirectPath = res.role === "WORKER" ? "/sales-invoices" : "/statistics";
+      // Developer gets redirected to their portal
+      const redirectPath = res.isDeveloper
+        ? "/developer"
+        : res.role === "WORKER"
+        ? "/sales-invoices"
+        : "/statistics";
       router.push(redirectPath);
-      router.refresh(); // Force a refresh to load session data
+      router.refresh();
     }
   };
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8 dark:bg-slate-900" dir="rtl">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
+
+        {/* System Logo */}
         <div className="flex justify-center">
-          <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/20">
-            <Zap className="w-8 h-8 text-white" />
-          </div>
+          {systemLogo ? (
+            <img
+              src={systemLogo}
+              alt={systemName}
+              className="w-16 h-16 object-contain rounded-2xl shadow-lg"
+            />
+          ) : (
+            <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/20">
+              <Zap className="w-8 h-8 text-white" />
+            </div>
+          )}
         </div>
+
+        {/* System Name */}
         <h2 className="mt-6 text-center text-3xl font-extrabold text-slate-900 dark:text-white">
-          نظام محُاسبة فاست
+          {systemName}
         </h2>
         <p className="mt-2 text-center text-sm text-slate-600 dark:text-slate-400">
           Fast Accounting System
@@ -116,9 +142,6 @@ export default function LoginPage() {
             </div>
           </form>
         </div>
-        <p className="text-center mt-6 text-xs text-slate-400">
-          لإضافة مستخدمين، يرجى استخدام Prisma Studio
-        </p>
       </div>
     </div>
   );

@@ -162,7 +162,8 @@ export function QuotationTable({
                             createdAt: new Date(),
                             updatedAt: new Date(),
                             categoryId: null,
-                            category: null
+                            category: null,
+                            imageUrl: null
                           });
                           e.currentTarget.value = "";
                         }
@@ -192,7 +193,8 @@ export function QuotationTable({
                           createdAt: new Date(),
                           updatedAt: new Date(),
                           categoryId: null,
-                          category: null
+                          category: null,
+                          imageUrl: null
                         });
                         input.value = "";
                       }

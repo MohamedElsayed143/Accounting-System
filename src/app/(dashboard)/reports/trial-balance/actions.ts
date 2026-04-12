@@ -1,6 +1,6 @@
 "use server";
 
-import { prisma } from "@/lib/prisma";
+import { getTenantPrisma, publicPrisma } from "@/lib/tenant-prisma";
 import { endOfDay } from "date-fns";
 import { AccountType } from "@prisma/client";
 
@@ -32,12 +32,12 @@ export async function getTrialBalance(startDate: Date, endDate: Date) {
   const sDate = startDate; // Already midnight if constructed properly, but let's use as is
 
   // 1. Fetch all accounts
-  const accounts = await prisma.account.findMany({
+  const accounts = await (await getTenantPrisma()).account.findMany({
     orderBy: { code: 'asc' },
   });
 
   // 2. Fetch Opening Balances (Before startDate)
-  const openingItems = await prisma.journalItem.groupBy({
+  const openingItems = await (await getTenantPrisma()).journalItem.groupBy({
     by: ['accountId'],
     where: {
       journalEntry: {
@@ -51,7 +51,7 @@ export async function getTrialBalance(startDate: Date, endDate: Date) {
   });
 
   // 3. Fetch Period Transactions (Between startDate and endDate)
-  const periodItems = await prisma.journalItem.groupBy({
+  const periodItems = await (await getTenantPrisma()).journalItem.groupBy({
     by: ['accountId'],
     where: {
       journalEntry: {

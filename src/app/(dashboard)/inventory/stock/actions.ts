@@ -1,6 +1,6 @@
 "use server";
 
-import { prisma } from "@/lib/prisma";
+import { getTenantPrisma, publicPrisma } from "@/lib/tenant-prisma";
 import { getSystemSettings } from "@/app/(dashboard)/settings/actions";
 
 export interface StockRow {
@@ -19,7 +19,7 @@ export interface StockRow {
 
 export async function getStockLevels(): Promise<{ rows: StockRow[]; alertsEnabled: boolean }> {
   // جلب جميع المنتجات النشطة
-  const products = await prisma.product.findMany({
+  const products = await (await getTenantPrisma()).product.findMany({
     where: { isActive: true },
     include: {
       category: { select: { name: true } },
@@ -30,7 +30,7 @@ export async function getStockLevels(): Promise<{ rows: StockRow[]; alertsEnable
   if (products.length === 0) return { rows: [], alertsEnabled: true };
 
   // تجميع حركات المخزون لكل منتج
-  const stockGroups = await prisma.stockMovement.groupBy({
+  const stockGroups = await (await getTenantPrisma()).stockMovement.groupBy({
     by: ["productId"],
     _sum: { quantity: true },
     where: {
@@ -76,11 +76,11 @@ export async function getStockLevels(): Promise<{ rows: StockRow[]; alertsEnable
 
 export async function getStockOverview() {
   const [products, movementsCount, settings] = await Promise.all([
-    prisma.product.findMany({
+    (await getTenantPrisma()).product.findMany({
       where: { isActive: true },
       select: { id: true, buyPrice: true, minStock: true },
     }),
-    prisma.stockMovement.count(),
+    (await getTenantPrisma()).stockMovement.count(),
     getSystemSettings(),
   ]);
 
@@ -88,7 +88,7 @@ export async function getStockOverview() {
     return { totalProducts: 0, lowStockCount: 0, totalValue: 0, totalMovements: movementsCount };
   }
 
-  const stockGroups = await prisma.stockMovement.groupBy({
+  const stockGroups = await (await getTenantPrisma()).stockMovement.groupBy({
     by: ["productId"],
     _sum: { quantity: true },
     where: { productId: { in: products.map((p) => p.id) } },
