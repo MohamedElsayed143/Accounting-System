@@ -14,6 +14,7 @@ export async function getJournalSelectableAccounts() {
   const accounts = await prisma.account.findMany({
     where: {
       isTerminal: true,
+      level: 4, // Only Level-4 accounts can have journal entries posted to them
     },
     orderBy: { code: "asc" },
     select: {

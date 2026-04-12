@@ -1,168 +1,97 @@
-import { PrismaClient, AccountType } from '@prisma/client'
-
+import { PrismaClient } from '@prisma/client'
+import * as fs from 'fs'
+import * as path from 'path'
+import { fileURLToPath } from 'url';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 const prisma = new PrismaClient()
 
 async function main() {
-  console.log('🌱 جارٍ إنشاء شجرة الحسابات (COA)...')
+  console.log('🌱 جارٍ بدء عملية تهيئة النظام من ملف الإعدادات...')
 
-  // --- 1. الأصول (Assets) ---
-  const assets = await prisma.account.upsert({
-    where: { code: '1' },
-    update: { level: 1, isTerminal: false, isSelectable: false },
-    create: { code: '1', name: 'الأصول', nameEn: 'Assets', type: 'ASSET', level: 1, isTerminal: false, isSelectable: false }
-  })
-
-  // 11. الأصول المتداولة (L2)
-  const currentAssets = await prisma.account.upsert({
-    where: { code: '11' },
-    update: { level: 2, isTerminal: false, isSelectable: false },
-    create: { code: '11', name: 'الأصول المتداولة', nameEn: 'Current Assets', type: 'ASSET', parentId: assets.id, level: 2, isTerminal: false, isSelectable: false }
-  })
-
-  // 1101. النقدية (L3)
-  const cashGroup = await prisma.account.upsert({
-    where: { code: '1101' },
-    update: { level: 3, isTerminal: false, isSelectable: false },
-    create: { code: '1101', name: 'النقدية بالخزينة', nameEn: 'Cash on Hand', type: 'ASSET', parentId: currentAssets.id, level: 3, isTerminal: false, isSelectable: false }
-  })
-
-  // 110101. الخزينة الرئيسية (L4 - Terminal)
-  const mainSafeAccount = await prisma.account.upsert({
-    where: { code: '110101' },
-    update: { level: 4, isTerminal: true, isSelectable: true },
-    create: { code: '110101', name: 'الخزينة الرئيسية', nameEn: 'Main Safe', type: 'ASSET', parentId: cashGroup.id, level: 4, isTerminal: true, isSelectable: true }
-  })
-
-  // 1102. البنوك (L3)
-  await prisma.account.upsert({
-    where: { code: '1102' },
-    update: { level: 3, isTerminal: false, isSelectable: false },
-    create: { code: '1102', name: 'البنوك', nameEn: 'Banks', type: 'ASSET', parentId: currentAssets.id, level: 3, isTerminal: false, isSelectable: false }
-  })
-
-  // 1103. العملاء (L3)
-  await prisma.account.upsert({
-    where: { code: '1103' },
-    update: { level: 3, isTerminal: false, isSelectable: false },
-    create: { code: '1103', name: 'العملاء', nameEn: 'Customers', type: 'ASSET', parentId: currentAssets.id, level: 3, isTerminal: false, isSelectable: false }
-  })
-
-  // 12. الأصول الثابتة (L2)
-  const fixedAssets = await prisma.account.upsert({
-    where: { code: '12' },
-    update: { level: 2, isTerminal: false, isSelectable: false },
-    create: { code: '12', name: 'الأصول الثابتة', nameEn: 'Fixed Assets', type: 'ASSET', parentId: assets.id, level: 2, isTerminal: false, isSelectable: false }
-  })
-
-  // 1201. الأراضي والعقارات (L3)
-  await prisma.account.upsert({
-    where: { code: '1201' },
-    update: { level: 3, isTerminal: false, isSelectable: false },
-    create: { code: '1201', name: 'الأراضي والعقارات', nameEn: 'Land & Buildings', type: 'ASSET', parentId: fixedAssets.id, level: 3, isTerminal: false, isSelectable: false }
-  })
-
-  // --- 2. الخصوم (Liabilities) ---
-  const liabilities = await prisma.account.upsert({
-    where: { code: '2' },
-    update: { level: 1, isTerminal: false, isSelectable: false },
-    create: { code: '2', name: 'الخصوم', nameEn: 'Liabilities', type: 'LIABILITY', level: 1, isTerminal: false, isSelectable: false }
-  })
-
-  // 21. الخصوم المتداولة (L2)
-  const currentLiabilities = await prisma.account.upsert({
-    where: { code: '21' },
-    update: { level: 2, isTerminal: false, isSelectable: false },
-    create: { code: '21', name: 'الخصوم المتداولة', nameEn: 'Current Liabilities', type: 'LIABILITY', parentId: liabilities.id, level: 2, isTerminal: false, isSelectable: false }
-  })
-
-  // 2101. الموردون (L3)
-  await prisma.account.upsert({
-    where: { code: '2101' },
-    update: { level: 3, isTerminal: false, isSelectable: false },
-    create: { code: '2101', name: 'الموردون', nameEn: 'Suppliers', type: 'LIABILITY', parentId: currentLiabilities.id, level: 3, isTerminal: false, isSelectable: false }
-  })
-
-  // --- 3. حقوق الملكية (Equity) ---
-  const equity = await prisma.account.upsert({
-    where: { code: '3' },
-    update: { level: 1, isTerminal: false, isSelectable: false },
-    create: { code: '3', name: 'حقوق الملكية', nameEn: 'Equity', type: 'EQUITY', level: 1, isTerminal: false, isSelectable: false }
-  })
-
-  // 31. رأس المال (L2)
-  const capital = await prisma.account.upsert({
-    where: { code: '31' },
-    update: { level: 2, isTerminal: false, isSelectable: false },
-    create: { code: '31', name: 'رأس المال', nameEn: 'Capital', type: 'EQUITY', parentId: equity.id, level: 2, isTerminal: false, isSelectable: false }
-  })
-
-  // 3101. رأس المال المدفوع (L3)
-  await prisma.account.upsert({
-    where: { code: '3101' },
-    update: { level: 3, isTerminal: false, isSelectable: false },
-    create: { code: '3101', name: 'رأس المال المدفوع', nameEn: 'Paid-up Capital', type: 'EQUITY', parentId: capital.id, level: 3, isTerminal: false, isSelectable: false }
-  })
-
-  // --- 4. الإيرادات (Revenue) ---
-  const revenue = await prisma.account.upsert({
-    where: { code: '4' },
-    update: { level: 1, isTerminal: false, isSelectable: false },
-    create: { code: '4', name: 'الإيرادات', nameEn: 'Revenue', type: 'REVENUE', level: 1, isTerminal: false, isSelectable: false }
-  })
-
-  // 41. إيرادات النشاط (L2)
-  const industrialRevenue = await prisma.account.upsert({
-    where: { code: '41' },
-    update: { level: 2, isTerminal: false, isSelectable: false },
-    create: { code: '41', name: 'إيرادات النشاط', nameEn: 'Operating Revenue', type: 'REVENUE', parentId: revenue.id, level: 2, isTerminal: false, isSelectable: false }
-  })
-
-  // 4101. مبيعات البضائع (L3)
-  await prisma.account.upsert({
-    where: { code: '4101' },
-    update: { level: 3, isTerminal: false, isSelectable: false },
-    create: { code: '4101', name: 'مبيعات البضائع', nameEn: 'Sales of Goods', type: 'REVENUE', parentId: industrialRevenue.id, level: 3, isTerminal: false, isSelectable: false }
-  })
-
-  // --- 5. المصروفات (Expenses) ---
-  const expenses = await prisma.account.upsert({
-    where: { code: '5' },
-    update: { level: 1, isTerminal: false, isSelectable: false },
-    create: { code: '5', name: 'المصروفات', nameEn: 'Expenses', type: 'EXPENSE', level: 1, isTerminal: false, isSelectable: false }
-  })
-
-  // 51. مصروفات تشغيلية (L2)
-  const operatingExpenses = await prisma.account.upsert({
-    where: { code: '51' },
-    update: { level: 2, isTerminal: false, isSelectable: false },
-    create: { code: '51', name: 'مصروفات تشغيلية', nameEn: 'Operating Expenses', type: 'EXPENSE', parentId: expenses.id, level: 2, isTerminal: false, isSelectable: false }
-  })
-
-  // 5101. الرواتب والأجور (L3)
-  await prisma.account.upsert({
-    where: { code: '5101' },
-    update: { level: 3, isTerminal: false, isSelectable: false },
-    create: { code: '5101', name: 'الرواتب والأجور', nameEn: 'Salaries & Wages', type: 'EXPENSE', parentId: operatingExpenses.id, level: 3, isTerminal: false, isSelectable: false }
-  })
-
-  // --- Treasuries Linkage ---
-  const primarySafe = await prisma.treasurySafe.findFirst({
-    where: { OR: [{ isPrimary: true }, { id: 1 }] }
-  })
-  if (primarySafe) {
-    await prisma.treasurySafe.update({
-      where: { id: primarySafe.id },
-      data: { accountId: mainSafeAccount.id, isPrimary: true }
-    })
-    console.log(`✅ تم ربط الخزنة الرئيسية بحساب ${mainSafeAccount.name}`)
+  // 1. قراءة ملف الـ COA الافتراضي
+  const coaPath = path.join(__dirname, 'default_coa.json')
+  if (!fs.existsSync(coaPath)) {
+    throw new Error(`❌ لم يتم العثور على ملف الإعدادات في: ${coaPath}`)
   }
 
-  console.log('🌱 تم إنشاء شجرة الحسابات بنجاح!')
+  const defaultCoa = JSON.parse(fs.readFileSync(coaPath, 'utf8'))
+  console.log(`📄 تم تحميل ${defaultCoa.length} حساب من ملف الإعدادات.`)
+
+  // 2. ترتيب الحسابات حسب المستوى لضمان إنشاء الأب قبل الابن
+  const sortedAccounts = defaultCoa.sort((a: any, b: any) => a.level - b.level)
+
+  const codeToIdMap: Record<string, number> = {}
+
+  console.log('🏗️  جارٍ بناء شجرة الحسابات...')
+
+  for (const acc of sortedAccounts) {
+    const parentId = acc.parentIdCode ? codeToIdMap[acc.parentIdCode] : null
+
+    const createdAccount = await prisma.account.upsert({
+      where: { code: acc.code },
+      update: {
+        name: acc.name,
+        nameEn: acc.nameEn,
+        type: acc.type,
+        level: acc.level,
+        isTerminal: acc.isTerminal,
+        isSelectable: acc.isSelectable,
+        parentId: parentId,
+      },
+      create: {
+        code: acc.code,
+        name: acc.name,
+        nameEn: acc.nameEn,
+        type: acc.type,
+        level: acc.level,
+        isTerminal: acc.isTerminal,
+        isSelectable: acc.isSelectable,
+        parentId: parentId,
+      }
+    })
+
+    codeToIdMap[acc.code] = createdAccount.id
+    // console.log(`   ✅ [${acc.code}] ${acc.name}`)
+  }
+
+  console.log('✅ تم بناء شجرة الحسابات بنجاح.')
+
+  // 3. الربط الذكي للخزينة الرئيسية
+  const mainSafeCode = '120101'
+  const mainSafeAccId = codeToIdMap[mainSafeCode]
+
+  if (mainSafeAccId) {
+    await prisma.treasurySafe.upsert({
+      where: { id: 1 },
+      update: { accountId: mainSafeAccId, name: 'الخزينة الرئيسية', isPrimary: true },
+      create: {
+        id: 1,
+        name: 'الخزينة الرئيسية',
+        isPrimary: true,
+        balance: 0,
+        accountId: mainSafeAccId
+      }
+    })
+    console.log(`🔗 تم ربط الخزينة الرئيسية بالحساب [${mainSafeCode}].`)
+  } else {
+    console.warn(`⚠️  تحذير: لم يتم العثور على حساب الخزينة الرئيسية بالكود [${mainSafeCode}] في ملف الإعدادات.`)
+  }
+
+  // 4. إعدادات الشركة الافتراضية
+  await prisma.companySettings.upsert({
+    where: { id: 1 },
+    update: { companyName: 'شركتي' },
+    create: { id: 1, companyName: 'شركتي' }
+  })
+  console.log('🏢 تم ضبط إعدادات الشركة الافتراضية.')
+
+  console.log('\n🎉 اكتملت عملية التمهيد بنجاح!')
 }
 
 main()
   .catch((e) => {
-    console.error(e)
+    console.error('❌ حدث خطأ أثناء عملية التمهيد:', e)
     process.exit(1)
   })
   .finally(async () => {

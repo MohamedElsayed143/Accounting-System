@@ -282,8 +282,10 @@ export async function createSubAccount(data: {
     );
   }
 
-  // Enforce 4-level hierarchy
-  if (parent.level >= 4 || parent.isTerminal) {
+  // Enforce 4-level hierarchy — check level only, NOT isTerminal,
+  // because some parent accounts may be seeded/marked as terminal
+  // even though they are at level 3 and can still have children.
+  if (parent.level >= 4) {
     throw new Error(
       "لا يمكن إضافة حسابات فرعية تحت حساب من المستوى الرابع (حساب طرفي)",
     );
@@ -291,6 +293,28 @@ export async function createSubAccount(data: {
 
   const newLevel = parent.level + 1;
   const isTerminal = newLevel === 4;
+
+  // Build ancestor code chain (parent → grandparent → great-grandparent)
+  // to correctly detect which module this account belongs to regardless of depth.
+  const ancestorCodes: string[] = [parent.code.trim()];
+  if (parent.parentId) {
+    const grandparent = await prisma.account.findUnique({
+      where: { id: parent.parentId },
+      select: { code: true, parentId: true },
+    });
+    if (grandparent) {
+      ancestorCodes.push(grandparent.code.trim());
+      if (grandparent.parentId) {
+        const greatGrandparent = await prisma.account.findUnique({
+          where: { id: grandparent.parentId },
+          select: { code: true },
+        });
+        if (greatGrandparent) {
+          ancestorCodes.push(greatGrandparent.code.trim());
+        }
+      }
+    }
+  }
 
   try {
     const result = await prisma.$transaction(async (tx) => {
@@ -316,32 +340,31 @@ export async function createSubAccount(data: {
       });
 
       // 3. Create linked entities if necessary (Sync with other modules)
+      //    Checks ancestorCodes so it works even when the direct parent is a
+      //    Level-3 sub-group that itself sits under the known Level-2/3 nodes.
       if (isTerminal) {
-        const parentCode = parent.code.trim();
-        if (parentCode === "1202") {
-          // Customers
-          const numericCode =
-            parseInt(newAccount.code.replace(parentCode, "")) || 0;
+        if (ancestorCodes.includes("1202")) {
+          // Customers — derive a sequential code from existing count
+          const existingCustomers = await tx.customer.count();
           await tx.customer.create({
             data: {
               name: newAccount.name,
-              code: numericCode,
+              code: existingCustomers + 1,
               accountId: newAccount.id,
               category: "قطاعي",
             },
           });
-        } else if (parentCode === "2101") {
+        } else if (ancestorCodes.includes("2101")) {
           // Suppliers
-          const numericCode =
-            parseInt(newAccount.code.replace(parentCode, "")) || 0;
+          const existingSuppliers = await tx.supplier.count();
           await tx.supplier.create({
             data: {
               name: newAccount.name,
-              code: numericCode,
+              code: existingSuppliers + 1,
               accountId: newAccount.id,
             },
           });
-        } else if (parentCode === "1201") {
+        } else if (ancestorCodes.includes("1201")) {
           // Safes
           await tx.treasurySafe.create({
             data: {
@@ -352,7 +375,7 @@ export async function createSubAccount(data: {
               isPrimary: false,
             },
           });
-        } else if (parentCode === "1205") {
+        } else if (ancestorCodes.includes("1205")) {
           // Banks
           await tx.treasuryBank.create({
             data: {
@@ -365,13 +388,11 @@ export async function createSubAccount(data: {
         }
       }
 
-      // 3. Ensure parent is no longer selectable if it was (though in 4-level only L4 should be selectable)
-      if (parent.isSelectable) {
-        await tx.account.update({
-          where: { id: data.parentId },
-          data: { isSelectable: false, isTerminal: false },
-        });
-      }
+      // 4. Always mark parent as non-terminal and non-selectable now that it has a child
+      await tx.account.update({
+        where: { id: data.parentId },
+        data: { isSelectable: false, isTerminal: false },
+      });
 
       return newAccount;
     });

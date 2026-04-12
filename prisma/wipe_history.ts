@@ -3,24 +3,25 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log("🧹 بدء عملية مسح الحركات المالية والبيانات التاريخية...");
+  console.log("🧹 بدء عملية المسح الكامل للبيانات مع الحفاظ على هيكل النظام...");
 
   try {
+    // ── الخطوة 1: مسح جميع الحركات المالية والبيانات الديناميكية ────────────────
     await prisma.$transaction([
       // مسح الإخطارات والجلسات وطلبات الخزينة
       prisma.notification.deleteMany(),
       prisma.session.deleteMany(),
       prisma.treasuryActionRequest.deleteMany(),
 
-      // مسح المخزون والحركات
+      // مسح المخزون والحركات والتحويلات
       prisma.stockMovement.deleteMany(),
-      
+      prisma.treasuryTransfer.deleteMany(),
+
       // مسح عروض الأسعار
       prisma.quotationItem.deleteMany(),
       prisma.quotation.deleteMany(),
 
-      // مسح التحويلات والقيود
-      prisma.treasuryTransfer.deleteMany(),
+      // مسح القيود المحاسبية
       prisma.journalItem.deleteMany(),
       prisma.journalEntry.deleteMany(),
 
@@ -39,14 +40,44 @@ async function main() {
       prisma.salesInvoice.deleteMany(),
       prisma.purchaseInvoiceItem.deleteMany(),
       prisma.purchaseInvoice.deleteMany(),
-
-      // تصفير الأرصدة التراكمية في الخزائن والبنوك والمخزون
-      prisma.treasurySafe.updateMany({ data: { balance: 0 } }),
-      prisma.treasuryBank.updateMany({ data: { balance: 0 } }),
-      prisma.product.updateMany({ data: { currentStock: 0 } }),
     ]);
+    console.log("✅ تم مسح جميع الحركات المالية.");
 
-    console.log("✅ تم مسح جميع الحركات المالية بنجاح مع الحفاظ على العملاء والموردين والأصناف.");
+    // ── الخطوة 2: حذف الخزائن والبنوك والعملاء والموردين والأصناف ─────────────
+    await prisma.$transaction([
+      prisma.treasurySafe.deleteMany(),
+      prisma.treasuryBank.deleteMany(),
+      prisma.customer.deleteMany(),
+      prisma.supplier.deleteMany(),
+      prisma.product.deleteMany(),
+      prisma.category.deleteMany(),
+    ]);
+    console.log("✅ تم حذف الخزائن، البنوك، العملاء، الموردين، والأصناف.");
+
+    // ── الخطوة 3: حذف شجرة الحسابات بالكامل ──────────────────────────────────
+    // نقوم بحذف جميع الحسابات لأننا سنعيد بناؤها من الصفر في عملية الـ Seed
+    await prisma.account.deleteMany();
+    console.log("✅ تم حذف شجرة الحسابات بالكامل.");
+
+    // ── الخطوة 4: تصفير بيانات إعدادات الشركة ───────────────────────────────
+    await prisma.companySettings.updateMany({
+      data: {
+        companyName: "شركتي",
+        companyNameEn: null,
+        companyLogo: null,
+        companyStamp: null,
+        companyBarcode: null,
+        termsAndConditions: null,
+        invoiceFooterNotes: null,
+      },
+    });
+    console.log("✅ تم تصفير بيانات إعدادات الشركة.");
+
+    console.log("\n🎉 اكتمل المسح الكامل. النظام جاهز الآن لعملية الـ Seed.");
+    console.log("   - تم مسح جميع الحركات المالية ✔");
+    console.log("   - تم مسح شجرة الحسابات بالكامل ✔");
+    console.log("   - بيانات اليوزرز محفوظة ✔");
+
   } catch (error) {
     console.error("❌ حدث خطأ أثناء مسح البيانات:", error);
   } finally {
