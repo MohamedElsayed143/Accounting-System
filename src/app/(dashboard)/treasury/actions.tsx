@@ -461,6 +461,7 @@ export async function createBank(data: { name: string; accountNumber: string; br
           parentId: parent.id,
           level: parent.level + 1,
           isSelectable: true,
+          isTerminal: true,
         }
       });
 
@@ -1578,6 +1579,7 @@ export async function createSafe(data: { name: string; initialBalance: number; d
           parentId: parent.id,
           level: parent.level + 1,
           isSelectable: true,
+          isTerminal: true,
         }
       });
 

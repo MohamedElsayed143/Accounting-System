@@ -13,7 +13,7 @@ import {
 import {
   getSystemConfig, updateSystemConfig,
   getDeveloperUsers, createDeveloperUser,
-  deleteDeveloperUser, updateUserEmail
+  deleteDeveloperUser, updateUserCredentials
 } from "./actions";
 import { logoutAction } from "@/app/login/actions";
 
@@ -288,7 +288,7 @@ function UsersTab() {
   const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
   const [deleting, setDeleting] = useState<number | null>(null);
-  const [editingEmail, setEditingEmail] = useState<{ id: number; email: string } | null>(null);
+  const [editingUser, setEditingUser] = useState<UserData | null>(null);
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
@@ -307,13 +307,6 @@ function UsersTab() {
     setDeleting(null);
     if (res.success) { toast.success("تم حذف المستخدم"); loadUsers(); }
     else toast.error(res.error || "فشل في الحذف");
-  };
-
-  const handleSaveEmail = async () => {
-    if (!editingEmail) return;
-    const res = await updateUserEmail(editingEmail.id, editingEmail.email);
-    if (res.success) { toast.success("تم تحديث البريد الإلكتروني"); setEditingEmail(null); loadUsers(); }
-    else toast.error(res.error || "فشل في التحديث");
   };
 
   const ROLE_LABELS: Record<string, string> = {
@@ -358,6 +351,15 @@ function UsersTab() {
         />
       )}
 
+      {/* Edit Form */}
+      {editingUser && (
+        <EditUserForm
+          user={editingUser}
+          onSuccess={() => { setEditingUser(null); loadUsers(); }}
+          onCancel={() => setEditingUser(null)}
+        />
+      )}
+
       {/* Users Table */}
       <div className="bg-white/[0.02] border border-white/5 rounded-3xl overflow-hidden">
         {loading ? (
@@ -390,27 +392,7 @@ function UsersTab() {
                     </div>
                   </td>
                   <td className="px-5 py-4">
-                    {editingEmail?.id === user.id ? (
-                      <div className="flex items-center gap-2">
-                        <input
-                          value={editingEmail.email}
-                          onChange={(e) => setEditingEmail({ id: user.id, email: e.target.value })}
-                          className="bg-white/5 border border-violet-500/30 rounded-lg px-2 py-1 text-white text-xs w-48 focus:outline-none focus:ring-1 focus:ring-violet-500/30"
-                        />
-                        <button onClick={handleSaveEmail} className="p-1 text-emerald-400 hover:text-emerald-300"><Check className="w-4 h-4" /></button>
-                        <button onClick={() => setEditingEmail(null)} className="p-1 text-white/30 hover:text-white/60"><X className="w-4 h-4" /></button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <span className="text-white/50 font-mono text-xs">{user.email || "—"}</span>
-                        <button
-                          onClick={() => setEditingEmail({ id: user.id, email: user.email || "" })}
-                          className="opacity-0 group-hover:opacity-100 p-1 rounded text-white/30 hover:text-violet-400 transition-all"
-                        >
-                          <Edit3 className="w-3 h-3" />
-                        </button>
-                      </div>
-                    )}
+                    <span className="text-white/50 font-mono text-xs">{user.email || "—"}</span>
                   </td>
                   <td className="px-5 py-4">
                     <span className={cn("text-[10px] font-black px-2.5 py-1 rounded-full border", ROLE_COLORS[user.role] || "text-white/50 bg-white/5 border-white/10")}>
@@ -426,13 +408,21 @@ function UsersTab() {
                     {new Date(user.createdAt).toLocaleDateString("ar-EG")}
                   </td>
                   <td className="px-5 py-4">
-                    <button
-                      onClick={() => handleDelete(user.id, user.username)}
-                      disabled={deleting === user.id || user.email === DEVELOPER_EMAIL}
-                      className="opacity-0 group-hover:opacity-100 h-7 w-7 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-400 flex items-center justify-center transition-all disabled:opacity-20 disabled:cursor-not-allowed"
-                    >
-                      {deleting === user.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setEditingUser(user)}
+                        className="opacity-0 group-hover:opacity-100 h-7 w-7 rounded-lg bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/20 text-violet-400 flex items-center justify-center transition-all"
+                      >
+                        <Edit3 className="w-3 h-3" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(user.id, user.username)}
+                        disabled={deleting === user.id || user.email === DEVELOPER_EMAIL}
+                        className="opacity-0 group-hover:opacity-100 h-7 w-7 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-400 flex items-center justify-center transition-all disabled:opacity-20 disabled:cursor-not-allowed"
+                      >
+                        {deleting === user.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -512,6 +502,66 @@ function AddUserForm({ onSuccess, onCancel }: { onSuccess: () => void; onCancel:
         </button>
       </div>
     </form>
+  );
+}
+
+// ─── Edit User Form ────────────────────────────────────────────────────────────
+
+function EditUserForm({ user, onSuccess, onCancel }: { user: UserData; onSuccess: () => void; onCancel: () => void }) {
+  const [username, setUsername] = useState(user.username);
+  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState(user.email || "");
+  const [showPass, setShowPass] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!username) { toast.error("اسم المستخدم مطلوب"); return; }
+    setSaving(true);
+    const res = await updateUserCredentials(user.id, { username, email: email || null, password: password || undefined });
+    setSaving(false);
+    if (res.success) { toast.success("تم تحديث بيانات المستخدم بنجاح ✓"); onSuccess(); }
+    else toast.error(res.error || "فشل في التحديث");
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <form onSubmit={handleSubmit} className="w-full max-w-lg bg-[#0f0f15] border border-white/10 rounded-3xl p-6 space-y-5 shadow-2xl">
+        <div className="flex items-center justify-between">
+          <h3 className="font-black text-white flex items-center gap-2"><Edit3 className="w-4 h-4 text-violet-400" /> تعديل بيانات المستخدم</h3>
+          <button type="button" onClick={onCancel} className="text-white/30 hover:text-white transition-colors"><X className="w-5 h-5" /></button>
+        </div>
+
+        <div className="space-y-4">
+          <Field label="اسم المستخدم" icon={<User className="w-3.5 h-3.5" />}>
+            <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="admin" required className={inputCls} />
+          </Field>
+
+          <Field label="كلمة المرور الجديدة (اتركها فارغة إذا لم ترد التغيير)" icon={<Lock className="w-3.5 h-3.5" />}>
+            <div className="relative">
+              <input value={password} onChange={(e) => setPassword(e.target.value)} type={showPass ? "text" : "password"} placeholder="••••••••" className={cn(inputCls, "pl-10")} />
+              <button type="button" onClick={() => setShowPass(!showPass)} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60">
+                {showPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+          </Field>
+
+          <Field label="البريد الإلكتروني (اختياري)" icon={<Mail className="w-3.5 h-3.5" />}>
+            <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="user@example.com" className={inputCls} />
+          </Field>
+        </div>
+
+        <div className="flex gap-3 pt-2">
+          <button type="submit" disabled={saving} className="flex-1 h-11 rounded-xl bg-gradient-to-r from-violet-600 to-blue-600 text-white font-black text-sm flex items-center justify-center gap-2 hover:opacity-90 transition-all disabled:opacity-50">
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            {saving ? "جاري الحفظ..." : "حفظ التعديلات"}
+          </button>
+          <button type="button" onClick={onCancel} className="h-11 px-6 rounded-xl bg-white/5 hover:bg-white/10 border border-white/8 text-white/60 font-bold text-sm transition-all">
+            إلغاء
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }
 

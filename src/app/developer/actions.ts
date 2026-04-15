@@ -159,12 +159,36 @@ export async function deleteDeveloperUser(userId: number) {
   }
 }
 
-export async function updateUserEmail(userId: number, email: string) {
+export async function updateUserCredentials(userId: number, data: { username: string; email: string | null; password?: string }) {
   await verifyDeveloper();
   try {
+    const dataToUpdate: any = { username: data.username, email: data.email };
+    if (data.password) {
+      dataToUpdate.password = hashPassword(data.password);
+    }
+    
+    const existing = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { username: data.username },
+          ...(data.email ? [{ email: data.email }] : []),
+        ],
+        id: { not: userId }
+      }
+    });
+
+    if (existing) {
+      if (existing.username === data.username) {
+        return { success: false, error: "اسم المستخدم موجود بالفعل" };
+      }
+      if (existing.email === data.email) {
+        return { success: false, error: "البريد الإلكتروني موجود بالفعل" };
+      }
+    }
+
     await prisma.user.update({
       where: { id: userId },
-      data: { email: email || null } as any,
+      data: dataToUpdate,
     });
     revalidatePath("/developer");
     return { success: true };

@@ -124,12 +124,12 @@ export default function PendingInvoicesPage() {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-slate-50/50 dark:bg-slate-800/50">
-                    <TableHead className="w-[100px]">رقم الفاتورة</TableHead>
-                    <TableHead>التاريخ</TableHead>
-                    <TableHead>العميل</TableHead>
-                    <TableHead className="text-right">الإجمالي</TableHead>
+                    <TableHead className="w-[120px] text-right">رقم الفاتورة</TableHead>
+                    <TableHead className="text-right">التاريخ</TableHead>
+                    <TableHead className="text-right">العميل</TableHead>
+                    <TableHead className="text-center">الإجمالي</TableHead>
                     <TableHead className="text-center">الحالة</TableHead>
-                    <TableHead className="text-left">الإجراءات</TableHead>
+                    <TableHead className="text-center">الإجراءات</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -139,10 +139,10 @@ export default function PendingInvoicesPage() {
                     <TableRow><TableCell colSpan={6} className="text-center py-10 text-muted-foreground">لا توجد فواتير مبيعات معلقة</TableCell></TableRow>
                   ) : filteredSales.map((inv) => (
                     <TableRow key={inv.id}>
-                      <TableCell className="font-mono font-bold">#{inv.invoiceNumber}</TableCell>
-                      <TableCell>{new Date(inv.invoiceDate).toLocaleDateString("ar-EG")}</TableCell>
-                      <TableCell>{inv.customer.name}</TableCell>
-                      <TableCell className="text-right font-bold text-blue-600">
+                      <TableCell className="font-mono font-bold text-right">#{inv.invoiceNumber}</TableCell>
+                      <TableCell className="text-right">{new Date(inv.invoiceDate).toLocaleDateString("ar-EG")}</TableCell>
+                      <TableCell className="text-right">{inv.customer.name}</TableCell>
+                      <TableCell className="text-center font-bold text-blue-600">
                         {inv.total.toLocaleString("ar-EG")} ج.م
                       </TableCell>
                       <TableCell className="text-center">
@@ -150,7 +150,7 @@ export default function PendingInvoicesPage() {
                           بانتظار التأكيد
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-left">
+                      <TableCell className="text-center">
                         <Button 
                           onClick={() => {
                             setSelectedInvoice(inv);
@@ -175,12 +175,12 @@ export default function PendingInvoicesPage() {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-slate-50/50 dark:bg-slate-800/50">
-                    <TableHead className="w-[100px]">رقم الفاتورة</TableHead>
-                    <TableHead>التاريخ</TableHead>
-                    <TableHead>المورد</TableHead>
-                    <TableHead className="text-right">الإجمالي</TableHead>
+                    <TableHead className="w-[120px] text-right">رقم الفاتورة</TableHead>
+                    <TableHead className="text-right">التاريخ</TableHead>
+                    <TableHead className="text-right">المورد</TableHead>
+                    <TableHead className="text-center">الإجمالي</TableHead>
                     <TableHead className="text-center">الحالة</TableHead>
-                    <TableHead className="text-left">الإجراءات</TableHead>
+                    <TableHead className="text-center">الإجراءات</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -190,10 +190,10 @@ export default function PendingInvoicesPage() {
                     <TableRow><TableCell colSpan={6} className="text-center py-10 text-muted-foreground">لا توجد فواتير مشتريات معلقة</TableCell></TableRow>
                   ) : filteredPurchases.map((inv) => (
                     <TableRow key={inv.id}>
-                      <TableCell className="font-mono font-bold">#{inv.invoiceNumber}</TableCell>
-                      <TableCell>{new Date(inv.invoiceDate).toLocaleDateString("ar-EG")}</TableCell>
-                      <TableCell>{inv.supplier.name}</TableCell>
-                      <TableCell className="text-right font-bold text-green-600">
+                      <TableCell className="font-mono font-bold text-right">#{inv.invoiceNumber}</TableCell>
+                      <TableCell className="text-right">{new Date(inv.invoiceDate).toLocaleDateString("ar-EG")}</TableCell>
+                      <TableCell className="text-right">{inv.supplier.name}</TableCell>
+                      <TableCell className="text-center font-bold text-green-600">
                         {inv.total.toLocaleString("ar-EG")} ج.م
                       </TableCell>
                       <TableCell className="text-center">
@@ -201,7 +201,7 @@ export default function PendingInvoicesPage() {
                           بانتظار التأكيد
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-left">
+                      <TableCell className="text-center">
                         <Button 
                           onClick={() => {
                             setSelectedInvoice(inv);
