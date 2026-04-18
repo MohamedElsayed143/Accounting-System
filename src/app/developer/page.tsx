@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -34,6 +34,8 @@ interface UserData {
   username: string;
   email: string | null;
   role: string;
+  tenantSchema: string | null;
+  parentId: number | null;
   createdAt: string | Date;
   maxDevices: number;
 }
@@ -298,6 +300,21 @@ function UsersTab() {
     setLoading(false);
   }, []);
 
+  const groupedUsers = useMemo(() => {
+    const groups: Record<string, UserData[]> = {};
+    users.forEach((u) => {
+      const key = u.tenantSchema || "SYSTEM";
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(u);
+    });
+    // Sort groups: SYSTEM first, then alphabetically by schema name
+    return Object.entries(groups).sort(([a], [b]) => {
+      if (a === "SYSTEM") return -1;
+      if (b === "SYSTEM") return 1;
+      return a.localeCompare(b);
+    });
+  }, [users]);
+
   useEffect(() => { loadUsers(); }, [loadUsers]);
 
   const handleDelete = async (id: number, username: string) => {
@@ -372,62 +389,99 @@ function UsersTab() {
             <p className="font-bold">لا يوجد مستخدمون</p>
           </div>
         ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-white/5 bg-white/[0.02]">
-                {["المستخدم", "البريد الإلكتروني", "الدور", "الأجهزة", "تاريخ الإنشاء", ""].map((h) => (
-                  <th key={h} className="px-5 py-3.5 text-right text-[10px] font-black text-white/30 uppercase tracking-widest">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/[0.04]">
-              {users.map((user) => (
-                <tr key={user.id} className="group hover:bg-white/[0.02] transition-colors">
-                  <td className="px-5 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-500/20 to-blue-500/20 border border-violet-500/20 flex items-center justify-center text-violet-400 font-black text-xs">
-                        {user.username.charAt(0).toUpperCase()}
-                      </div>
-                      <span className="font-bold text-white">{user.username}</span>
-                    </div>
-                  </td>
-                  <td className="px-5 py-4">
-                    <span className="text-white/50 font-mono text-xs">{user.email || "—"}</span>
-                  </td>
-                  <td className="px-5 py-4">
-                    <span className={cn("text-[10px] font-black px-2.5 py-1 rounded-full border", ROLE_COLORS[user.role] || "text-white/50 bg-white/5 border-white/10")}>
-                      {ROLE_LABELS[user.role] || user.role}
-                    </span>
-                  </td>
-                  <td className="px-5 py-4">
-                    <div className="flex items-center gap-1.5 text-white/40 text-xs">
-                      <Monitor className="w-3 h-3" /> {user.maxDevices}
-                    </div>
-                  </td>
-                  <td className="px-5 py-4 text-white/30 text-xs font-mono">
-                    {new Date(user.createdAt).toLocaleDateString("ar-EG")}
-                  </td>
-                  <td className="px-5 py-4">
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => setEditingUser(user)}
-                        className="opacity-0 group-hover:opacity-100 h-7 w-7 rounded-lg bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/20 text-violet-400 flex items-center justify-center transition-all"
-                      >
-                        <Edit3 className="w-3 h-3" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(user.id, user.username)}
-                        disabled={deleting === user.id || user.email === DEVELOPER_EMAIL}
-                        className="opacity-0 group-hover:opacity-100 h-7 w-7 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-400 flex items-center justify-center transition-all disabled:opacity-20 disabled:cursor-not-allowed"
-                      >
-                        {deleting === user.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
-                      </button>
-                    </div>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-white/5 bg-white/[0.02]">
+                  {["المستخدم", "البريد الإلكتروني", "الدور", "كود السكيمة", "الأجهزة", "تاريخ الإنشاء", ""].map((h) => (
+                    <th key={h} className="px-5 py-3.5 text-right text-[10px] font-black text-white/30 uppercase tracking-widest">{h}</th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-white/[0.04]">
+                {groupedUsers.map(([schema, schemaUsers]) => (
+                  <React.Fragment key={schema}>
+                    {/* Schema Header Row */}
+                    <tr className="bg-white/[0.03] border-y border-white/5">
+                      <td colSpan={7} className="px-5 py-2">
+                        <div className="flex items-center gap-2">
+                          <Shield className="w-3 h-3 text-violet-400" />
+                          <span className="text-[10px] font-black text-violet-300 uppercase tracking-widest">
+                            {schema === "SYSTEM" ? "إدارة النظام (System)" : `شركة: ${schema}`}
+                          </span>
+                          <span className="text-[10px] text-white/20 font-bold bg-white/5 px-1.5 py-0.5 rounded">
+                            {schemaUsers.length} مستخدم
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                    {schemaUsers.map((user) => (
+                      <tr key={user.id} className="group hover:bg-white/[0.02] transition-colors">
+                        <td className="px-5 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className={cn(
+                              "w-8 h-8 rounded-xl flex items-center justify-center text-xs font-black border transition-all",
+                              user.role === "ADMIN" 
+                                ? "bg-amber-500/20 border-amber-500/30 text-amber-500 shadow-lg shadow-amber-500/10" 
+                                : "bg-violet-500/20 border-violet-500/20 text-violet-400"
+                            )}>
+                              {user.username.charAt(0).toUpperCase()}
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="font-bold text-white text-sm">{user.username}</span>
+                              {user.role === "WORKER" && (
+                                <span className="text-[10px] text-white/20 font-bold flex items-center gap-1">
+                                  <ChevronDown className="w-2.5 h-2.5 rotate-90" /> موظف تابع
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-5 py-4">
+                          <span className="text-white/50 font-mono text-xs">{user.email || "—"}</span>
+                        </td>
+                        <td className="px-5 py-4">
+                          <span className={cn("text-[10px] font-black px-2.5 py-1 rounded-full border", ROLE_COLORS[user.role] || "text-white/50 bg-white/5 border-white/10")}>
+                            {ROLE_LABELS[user.role] || user.role}
+                          </span>
+                        </td>
+                        <td className="px-5 py-4">
+                          <span className="text-white/40 font-mono text-[10px] bg-white/5 px-2 py-1 rounded border border-white/10 block w-fit">
+                            {user.tenantSchema || "SYSTEM"}
+                          </span>
+                        </td>
+                        <td className="px-5 py-4">
+                          <div className="flex items-center gap-1.5 text-white/40 text-xs">
+                            <Monitor className="w-3 h-3" /> {user.maxDevices}
+                          </div>
+                        </td>
+                        <td className="px-5 py-4 text-white/30 text-xs font-mono">
+                          {new Date(user.createdAt).toLocaleDateString("ar-EG")}
+                        </td>
+                        <td className="px-5 py-4">
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => setEditingUser(user)}
+                              className="opacity-0 group-hover:opacity-100 h-7 w-7 rounded-lg bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/20 text-violet-400 flex items-center justify-center transition-all"
+                            >
+                              <Edit3 className="w-3 h-3" />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(user.id, user.username)}
+                              disabled={deleting === user.id || user.email === DEVELOPER_EMAIL}
+                              className="opacity-0 group-hover:opacity-100 h-7 w-7 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-400 flex items-center justify-center transition-all disabled:opacity-20 disabled:cursor-not-allowed"
+                            >
+                              {deleting === user.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </React.Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>

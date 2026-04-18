@@ -213,9 +213,14 @@ export async function updateFinancialSettingsAction(data: any) {
  * Fetches all users for admin view.
  */
 export async function getUsers() {
-  await verifyAdmin();
+  const session = await verifyAdmin();
+  const tenantSchema = (session.user as any).tenantSchema;
+  
   try {
     return await publicPrisma.user.findMany({
+      where: {
+        tenantSchema: tenantSchema,
+      },
       select: {
         id: true,
         username: true,
@@ -234,7 +239,9 @@ export async function getUsers() {
  * Creates a new user (Worker/Admin).
  */
 export async function createUser(data: { username: string; password: string; role: string }) {
-  await verifyAdmin();
+  const session = await verifyAdmin();
+  const tenantSchema = (session.user as any).tenantSchema;
+
   try {
     const existing = await publicPrisma.user.findUnique({ where: { username: data.username } });
     if (existing) {
@@ -247,6 +254,8 @@ export async function createUser(data: { username: string; password: string; rol
         username: data.username,
         password: hashed,
         role: data.role,
+        tenantSchema: tenantSchema,
+        parentId: session.userId,
       },
     });
 
@@ -263,6 +272,7 @@ export async function createUser(data: { username: string; password: string; rol
  */
 export async function deleteUser(id: number) {
   const session = await verifyAdmin();
+  const tenantSchema = (session.user as any).tenantSchema;
   
   // Prevent admin from deleting themselves
   if (session.userId === id) {
@@ -270,6 +280,15 @@ export async function deleteUser(id: number) {
   }
 
   try {
+    const target = await publicPrisma.user.findUnique({
+      where: { id },
+      select: { tenantSchema: true }
+    });
+
+    if (!target || target.tenantSchema !== tenantSchema) {
+      return { error: "غير مصرح لك بحذف هذا المستخدم" };
+    }
+
     await publicPrisma.user.delete({ where: { id } });
     revalidatePath("/settings");
     return { success: true };

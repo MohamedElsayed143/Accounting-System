@@ -72,6 +72,8 @@ export async function getDeveloperUsers() {
         username: true,
         email: true,
         role: true,
+        tenantSchema: true,
+        parentId: true,
         createdAt: true,
         maxDevices: true,
       },
