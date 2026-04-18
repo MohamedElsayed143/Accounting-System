@@ -174,19 +174,78 @@ async function main() {
 
 
 
-  // 5. مزامنة المتتاليات (Sequences) لتجنب أخطاء الإضافة في قاعدة بيانات PostgreSQL
+  // 5. إعدادات النظام العامة (GeneralSettings)
+  // ✅ [مضاف] كانت غائبة من seed_coa.ts وتسبب بقاء إعدادات قديمة بعد الريسيت
+  await prisma.generalSettings.upsert({
+    where: { id: 1 },
+    update: {
+      staffActivityAlerts: true,
+      inventoryAlerts: true,
+      vaultBankAlerts: true,
+      minVaultBalance: 1000,
+      financialAlerts: true,
+      showDueDateOnInvoices: false,
+      requireApprovalForTransfers: false,
+      requireApprovalForSafeCreation: false,
+      requireApprovalForBankCreation: false,
+      requireApprovalForVouchers: false,
+    },
+    create: { id: 1 },
+  })
+  console.log('⚙️  تم ضبط الإعدادات العامة للنظام.')
 
-  try {
 
-    console.log('🔄 جارٍ مزامنة متتاليات معرفات الجداول...')
 
-    await prisma.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('"TreasurySafe"', 'id'), COALESCE((SELECT MAX(id) FROM "TreasurySafe"), 1), true)`)
+  // 6. إنشاء المستودع الرئيسي الافتراضي
+  // ✅ [مضاف] كان غياب المستودع يسبب فشل حركات المخزون المرتبطة بالمستودع
+  await prisma.warehouse.upsert({
+    where: { id: 1 },
+    update: { name: 'المخزن الرئيسي', isDefault: true },
+    create: {
+      id: 1,
+      name: 'المخزن الرئيسي',
+      location: null,
+      isDefault: true,
+    },
+  })
+  console.log('🏭 تم إنشاء المستودع الرئيسي الافتراضي.')
 
-    await prisma.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('"Account"', 'id'), COALESCE((SELECT MAX(id) FROM "Account"), 1), true)`)
 
-    await prisma.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('"CompanySettings"', 'id'), COALESCE((SELECT MAX(id) FROM "CompanySettings"), 1), true)`)
 
-  } catch (e: any) {
+    // 5. مزامنة المتتاليات (Sequences) لتجنب أخطاء الإضافة في قاعدة بيانات PostgreSQL
+
+    try {
+      console.log('🔄 جارٍ تهيئة متتاليات النظام (SystemSequence)...')
+      const sequencesToInit = [
+        'JournalEntry',
+        'SalesInvoice',
+        'PurchaseInvoice',
+        'SalesReturn',
+        'PurchaseReturn',
+        'Quotation',
+        'ReceiptVoucher',
+        'PaymentVoucher',
+        'TreasuryTransfer',
+        'Category'
+      ];
+
+      for (const seqId of sequencesToInit) {
+        await prisma.systemSequence.upsert({
+          where: { id: seqId },
+          update: {}, // Don't reset if already exists during seed (upsert safety)
+          create: { id: seqId, lastValue: 0 }
+        });
+      }
+
+      console.log('🔄 جارٍ مزامنة متتاليات معرفات الجداول...')
+
+      await prisma.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('"TreasurySafe"', 'id'), COALESCE((SELECT MAX(id) FROM "TreasurySafe"), 1), true)`)
+
+      await prisma.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('"Account"', 'id'), COALESCE((SELECT MAX(id) FROM "Account"), 1), true)`)
+
+      await prisma.$executeRawUnsafe(`SELECT setval(pg_get_serial_sequence('"CompanySettings"', 'id'), COALESCE((SELECT MAX(id) FROM "CompanySettings"), 1), true)`)
+
+    } catch (e: any) {
 
     if (e.message && e.message.includes('pg_get_serial_sequence')) {
 

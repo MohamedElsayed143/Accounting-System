@@ -1,9 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { Prisma } from "@prisma/client";
 
 import { getTenantPrisma, publicPrisma } from "@/lib/tenant-prisma";
 import { triggerTreasuryAlert } from "@/lib/notifications";
+import { SequenceService } from "@/lib/services/SequenceService";
+import { getSession } from "@/lib/auth";
+import { hasPermission } from "@/lib/permissions";
 
 // تعريف الأنواع المستخدمة
 export type SalesReturnItemInput = {
@@ -33,14 +37,17 @@ export type SalesReturnInput = {
   items: SalesReturnItemInput[];
 };
 
-async function generateReturnNumber(): Promise<number> {
-  const lastReturn = await (await getTenantPrisma()).salesReturn.findFirst({
-    orderBy: { returnNumber: 'desc' },
-  });
-  return lastReturn ? lastReturn.returnNumber + 1 : 1;
+async function generateReturnNumber(tx: Prisma.TransactionClient): Promise<number> {
+  return await SequenceService.getNextSequenceValue(tx, "SalesReturn");
 }
 
 export async function getNextSalesReturnNumber(): Promise<number> {
+  const sequence = await (await getTenantPrisma()).systemSequence.findUnique({
+    where: { id: "SalesReturn" },
+    select: { lastValue: true },
+  });
+  if (sequence) return sequence.lastValue + 1;
+
   const lastReturn = await (await getTenantPrisma()).salesReturn.findFirst({
     orderBy: { returnNumber: 'desc' },
     select: { returnNumber: true },
@@ -98,6 +105,11 @@ export async function getSalesReturnById(id: number) {
 }
 
 export async function createSalesReturn(data: SalesReturnInput) {
+  const session = await getSession();
+  if (!session) throw new Error("يجب تسجيل الدخول أولاً");
+
+  const canManage = await hasPermission(session.userId, "returns_sales");
+  if (!canManage) throw new Error("ليس لديك صلاحية إنشاء مرتجعات مبيعات");
   try {
     // التحقق من وجود الفاتورة مع المرتجعات السابقة والأصناف
     const invoice = await (await getTenantPrisma()).salesInvoice.findUnique({
@@ -175,18 +187,19 @@ export async function createSalesReturn(data: SalesReturnInput) {
       }
     }
 
-    // توليد رقم مرتجع إذا كان 0
-    let returnNumber = data.returnNumber;
-    if (returnNumber === 0) {
-      returnNumber = await generateReturnNumber();
-    } else {
-      const existing = await (await getTenantPrisma()).salesReturn.findUnique({
-        where: { returnNumber },
-      });
-      if (existing) throw new Error(`رقم المرتجع ${returnNumber} مستخدم مسبقاً`);
-    }
+    // logic moved inside transaction for atomic numbering
 
     const result = await (await getTenantPrisma()).$transaction(async (tx) => {
+      // توليد أو التحقق من رقم المرتجع
+      let returnNumber = data.returnNumber;
+      if (returnNumber === 0) {
+        returnNumber = await generateReturnNumber(tx);
+      } else {
+        const existing = await tx.salesReturn.findUnique({
+          where: { returnNumber },
+        });
+        if (existing) throw new Error(`رقم المرتجع ${returnNumber} مستخدم مسبقاً`);
+      }
       const salesReturn = await tx.salesReturn.create({
         data: {
           returnNumber,
@@ -290,13 +303,7 @@ export async function createSalesReturn(data: SalesReturnInput) {
         });
       }
 
-      // ✅ الترحيل للمحاسبة (Accounting Posting)
-      const lastEntry = await tx.journalEntry.findFirst({
-        orderBy: { entryNumber: "desc" },
-        select: { entryNumber: true },
-      });
-      let nextEntryNum = (lastEntry?.entryNumber || 0) + 1;
-
+      // ✅ الترحيل للمحاسبة (Accounting Posting) using atomic sequence
       // 1. عكس الإيراد والضريبة
       const revenueAccount = await tx.account.findUnique({ where: { code: "4101" } });
       const customer = await tx.customer.findUnique({ where: { id: data.customerId }, select: { accountId: true } });
@@ -313,9 +320,10 @@ export async function createSalesReturn(data: SalesReturnInput) {
       }
 
       if (revenueAccount && refundAccountId) {
+        const refundEntryNo = await SequenceService.getNextSequenceValue(tx, "JournalEntry");
         await tx.journalEntry.create({
           data: {
-            entryNumber: nextEntryNum++,
+            entryNumber: refundEntryNo,
             date: data.returnDate,
             description: `مرتجع مبيعات #${returnNumber} - فاتورة #${invoice.invoiceNumber}`,
             sourceType: "SALES_RETURN",
@@ -356,9 +364,10 @@ export async function createSalesReturn(data: SalesReturnInput) {
         }
 
         if (returnCogsValue > 0) {
+          const cogsEntryNo = await SequenceService.getNextSequenceValue(tx, "JournalEntry");
           await tx.journalEntry.create({
             data: {
-              entryNumber: nextEntryNum++,
+              entryNumber: cogsEntryNo,
               date: data.returnDate,
               description: `عكس تكلفة بضاعة مرتجعة #${returnNumber}`,
               sourceType: "SALES_RETURN",
@@ -411,6 +420,9 @@ export async function createSalesReturn(data: SalesReturnInput) {
 }
 
 export async function updateSalesReturnStatus(id: number, status: string) {
+  const session = await getSession();
+  if (!session) throw new Error("Unauthorized");
+  if (!(await hasPermission(session.userId, "returns_sales"))) throw new Error("Permission denied");
   try {
     const updated = await (await getTenantPrisma()).salesReturn.update({
       where: { id },
@@ -425,6 +437,9 @@ export async function updateSalesReturnStatus(id: number, status: string) {
 }
 
 export async function deleteSalesReturn(id: number) {
+  const session = await getSession();
+  if (!session) throw new Error("Unauthorized");
+  if (!(await hasPermission(session.userId, "returns_sales"))) throw new Error("Permission denied");
   try {
     await (await getTenantPrisma()).$transaction(async (tx) => {
       // 1. استرجاع بيانات المرتجع مع الأصناف

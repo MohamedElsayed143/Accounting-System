@@ -1,9 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { Prisma } from "@prisma/client";
 
 import { getTenantPrisma, publicPrisma } from "@/lib/tenant-prisma";
 import { triggerTreasuryAlert } from "@/lib/notifications";
+import { SequenceService } from "@/lib/services/SequenceService";
+import { getSession } from "@/lib/auth";
+import { hasPermission } from "@/lib/permissions";
 
 // تعريف الأنواع
 export type PurchaseReturnItemInput = {
@@ -34,9 +38,20 @@ export type PurchaseReturnInput = {
 };
 
 // توليد رقم مرتجع فريد
-async function generateReturnNumber(): Promise<number> {
+async function generateReturnNumber(tx: Prisma.TransactionClient): Promise<number> {
+  return await SequenceService.getNextSequenceValue(tx, "PurchaseReturn");
+}
+
+export async function getNextPurchaseReturnNumber(): Promise<number> {
+  const sequence = await (await getTenantPrisma()).systemSequence.findUnique({
+    where: { id: "PurchaseReturn" },
+    select: { lastValue: true },
+  });
+  if (sequence) return sequence.lastValue + 1;
+
   const lastReturn = await (await getTenantPrisma()).purchaseReturn.findFirst({
     orderBy: { returnNumber: 'desc' },
+    select: { returnNumber: true },
   });
   return lastReturn ? lastReturn.returnNumber + 1 : 1;
 }
@@ -94,6 +109,11 @@ export async function getPurchaseReturnById(id: number) {
 
 // إنشاء مرتجع شراء جديد
 export async function createPurchaseReturn(data: PurchaseReturnInput) {
+  const session = await getSession();
+  if (!session) throw new Error("يجب تسجيل الدخول أولاً");
+
+  const canManage = await hasPermission(session.userId, "returns_purchase");
+  if (!canManage) throw new Error("ليس لديك صلاحية إنشاء مرتجعات مشتريات");
   try {
     // التحقق من وجود الفاتورة
     const invoice = await (await getTenantPrisma()).purchaseInvoice.findUnique({
@@ -161,18 +181,19 @@ export async function createPurchaseReturn(data: PurchaseReturnInput) {
       if (!bank) throw new Error("البنك غير موجود");
     }
 
-    // توليد رقم مرتجع
-    let returnNumber = data.returnNumber;
-    if (returnNumber === 0) {
-      returnNumber = await generateReturnNumber();
-    } else {
-      const existing = await (await getTenantPrisma()).purchaseReturn.findUnique({
-        where: { returnNumber },
-      });
-      if (existing) throw new Error(`رقم المرتجع ${returnNumber} مستخدم مسبقاً`);
-    }
+    // numbering moved inside transaction
 
     const result = await (await getTenantPrisma()).$transaction(async (tx) => {
+      // توليد أو التحقق من رقم المرتجع
+      let returnNumber = data.returnNumber;
+      if (returnNumber === 0) {
+        returnNumber = await generateReturnNumber(tx);
+      } else {
+        const existing = await tx.purchaseReturn.findUnique({
+          where: { returnNumber },
+        });
+        if (existing) throw new Error(`رقم المرتجع ${returnNumber} مستخدم مسبقاً`);
+      }
       const purchaseReturn = await tx.purchaseReturn.create({
         data: {
           returnNumber,
@@ -241,7 +262,7 @@ export async function createPurchaseReturn(data: PurchaseReturnInput) {
         });
       }
 
-      // تحديث رصيد الخزنة/البنك مباشرة (بدون إنشاء سند قبض لأن سندات القبض مرتبطة بالعملاء وليس الموردين)
+      // تحديث رصيد الخزنة/البنك مباشرة (استرداد المال من المورد)
       if ((data.refundMethod === 'safe' || data.refundMethod === 'cash') && data.safeId) {
         await tx.treasurySafe.update({
           where: { id: data.safeId },
@@ -252,6 +273,90 @@ export async function createPurchaseReturn(data: PurchaseReturnInput) {
           where: { id: data.bankId },
           data: { balance: { increment: data.total } },
         });
+      }
+
+      // ✅ [مضاف] الترحيل للمحاسبة — كان غائباً تماماً
+      // مرتجع الشراء: نعكس قيد الشراء الأصلي (كان: مدين مخزون / دائن مورد)
+      const inventoryAccount = await tx.account.findUnique({ where: { code: "120301" } });
+      const supplier = await tx.supplier.findUnique({
+        where: { id: data.supplierId },
+        select: { accountId: true },
+      });
+
+      if (inventoryAccount && supplier?.accountId) {
+        const returnEntryNo = await SequenceService.getNextSequenceValue(tx, "JournalEntry");
+        await tx.journalEntry.create({
+          data: {
+            entryNumber: returnEntryNo,
+            date: data.returnDate,
+            description: `مرتجع مشتريات #${returnNumber} - فاتورة #${invoice.invoiceNumber}`,
+            sourceType: "PURCHASE_RETURN",
+            sourceId: purchaseReturn.id,
+            items: {
+              create: [
+                {
+                  accountId: supplier.accountId,
+                  debit: data.total,
+                  credit: 0,
+                  description: `عكس استحقاق مورد مرتجع مشتريات #${returnNumber}`,
+                },
+                {
+                  accountId: inventoryAccount.id,
+                  debit: 0,
+                  credit: data.total,
+                  description: `خروج بضاعة مرتجعة من المخزون #${returnNumber}`,
+                },
+              ],
+            },
+          },
+        });
+      }
+
+      // القيد 2: تسوية طريقة الاسترداد (خزنة/بنك/آجل)
+      if (data.refundMethod !== 'credit' && supplier?.accountId) {
+        let refundAccountId: number | null = null;
+        if (data.refundMethod === 'safe' || data.refundMethod === 'cash') {
+          const safe = await tx.treasurySafe.findUnique({
+            where: { id: data.safeId! },
+            select: { accountId: true },
+          });
+          refundAccountId = safe?.accountId || null;
+        } else if (data.refundMethod === 'bank') {
+          const bank = await tx.treasuryBank.findUnique({
+            where: { id: data.bankId! },
+            select: { accountId: true },
+          });
+          refundAccountId = bank?.accountId || null;
+        }
+
+        if (refundAccountId) {
+          const refundEntryNo = await SequenceService.getNextSequenceValue(tx, "JournalEntry");
+          await tx.journalEntry.create({
+            data: {
+              entryNumber: refundEntryNo,
+              date: data.returnDate,
+              description: `استرداد قيمة مرتجع مشتريات #${returnNumber}`,
+              sourceType: "PURCHASE_RETURN",
+              sourceId: purchaseReturn.id,
+              items: {
+                create: [
+                  {
+                    accountId: refundAccountId,
+                    debit: data.total,
+                    credit: 0,
+                    description: `استلام مبلغ مرتجع مشتريات #${returnNumber}`,
+                  },
+                  {
+                    accountId: supplier.accountId,
+                    debit: 0,
+                    credit: data.total,
+                    description: `تسوية سداد مورد مرتجع مشتريات #${returnNumber}`,
+                  },
+                ],
+              },
+            },
+          });
+        }
       }
 
       return {
@@ -282,6 +387,9 @@ export async function createPurchaseReturn(data: PurchaseReturnInput) {
 
 // تحديث حالة مرتجع
 export async function updatePurchaseReturnStatus(id: number, status: string) {
+  const session = await getSession();
+  if (!session) throw new Error("Unauthorized");
+  if (!(await hasPermission(session.userId, "returns_purchase"))) throw new Error("Permission denied");
   try {
     const updated = await (await getTenantPrisma()).purchaseReturn.update({
       where: { id },
@@ -297,6 +405,9 @@ export async function updatePurchaseReturnStatus(id: number, status: string) {
 
 // حذف مرتجع
 export async function deletePurchaseReturn(id: number) {
+  const session = await getSession();
+  if (!session) throw new Error("Unauthorized");
+  if (!(await hasPermission(session.userId, "returns_purchase"))) throw new Error("Permission denied");
   try {
     await (await getTenantPrisma()).$transaction(async (tx) => {
       // 1. استرجاع بيانات المرتجع مع الأصناف
@@ -334,7 +445,9 @@ export async function deletePurchaseReturn(id: number) {
         });
       }
 
-      // 4. حذف حركات المخزون وحذف المرتجع نفسه
+      // 4. حذف القيود المحاسبية وحركات المخزون والمرتجع نفسه
+      // ✅ [مضاف] حذف القيود المحاسبية التي أصبحنا ننشئها الآن في createPurchaseReturn
+      await tx.journalEntry.deleteMany({ where: { sourceType: "PURCHASE_RETURN", sourceId: id } });
       await tx.stockMovement.deleteMany({ where: { purchaseReturnId: id } });
       await tx.purchaseReturn.delete({ where: { id } });
     });

@@ -454,7 +454,16 @@ function InvoiceFormStep({
     if (isViewMode) return;
 
     let appliedUnitPrice = product.sellPrice;
-    let appliedProfitMargin = product.profitMargin || 0;
+    // حساب هامش الربح تلقائياً بناءً على سعر الشراء والبيع
+    const _buyPrice = product.buyPrice || 0;
+    let appliedProfitMargin: number;
+    if (appliedUnitPrice > 0) {
+      appliedProfitMargin = _buyPrice > 0
+        ? Number(((1 - _buyPrice / appliedUnitPrice) * 100).toFixed(2))
+        : 100;
+    } else {
+      appliedProfitMargin = 0;
+    }
 
     if (product.currentStock <= 0) {
       toast.warning(
@@ -517,14 +526,17 @@ function InvoiceFormStep({
         if (field === "unitPrice") {
           const newUnitPrice = Number(updated.unitPrice);
           const buyPrice = updated.buyPrice || 0;
-          if (buyPrice > 0) {
-            if (newUnitPrice > 0) {
+          if (newUnitPrice > 0) {
+            if (buyPrice > 0) {
               updated.profitMargin = Number(
                 ((1 - buyPrice / newUnitPrice) * 100).toFixed(2),
               );
             } else {
-              updated.profitMargin = -100;
+              // لا يوجد سعر شراء مسجل — سعر البيع كله ربح
+              updated.profitMargin = 100;
             }
+          } else {
+            updated.profitMargin = -100;
           }
         }
 
@@ -1251,7 +1263,7 @@ function InvoiceFormStep({
                       <th className="text-center font-bold text-gray-500 text-xs uppercase tracking-wide px-3 py-3 bg-gray-50/30 w-28">
                         السعر
                       </th>
-                      <th className="text-center font-bold text-emerald-500 text-xs uppercase tracking-wide px-3 py-3 bg-gray-50/30 w-24">
+                      <th className="text-center font-bold text-emerald-500 text-xs uppercase tracking-wide px-3 py-3 bg-gray-50/30 w-32">
                         الربح %
                       </th>
                       <th className="text-center font-bold text-rose-500 text-xs uppercase tracking-wide px-3 py-3 bg-gray-50/30 w-24">

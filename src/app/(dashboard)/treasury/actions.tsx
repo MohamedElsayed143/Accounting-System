@@ -2,9 +2,11 @@
 
 import { getTenantPrisma, publicPrisma } from "@/lib/tenant-prisma";
 import { revalidatePath } from "next/cache";
+import { Prisma } from "@prisma/client";
 import { getSession } from "@/lib/auth";
 import { hasPermission } from "@/lib/permissions";
 import { triggerStaffActivityAlert, triggerTreasuryAlert } from "@/lib/notifications";
+import { SequenceService } from "@/lib/services/SequenceService";
 
 // تعريف الأنواع
 export interface TreasuryStats {
@@ -48,29 +50,29 @@ async function ensureMainSafe() {
   });
   
   if (!safe || !safe.accountId) {
-    // 1. Ensure COA Parent exists
-    const parent = await (await getTenantPrisma()).account.findUnique({ where: { code: '1201' } });
-    if (!parent) throw new Error("Parent COA account 1201 missing");
-
+    // ✅ [مصلح] يربط الخزنة بالحساب الطرفي 120101 (الخزينة الرئيسية) لا بالمجموعة 1201
     const result = await (await getTenantPrisma()).$transaction(async (tx) => {
       let existingSafe = await tx.treasurySafe.findFirst({
         where: { OR: [{ isPrimary: true }, { name: "الخزنة الرئيسية" }] }
       });
 
-      // Find or create COA account
-      let account = await tx.account.findFirst({
-        where: { code: '1201' }
-      });
+      // البحث عن الحساب الطرفي الصحيح للخزينة الرئيسية
+      let account = await tx.account.findUnique({ where: { code: '120101' } });
 
       if (!account) {
+        // محاولة استخدام مجموعة 1201 كـ parent
+        const parent = await tx.account.findUnique({ where: { code: '1201' } });
+        if (!parent) throw new Error("حساب النقدية بالخزينة (1201) غير موجود في شجرة الحسابات");
         account = await tx.account.create({
           data: {
-            code: '1201',
-            name: "النقدية في الخزينة",
+            code: '120101',
+            name: 'الخزينة الرئيسية',
+            nameEn: 'Main Safe Account',
             type: parent.type,
             parentId: parent.id,
             level: parent.level + 1,
-            isSelectable: true
+            isTerminal: true,
+            isSelectable: true,
           }
         });
       }
@@ -439,7 +441,7 @@ export async function createBank(data: { name: string; accountNumber: string; br
         where: { code: '1205' }
       });
 
-      if (!parent) throw new Error("حساب البنوك الرئيسي (1102) غير موجود في شجرة الحسابات");
+      if (!parent) throw new Error("حساب البنوك الرئيسي (1205) غير موجود في شجرة الحسابات"); // ✅ [مصلح] كان يقول 1102 بالخطأ
 
       // 2. Suggest Next Code
       const lastChild = await tx.account.findFirst({
@@ -492,10 +494,10 @@ export async function createBank(data: { name: string; accountNumber: string; br
         }
 
         if (openingAccId) {
-          const lastEntry = await tx.journalEntry.findFirst({ orderBy: { entryNumber: 'desc' } });
+          const entryNumber = await SequenceService.getNextSequenceValue(tx, "JournalEntry");
           await tx.journalEntry.create({
             data: {
-              entryNumber: (lastEntry?.entryNumber || 0) + 1,
+              entryNumber,
               date: new Date(),
               description: `رصيد افتتاحي - ${data.name}`,
               sourceType: 'MANUAL',
@@ -518,7 +520,7 @@ export async function createBank(data: { name: string; accountNumber: string; br
       await triggerStaffActivityAlert(
         session.user,
         "إضافة بنك",
-        `تم إضافة بنك جديد: ${data.name} (رصيد: ${data.initialBalance})`
+        `تم إضافة بنك جديد: ${result.name} (رصيد: ${result.balance})`
       );
     }
 
@@ -1197,6 +1199,27 @@ export async function getCustomers() {
   }
 }
 
+export async function getNextReceiptVoucherNumber(): Promise<string> {
+  const sequence = await (await getTenantPrisma()).systemSequence.findUnique({
+    where: { id: "ReceiptVoucher" },
+    select: { lastValue: true },
+  });
+  if (sequence) return `RV-${sequence.lastValue + 1}`;
+
+  const lastVoucher = await (await getTenantPrisma()).receiptVoucher.findFirst({
+    orderBy: { id: "desc" },
+    select: { voucherNumber: true },
+  });
+  if (!lastVoucher) return "RV-1";
+  const lastNum = parseInt(lastVoucher.voucherNumber.split("-")[1] || "0");
+  return `RV-${lastNum + 1}`;
+}
+
+async function generateReceiptVoucherNumber(tx: Prisma.TransactionClient): Promise<string> {
+  const nextVal = await SequenceService.getNextSequenceValue(tx, "ReceiptVoucher");
+  return `RV-${nextVal}`;
+}
+
 // 8. إنشاء سند قبض
 export async function createReceiptVoucher(data: {
   voucherNumber: string;
@@ -1247,12 +1270,8 @@ export async function createReceiptVoucher(data: {
     const pendingAlerts: { type: 'treasury', name: string, balance: number }[] = [];
 
     const result = await (await getTenantPrisma()).$transaction(async (tx) => {
-      // 1. Get current entry number
-      const lastEntry = await tx.journalEntry.findFirst({
-        orderBy: { entryNumber: 'desc' },
-        select: { entryNumber: true }
-      });
-      const entryNumber = (lastEntry?.entryNumber || 0) + 1;
+      // 1. Get current entry number using atomic sequence
+      const entryNumber = await SequenceService.getNextSequenceValue(tx, "JournalEntry");
 
       // 2. Find Treasury/Bank Account ID
       let treasuryAccountId: number;
@@ -1294,10 +1313,18 @@ export async function createReceiptVoucher(data: {
       if (!customer?.accountId) throw new Error("العميل غير مربوط بحساب محاسبي");
       const customerAccountId = customer.accountId;
 
-      // 4. Create Receipt Voucher
+      // 4. Create Receipt Voucher with Sequence
+      let finalVoucherNumber = voucherNumber;
+      if (!finalVoucherNumber || finalVoucherNumber === "RV-0" || finalVoucherNumber === "") {
+        finalVoucherNumber = await generateReceiptVoucherNumber(tx);
+      } else {
+        const existing = await tx.receiptVoucher.findUnique({ where: { voucherNumber: finalVoucherNumber } });
+        if (existing) throw new Error(`رقم سند القبض ${finalVoucherNumber} مستخدم مسبقاً`);
+      }
+
       const voucher = await tx.receiptVoucher.create({
         data: {
-          voucherNumber,
+          voucherNumber: finalVoucherNumber,
           date: new Date(date),
           amount,
           description: description || "",
@@ -1316,7 +1343,7 @@ export async function createReceiptVoucher(data: {
           data: {
               entryNumber,
               date: new Date(date),
-              description: `سند قبض #${voucherNumber} - ${voucher.customer.name}`,
+              description: `سند قبض #${voucher.voucherNumber} - ${voucher.customer.name}`,
               sourceType: 'RECEIPT_VOUCHER',
               sourceId: voucher.id,
               items: {
@@ -1349,7 +1376,7 @@ export async function createReceiptVoucher(data: {
       await triggerStaffActivityAlert(
         session.user,
         "سند قبض",
-        `تم إنشاء سند قبض #${data.voucherNumber} بقيمة ${data.amount} إلى ${data.accountType === "safe" ? "خزنة" : "بنك"}`
+        `تم إنشاء سند قبض #${result.voucherNumber} بقيمة ${result.amount} إلى ${result.accountType === "safe" ? "خزنة" : "بنك"}`
       );
     }
 
@@ -1431,6 +1458,11 @@ export async function getArchivedAccounts() {
 // 11. إرجاع حساب من الأرشيف
 export async function restoreAccount(id: number, type: 'safe' | 'bank') {
   const session = await getSession();
+  if (!session) throw new Error("يجب تسجيل الدخول أولاً");
+
+  const canManage = await hasPermission(session.userId, "treasury_manage");
+  if (!canManage) throw new Error("ليس لديك صلاحية استعادة الحسابات");
+
   try {
     if (type === 'bank') {
         const account = await (await getTenantPrisma()).treasuryBank.update({
@@ -1610,10 +1642,10 @@ export async function createSafe(data: { name: string; initialBalance: number; d
         }
 
         if (openingAccId) {
-          const lastEntry = await tx.journalEntry.findFirst({ orderBy: { entryNumber: 'desc' } });
+          const entryNumber = await SequenceService.getNextSequenceValue(tx, "JournalEntry");
           await tx.journalEntry.create({
             data: {
-              entryNumber: (lastEntry?.entryNumber || 0) + 1,
+              entryNumber,
               date: new Date(),
               description: `رصيد افتتاحي - ${data.name}`,
               sourceType: 'MANUAL',
@@ -1636,7 +1668,7 @@ export async function createSafe(data: { name: string; initialBalance: number; d
       await triggerStaffActivityAlert(
         session.user,
         "إضافة خزنة",
-        `تم إضافة خزنة جديدة: ${data.name} (رصيد: ${data.initialBalance})`
+        `تم إضافة خزنة جديدة: ${result.name} (رصيد: ${result.balance})`
       );
     }
 
@@ -1650,6 +1682,12 @@ export async function createSafe(data: { name: string; initialBalance: number; d
 
 // 13. أرشفة خزنة
 export async function archiveSafe(safeId: number) {
+  const session = await getSession();
+  if (!session) throw new Error("يجب تسجيل الدخول أولاً");
+
+  const canManage = await hasPermission(session.userId, "treasury_manage");
+  if (!canManage) throw new Error("ليس لديك صلاحية أرشفة الخزائن");
+
   try {
     const safe = await (await getTenantPrisma()).treasurySafe.findUnique({
       where: { id: safeId }

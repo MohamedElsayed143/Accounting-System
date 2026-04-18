@@ -12,6 +12,7 @@ import {
   triggerStockAlert,
   triggerTreasuryAlert,
 } from "@/lib/notifications";
+import { SequenceService } from "@/lib/services/SequenceService";
 
 // دالة مساعدة لحساب الرصيد الحالي لمنتج
 async function getCurrentStock(
@@ -100,11 +101,20 @@ export async function getSalesInvoiceById(id: number) {
 }
 
 export async function getNextInvoiceNumber(): Promise<number> {
+  const sequence = await (await getTenantPrisma()).systemSequence.findUnique({
+    where: { id: "SalesInvoice" },
+    select: { lastValue: true },
+  });
+
   const last = await (await getTenantPrisma()).salesInvoice.findFirst({
     orderBy: { invoiceNumber: "desc" },
     select: { invoiceNumber: true },
   });
-  return (last?.invoiceNumber ?? 0) + 1;
+
+  const seqVal = sequence ? sequence.lastValue : 0;
+  const maxInvoice = last?.invoiceNumber ?? 0;
+
+  return Math.max(seqVal, maxInvoice) + 1;
 }
 
 export async function checkInvoiceNumberExists(num: number): Promise<boolean> {
@@ -191,13 +201,30 @@ export async function createSalesInvoice(data: {
   }[] = [];
 
   const result = await (await getTenantPrisma()).$transaction(async (tx) => {
-    // 1. التحقق من رقم الفاتورة
-    const taken = await tx.salesInvoice.findUnique({
-      where: { invoiceNumber: data.invoiceNumber },
-      select: { id: true },
-    });
-    if (taken)
-      throw new Error(`رقم الفاتورة #${data.invoiceNumber} مستخدم مسبقاً`);
+    // 1. التحقق من رقم الفاتورة أو توليده
+    let invoiceNumber = data.invoiceNumber;
+    if (invoiceNumber === 0) {
+      invoiceNumber = await SequenceService.getNextSequenceValue(tx, "SalesInvoice");
+    } else {
+      const taken = await tx.salesInvoice.findUnique({
+        where: { invoiceNumber },
+        select: { id: true },
+      });
+      if (taken)
+        throw new Error(`رقم الفاتورة #${invoiceNumber} مستخدم مسبقاً`);
+
+      // مزامنة التسلسل التلقائي إذا تم اقتراح رقم أو إدخاله يدوياً لمنع تكرار الأرقام
+      const sequence = await tx.systemSequence.findUnique({
+        where: { id: "SalesInvoice" },
+      });
+      if (!sequence || sequence.lastValue < invoiceNumber) {
+        await tx.systemSequence.upsert({
+          where: { id: "SalesInvoice" },
+          update: { lastValue: invoiceNumber },
+          create: { id: "SalesInvoice", lastValue: invoiceNumber },
+        });
+      }
+    }
 
     // 2. التحقق من الأصناف وفحص المخزون
     for (const item of data.items) {
@@ -233,7 +260,7 @@ export async function createSalesInvoice(data: {
 
     const invoice = await tx.salesInvoice.create({
       data: {
-        invoiceNumber: data.invoiceNumber,
+        invoiceNumber: invoiceNumber, // استخدام الرقم المولد أو المسند
         customerId: data.customerId,
         customerName: data.customerName,
         status: data.status,
@@ -268,45 +295,44 @@ export async function createSalesInvoice(data: {
     });
 
     // 3.1. إنشاء قيد المحاسبة (Auto-Posting)
+    // ✅ [مصلح] الفاتورة المعلقة (pending) لا تُنشئ قيد إيراد — تجنب تضخيم الإيرادات مبكراً
     const customerAccountId = invoice.customer?.accountId;
     if (!customerAccountId) throw new Error("العميل غير مربوط بحساب محاسبي");
 
-    const salesRevenueAccount = await tx.account.findUnique({
-      where: { code: "4101" },
-    });
-    if (!salesRevenueAccount) throw new Error("حساب المبيعات (4101) غير موجود");
+    if (data.status !== "pending") {
+      const salesRevenueAccount = await tx.account.findUnique({
+        where: { code: "4101" },
+      });
+      if (!salesRevenueAccount) throw new Error("حساب المبيعات (4101) غير موجود");
 
-    const lastEntry = await tx.journalEntry.findFirst({
-      orderBy: { entryNumber: "desc" },
-      select: { entryNumber: true },
-    });
-    const entryNumber = (lastEntry?.entryNumber || 0) + 1;
+      const entryNumber = await SequenceService.getNextSequenceValue(tx, "JournalEntry");
 
-    await tx.journalEntry.create({
-      data: {
-        entryNumber,
-        date: invoice.invoiceDate,
-        description: `فاتورة مبيعات #${invoice.invoiceNumber} - ${invoice.customerName}`,
-        sourceType: "SALES_INVOICE",
-        sourceId: invoice.id,
-        items: {
-          create: [
-            {
-              accountId: customerAccountId,
-              debit: invoice.total,
-              credit: 0,
-              description: `قيمة فاتورة مبيعات #${invoice.invoiceNumber}`,
-            },
-            {
-              accountId: salesRevenueAccount.id,
-              debit: 0,
-              credit: invoice.total,
-              description: `إيراد مبيعات فاتورة #${invoice.invoiceNumber}`,
-            },
-          ],
+      await tx.journalEntry.create({
+        data: {
+          entryNumber,
+          date: invoice.invoiceDate,
+          description: `فاتورة مبيعات #${invoice.invoiceNumber} - ${invoice.customerName}`,
+          sourceType: "SALES_INVOICE",
+          sourceId: invoice.id,
+          items: {
+            create: [
+              {
+                accountId: customerAccountId,
+                debit: invoice.total,
+                credit: 0,
+                description: `قيمة فاتورة مبيعات #${invoice.invoiceNumber}`,
+              },
+              {
+                accountId: salesRevenueAccount.id,
+                debit: 0,
+                credit: invoice.total,
+                description: `إيراد مبيعات فاتورة #${invoice.invoiceNumber}`,
+              },
+            ],
+          },
         },
-      },
-    });
+      });
+    }
 
     // 3.3. تسجيل تكلفة البضاعة المباعة وتقليل المخزون إذا كانت الفاتورة نهائية
     const inventoryAccount = await tx.account.findUnique({
@@ -383,11 +409,7 @@ export async function createSalesInvoice(data: {
         if (!cogsAccount)
           throw new Error("حساب تكلفة البضاعة المباعة 6101 غير موجود");
 
-        const lastCogsEntry = await tx.journalEntry.findFirst({
-          orderBy: { entryNumber: "desc" },
-          select: { entryNumber: true },
-        });
-        const nextCogsEntry = (lastCogsEntry?.entryNumber || 0) + 1;
+        const nextCogsEntry = await SequenceService.getNextSequenceValue(tx, "JournalEntry");
 
         await tx.journalEntry.create({
           data: {
@@ -437,11 +459,7 @@ export async function createSalesInvoice(data: {
       }
 
       if (treasuryAccountId) {
-        const lastEntryCash = await tx.journalEntry.findFirst({
-          orderBy: { entryNumber: "desc" },
-          select: { entryNumber: true },
-        });
-        const entryNumberCash = (lastEntryCash?.entryNumber || 0) + 1;
+        const entryNumberCash = await SequenceService.getNextSequenceValue(tx, "JournalEntry");
 
         await tx.journalEntry.create({
           data: {
@@ -769,15 +787,11 @@ export async function updateSalesInvoice(
         where: { code: "4101" },
       });
       if (salesRevenueAccount) {
-        const lastEntry = await tx.journalEntry.findFirst({
-          orderBy: { entryNumber: "desc" },
-          select: { entryNumber: true },
-        });
-        let currentEntryNo = (lastEntry?.entryNumber || 0) + 1;
+        const salesEntryNo = await SequenceService.getNextSequenceValue(tx, "JournalEntry");
 
         await tx.journalEntry.create({
           data: {
-            entryNumber: currentEntryNo++,
+            entryNumber: salesEntryNo,
             date: invoice.invoiceDate,
             description: `تعديل فاتورة مبيعات #${invoice.invoiceNumber} - ${invoice.customerName}`,
             sourceType: "SALES_INVOICE",
@@ -818,9 +832,10 @@ export async function updateSalesInvoice(
           }
 
           if (treasuryAccountId) {
+            const receiptEntryNo = await SequenceService.getNextSequenceValue(tx, "JournalEntry");
             await tx.journalEntry.create({
               data: {
-                entryNumber: currentEntryNo++,
+                entryNumber: receiptEntryNo,
                 date: invoice.invoiceDate,
                 description: `سداد نقدي فاتورة #${invoice.invoiceNumber} - ${invoice.customerName}`,
                 sourceType: "RECEIPT_VOUCHER",
@@ -948,11 +963,7 @@ export async function updateSalesInvoice(
       }
 
       if (salesCogsValue > 0) {
-        const lastCogsEntry = await tx.journalEntry.findFirst({
-          orderBy: { entryNumber: "desc" },
-          select: { entryNumber: true },
-        });
-        const nextCogsEntry = (lastCogsEntry?.entryNumber || 0) + 1;
+        const nextCogsEntry = await SequenceService.getNextSequenceValue(tx, "JournalEntry");
 
         await tx.journalEntry.create({
           data: {
@@ -992,15 +1003,6 @@ export async function updateSalesInvoice(
     return invoice;
   });
 
-  // Fire pending alerts outside transaction
-  for (const alert of pendingAlerts) {
-    if (alert.type === "treasury") {
-      await triggerTreasuryAlert(alert.name, alert.value);
-    } else if (alert.type === "stock") {
-      await triggerStockAlert(alert.name, alert.value, alert.limit || 0);
-    }
-  }
-
   if (session) {
     await triggerStaffActivityAlert(
       session.user,
@@ -1009,7 +1011,6 @@ export async function updateSalesInvoice(
     );
   }
 
-  // Fire pending alerts outside transaction
   for (const alert of pendingAlerts) {
     if (alert.type === "treasury") {
       await triggerTreasuryAlert(alert.name, alert.value);

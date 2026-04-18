@@ -4,29 +4,17 @@ import { getTenantPrisma, publicPrisma } from "@/lib/tenant-prisma";
 import { revalidatePath } from "next/cache";
 import type { Category } from "@prisma/client";
 import { getSession } from "@/lib/auth";
+import { Prisma } from "@prisma/client";
 import { hasPermission } from "@/lib/permissions";
+import { SequenceService } from "@/lib/services/SequenceService";
 
 export interface CategoryData extends Category {
   _count?: { products: number };
 }
 
-// دالة توليد كود التصنيف (CAT-001, CAT-002, ...)
-async function generateCategoryCode(tx: any): Promise<string> {
-  const lastCategory = await tx.category.findFirst({
-    where: { code: { startsWith: 'CAT-' } },
-    orderBy: { code: 'desc' },
-    select: { code: true },
-  });
-
-  let nextNumber = 1;
-  if (lastCategory && lastCategory.code) {
-    const match = lastCategory.code.match(/CAT-(\d+)/);
-    if (match) {
-      nextNumber = parseInt(match[1], 10) + 1;
-    }
-  }
-
-  const paddedNumber = String(nextNumber).padStart(3, '0');
+async function generateCategoryCode(tx: Prisma.TransactionClient): Promise<string> {
+  const nextNum = await SequenceService.getNextSequenceValue(tx, "Category");
+  const paddedNumber = String(nextNum).padStart(3, '0');
   return `CAT-${paddedNumber}`;
 }
 

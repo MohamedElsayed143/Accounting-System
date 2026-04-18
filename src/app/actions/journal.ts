@@ -5,6 +5,7 @@ import { startOfDay, endOfDay } from "date-fns";
 import { revalidatePath } from "next/cache";
 import { getSession } from "@/lib/auth";
 import { hasPermission } from "@/lib/permissions";
+import { SequenceService } from "@/lib/services/SequenceService";
 import { AccountType } from "@prisma/client";
 
 /**
@@ -84,6 +85,15 @@ export async function getJournalSelectableAccounts() {
  * Gets the next entry number for a manual journal entry.
  */
 export async function getNextEntryNumber() {
+  const sequence = await (await getTenantPrisma()).systemSequence.findUnique({
+    where: { id: "JournalEntry" },
+    select: { lastValue: true },
+  });
+  
+  if (sequence) {
+    return sequence.lastValue + 1;
+  }
+
   const lastEntry = await (await getTenantPrisma()).journalEntry.findFirst({
     orderBy: { entryNumber: "desc" },
     select: { entryNumber: true },
@@ -198,10 +208,10 @@ export async function saveJournalEntry(data: {
   }
 
   // 2. Database Transaction
-  const entryNumber = await getNextEntryNumber();
-
   try {
     const result = await (await getTenantPrisma()).$transaction(async (tx) => {
+      const entryNumber = await SequenceService.getNextSequenceValue(tx, "JournalEntry");
+
       const entry = await tx.journalEntry.create({
         data: {
           entryNumber,

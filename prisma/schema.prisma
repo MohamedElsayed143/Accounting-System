@@ -679,3 +679,9 @@ enum SourceType {
   PURCHASE_RETURN
   TRANSFER
 }
+
+model SystemSequence {
+  id        String   @id // e.g., 'JournalEntry', 'SalesInvoice', 'SalesReturn'
+  lastValue Int      @default(0)
+  updatedAt DateTime @updatedAt
+}

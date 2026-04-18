@@ -2,7 +2,9 @@
 
 import { getTenantPrisma, publicPrisma } from "@/lib/tenant-prisma";
 import { revalidatePath } from "next/cache";
-import { triggerTreasuryAlert } from "@/lib/notifications";
+import { Prisma } from "@prisma/client";
+import { triggerTreasuryAlert, triggerStaffActivityAlert } from "@/lib/notifications";
+import { SequenceService } from "@/lib/services/SequenceService";
 import { getSession } from "@/lib/auth";
 import { hasPermission } from "@/lib/permissions";
 
@@ -86,6 +88,27 @@ export async function getInitialData(): Promise<InitialData> {
   }
 }
 
+export async function getNextPaymentVoucherNumber(): Promise<string> {
+  const sequence = await (await getTenantPrisma()).systemSequence.findUnique({
+    where: { id: "PaymentVoucher" },
+    select: { lastValue: true },
+  });
+  if (sequence) return `PV-${sequence.lastValue + 1}`;
+
+  const lastVoucher = await (await getTenantPrisma()).paymentVoucher.findFirst({
+    orderBy: { id: "desc" },
+    select: { voucherNumber: true },
+  });
+  if (!lastVoucher) return "PV-1";
+  const lastNum = parseInt(lastVoucher.voucherNumber.split("-")[1] || "0");
+  return `PV-${lastNum + 1}`;
+}
+
+async function generatePaymentVoucherNumber(tx: Prisma.TransactionClient): Promise<string> {
+  const nextVal = await SequenceService.getNextSequenceValue(tx, "PaymentVoucher");
+  return `PV-${nextVal}`;
+}
+
 // 2. إنشاء سند صرف وتحديث رصيد الحساب المختار
 export async function createPaymentVoucher(data: PaymentVoucherInput, skipApproval: boolean = false) {
   const session = await getSession();
@@ -162,12 +185,8 @@ export async function createPaymentVoucher(data: PaymentVoucherInput, skipApprov
 
     // تنفيذ المعاملة
     const result = await (await getTenantPrisma()).$transaction(async (tx) => {
-      // 1. Get current entry number
-      const lastEntry = await tx.journalEntry.findFirst({
-        orderBy: { entryNumber: 'desc' },
-        select: { entryNumber: true }
-      });
-      const entryNumber = (lastEntry?.entryNumber || 0) + 1;
+      // 1. Get current entry number using atomic sequence
+      const entryNumber = await SequenceService.getNextSequenceValue(tx, "JournalEntry");
 
       // 2. Find Treasury/Bank Account ID and update balance
       let treasuryAccountId: number;
@@ -217,10 +236,18 @@ export async function createPaymentVoucher(data: PaymentVoucherInput, skipApprov
       if (!supplier?.accountId) throw new Error("المورد غير مربوط بحساب محاسبي");
       const supplierAccountId = supplier.accountId;
 
-      // 4. Create record for the voucher
+      // 4. Create record for the voucher with Sequence
+      let finalVoucherNumber = voucherNumber;
+      if (!finalVoucherNumber || finalVoucherNumber === "PV-0" || finalVoucherNumber === "") {
+        finalVoucherNumber = await generatePaymentVoucherNumber(tx);
+      } else {
+        const existing = await tx.paymentVoucher.findUnique({ where: { voucherNumber: finalVoucherNumber } });
+        if (existing) throw new Error(`رقم سند الصرف ${finalVoucherNumber} مستخدم مسبقاً`);
+      }
+
       const voucher = await tx.paymentVoucher.create({
         data: {
-          voucherNumber,
+          voucherNumber: finalVoucherNumber,
           date: new Date(date),
           amount: amountFloat,
           description: description || "",
@@ -239,7 +266,7 @@ export async function createPaymentVoucher(data: PaymentVoucherInput, skipApprov
           data: {
               entryNumber,
               date: new Date(date),
-              description: `سند صرف #${voucherNumber} - ${voucher.supplier.name}`,
+              description: `سند صرف #${voucher.voucherNumber} - ${voucher.supplier.name}`,
               sourceType: 'PAYMENT_VOUCHER',
               sourceId: voucher.id,
               items: {
@@ -272,14 +299,15 @@ export async function createPaymentVoucher(data: PaymentVoucherInput, skipApprov
       await triggerTreasuryAlert(result.updatedAccount.name, result.updatedAccount.balance);
     }
 
-    // تحديث الصفحات المرتبطة - مع التأكد من وجود idInt
-    if (idInt && !isNaN(idInt)) {
-      revalidatePath("/treasury");
-      revalidatePath(`/treasury/${idInt}?type=${accountType}`);
-    } else {
-      revalidatePath("/treasury");
+    const session = await getSession();
+    if (session) {
+      await triggerStaffActivityAlert(
+        session.user,
+        "سند صرف",
+        `تم إنشاء سند صرف #${result.voucher.voucherNumber} بقيمة ${result.voucher.amount} من ${result.voucher.accountType === "safe" ? "الخزنة" : "البنك"}`
+      );
     }
-    
+
     return { success: true, data: result };
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "وقع خطأ غير معروف";

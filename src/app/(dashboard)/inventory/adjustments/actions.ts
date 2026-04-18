@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { MovementType } from "@prisma/client";
 import { getSession } from "@/lib/auth";
 import { hasPermission } from "@/lib/permissions";
+import { SequenceService } from "@/lib/services/SequenceService";
 
 // حساب المخزون الحالي لمنتج في مستودع معين (اختياري)
 export async function getCurrentStock(
@@ -125,11 +126,7 @@ export async function createAdjustment(data: {
         });
 
         if (damageAccount && inventoryAccount) {
-          const lastEntry = await tx.journalEntry.findFirst({
-            orderBy: { entryNumber: "desc" },
-            select: { entryNumber: true },
-          });
-          const nextEntryNumber = (lastEntry?.entryNumber || 0) + 1;
+          const nextEntryNumber = await SequenceService.getNextSequenceValue(tx, "JournalEntry");
 
           await tx.journalEntry.create({
             data: {

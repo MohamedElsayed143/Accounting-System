@@ -2,8 +2,11 @@
 
 import { getTenantPrisma, publicPrisma } from "@/lib/tenant-prisma";
 import { revalidatePath } from "next/cache";
-import { triggerTreasuryAlert } from "@/lib/notifications";
+import { Prisma } from "@prisma/client";
+import { triggerTreasuryAlert, triggerStaffActivityAlert } from "@/lib/notifications";
 import { getSession } from "@/lib/auth";
+import { SequenceService } from "@/lib/services/SequenceService";
+import { hasPermission } from "@/lib/permissions";
 
 export interface TransferInput {
   transferNumber: string;
@@ -14,6 +17,11 @@ export interface TransferInput {
   fromId: number;
   toType: "safe" | "bank";
   toId: number;
+}
+
+async function generateTransferNumber(tx: Prisma.TransactionClient): Promise<string> {
+  const nextVal = await SequenceService.getNextSequenceValue(tx, "TreasuryTransfer");
+  return `TRF-${nextVal}`;
 }
 
 export async function createTransfer(data: TransferInput, skipApproval: boolean = false) {
@@ -36,6 +44,9 @@ export async function createTransfer(data: TransferInput, skipApproval: boolean 
       return { success: true, pending: true, message: "تم إرسال طلب التحويل للمدير للموافقة" };
     }
   }
+
+  const canManage = await hasPermission(session.userId, "treasury_manage");
+  if (!canManage) throw new Error("ليس لديك صلاحية إجراء تحويلات بين الخزائن");
 
   if (data.fromType === data.toType && data.fromId === data.toId) {
     throw new Error("لا يمكن التحويل لنفس الحساب");
@@ -89,9 +100,21 @@ export async function createTransfer(data: TransferInput, skipApproval: boolean 
     }
 
     // 3. تسجيل عملية التحويل والمعالجة المحاسبية
+    let transferNumber = data.transferNumber;
+    if (!transferNumber || transferNumber === "TRF-0" || transferNumber === "") {
+      transferNumber = await generateTransferNumber(tx);
+    } else {
+      // Ensuring the sequence is updated if a manual number is provided
+      // or at least checking for collision (though create will fail anyway)
+      const existing = await tx.treasuryTransfer.findUnique({
+        where: { transferNumber },
+      });
+      if (existing) throw new Error(`رقم التحويل ${transferNumber} مستخدم مسبقاً`);
+    }
+
     const result = await tx.treasuryTransfer.create({
       data: {
-        transferNumber: data.transferNumber,
+        transferNumber,
         date: new Date(data.date),
         amount: data.amount,
         description: data.description,
@@ -114,17 +137,13 @@ export async function createTransfer(data: TransferInput, skipApproval: boolean 
       : await tx.treasuryBank.findUnique({ where: { id: data.toId }, select: { accountId: true, name: true, balance: true } });
 
     if (fromAccount?.accountId && toAccount?.accountId) {
-      const lastEntry = await tx.journalEntry.findFirst({
-        orderBy: { entryNumber: 'desc' },
-        select: { entryNumber: true }
-      });
-      const entryNumber = (lastEntry?.entryNumber || 0) + 1;
+      const entryNumber = await SequenceService.getNextSequenceValue(tx, "JournalEntry");
 
       await tx.journalEntry.create({
         data: {
           entryNumber,
           date: new Date(data.date),
-          description: `تحويل من ${fromAccount.name} إلى ${toAccount.name}`,
+          description: `تحويل #${result.transferNumber} من ${fromAccount.name} إلى ${toAccount.name}`,
           sourceType: 'TRANSFER',
           sourceId: result.id,
           items: {
@@ -158,11 +177,27 @@ export async function createTransfer(data: TransferInput, skipApproval: boolean 
   if (res.fromName) await triggerTreasuryAlert(res.fromName.name, res.fromName.balance);
   if (res.toName) await triggerTreasuryAlert(res.toName.name, res.toName.balance);
 
+  if (session) {
+    const fromName = res.fromName?.name || "حساب مجهول";
+    const toName = res.toName?.name || "حساب مجهول";
+    await triggerStaffActivityAlert(
+      session.user,
+      "تحويل خزينة",
+      `تم تحويل مبلغ ${res.transfer.amount} من ${fromName} إلى ${toName} (رقم التحويل: ${res.transfer.transferNumber})`
+    );
+  }
+
   revalidatePath("/treasury");
   return res.transfer;
 }
 
 export async function getNextTransferNumber(): Promise<string> {
+  const sequence = await (await getTenantPrisma()).systemSequence.findUnique({
+    where: { id: "TreasuryTransfer" },
+    select: { lastValue: true },
+  });
+  if (sequence) return `TRF-${sequence.lastValue + 1}`;
+
   const last = await (await getTenantPrisma()).treasuryTransfer.findFirst({
     orderBy: { id: "desc" },
     select: { transferNumber: true }
@@ -170,6 +205,6 @@ export async function getNextTransferNumber(): Promise<string> {
 
   if (!last) return "TRF-1";
   
-  const lastNum = parseInt(last.transferNumber.split("-")[1]);
+  const lastNum = parseInt(last.transferNumber.split("-")[1] || "0");
   return `TRF-${lastNum + 1}`;
 }

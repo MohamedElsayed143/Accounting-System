@@ -3,6 +3,9 @@
 import { getTenantPrisma, publicPrisma } from "@/lib/tenant-prisma";
 import { revalidatePath } from "next/cache";
 import { triggerTreasuryAlert, triggerStockAlert } from "@/lib/notifications";
+import { SequenceService } from "@/lib/services/SequenceService";
+import { getSession } from "@/lib/auth";
+import { hasPermission } from "@/lib/permissions";
 
 export async function getPendingInvoices() {
   const sales = await (await getTenantPrisma()).salesInvoice.findMany({
@@ -28,14 +31,12 @@ export async function finalizeSalesInvoice(
     bankId?: number;
   },
 ) {
-    const result = await (await getTenantPrisma()).$transaction(async (tx) => {
-      // Get the starting entry number
-      const latestEntry = await tx.journalEntry.findFirst({
-        orderBy: { entryNumber: "desc" },
-        select: { entryNumber: true },
-      });
-      let currentEntryNo = (latestEntry?.entryNumber || 0) + 1;
+  const session = await getSession();
+  if (!session) throw new Error("يجب تسجيل الدخول أولاً");
 
+  const canFinalize = await hasPermission(session.userId, "sales_create");
+  if (!canFinalize) throw new Error("ليس لديك صلاحية تأكيد فواتير مبيعات");
+    const result = await (await getTenantPrisma()).$transaction(async (tx) => {
       const invoice = await tx.salesInvoice.findUnique({
       where: { id },
       include: { items: true },
@@ -78,9 +79,10 @@ export async function finalizeSalesInvoice(
       });
 
       if (treasuryAccountId && customer?.accountId) {
+        const receiptEntryNo = await SequenceService.getNextSequenceValue(tx, "JournalEntry");
         await tx.journalEntry.create({
           data: {
-            entryNumber: currentEntryNo++,
+            entryNumber: receiptEntryNo,
             date: new Date(),
             description: `سداد نقدي (تأكيد) فاتورة #${invoice.invoiceNumber}`,
             sourceType: "RECEIPT_VOUCHER",
@@ -104,6 +106,44 @@ export async function finalizeSalesInvoice(
           },
         });
       }
+    }
+
+    // 2.5 قيد الإيراد الأساسي (مدين عميل / دائن مبيعات) - مضاف لضمان التكامل المحاسبي بعد التأكيد
+    const customer = await tx.customer.findUnique({
+      where: { id: invoice.customerId },
+      select: { accountId: true }
+    });
+    const salesRevenueAccount = await tx.account.findUnique({
+      where: { code: "4101" },
+    });
+
+    if (customer?.accountId && salesRevenueAccount) {
+      const revenueEntryNo = await SequenceService.getNextSequenceValue(tx, "JournalEntry");
+      await tx.journalEntry.create({
+        data: {
+          entryNumber: revenueEntryNo,
+          date: new Date(),
+          description: `إثبات إيراد (تأكيد) فاتورة #${invoice.invoiceNumber} - ${invoice.customerName}`,
+          sourceType: "SALES_INVOICE",
+          sourceId: invoice.id,
+          items: {
+            create: [
+              {
+                accountId: customer.accountId,
+                debit: invoice.total,
+                credit: 0,
+                description: `قيمة فاتورة مبيعات #${invoice.invoiceNumber}`,
+              },
+              {
+                accountId: salesRevenueAccount.id,
+                debit: 0,
+                credit: invoice.total,
+                description: `إيراد مبيعات فاتورة #${invoice.invoiceNumber}`,
+              },
+            ],
+          },
+        },
+      });
     }
 
     // 3. إنشاء حركات المخزون وتحديث الرصيد
@@ -167,9 +207,10 @@ export async function finalizeSalesInvoice(
     }
 
     if (salesCogsValue > 0) {
+      const cogsEntryNo = await SequenceService.getNextSequenceValue(tx, "JournalEntry");
       await tx.journalEntry.create({
         data: {
-          entryNumber: currentEntryNo++,
+          entryNumber: cogsEntryNo,
           date: new Date(),
           description: `قيد تكلفة البضاعة المباعة لفاتورة بيع رقم ${invoice.invoiceNumber}`,
           reference: `فاتورة بيع #${invoice.invoiceNumber}`,
@@ -250,14 +291,12 @@ export async function finalizePurchaseInvoice(
     bankId?: number;
   },
 ) {
-  const result = await (await getTenantPrisma()).$transaction(async (tx) => {
-    // Get starting entry number
-    const latestEntry = await tx.journalEntry.findFirst({
-      orderBy: { entryNumber: "desc" },
-      select: { entryNumber: true },
-    });
-    let currentEntryNo = (latestEntry?.entryNumber || 0) + 1;
+  const session = await getSession();
+  if (!session) throw new Error("يجب تسجيل الدخول أولاً");
 
+  const canFinalize = await hasPermission(session.userId, "purchase_create");
+  if (!canFinalize) throw new Error("ليس لديك صلاحية تأكيد فواتير مشتريات");
+  const result = await (await getTenantPrisma()).$transaction(async (tx) => {
     const invoice = await tx.purchaseInvoice.findUnique({
       where: { id },
       include: {
@@ -397,9 +436,10 @@ export async function finalizePurchaseInvoice(
       }
 
       if (paymentAccountId) {
+        const purchaseEntryNo = await SequenceService.getNextSequenceValue(tx, "JournalEntry");
         await tx.journalEntry.create({
           data: {
-            entryNumber: currentEntryNo++,
+            entryNumber: purchaseEntryNo,
             date: new Date(),
             description: `قيد مخزون مشتريات فاتورة شراء رقم ${invoice.invoiceNumber}`,
             reference: `فاتورة شراء #${invoice.invoiceNumber}`,

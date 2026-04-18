@@ -10,6 +10,8 @@ import {
   triggerStockAlert,
   triggerTreasuryAlert,
 } from "@/lib/notifications";
+import { SequenceService } from "@/lib/services/SequenceService";
+import { Prisma } from "@prisma/client";
 
 // ─── أنواع البيانات ─────────────────────────────────────────────────────────
 export interface PurchaseInvoiceItem {
@@ -112,11 +114,20 @@ export async function getPurchaseInvoiceById(id: number) {
 
 // ─── الحصول على رقم الفاتورة التالي (تلقائي) ───────────────────────────────
 export async function getNextPurchaseInvoiceNumber(): Promise<number> {
+  const sequence = await (await getTenantPrisma()).systemSequence.findUnique({
+    where: { id: "PurchaseInvoice" },
+    select: { lastValue: true },
+  });
+
   const last = await (await getTenantPrisma()).purchaseInvoice.findFirst({
     orderBy: { invoiceNumber: "desc" },
     select: { invoiceNumber: true },
   });
-  return (last?.invoiceNumber ?? 0) + 1;
+
+  const seqVal = sequence ? sequence.lastValue : 0;
+  const maxInvoice = last?.invoiceNumber ?? 0;
+
+  return Math.max(seqVal, maxInvoice) + 1;
 }
 
 // ─── التحقق من وجود رقم الفاتورة ───────────────────────────────────────────
@@ -188,14 +199,31 @@ export async function createPurchaseInvoice(data: {
     limit?: number;
   }[] = [];
 
-  const result = await (await getTenantPrisma() as any).$transaction(async (tx: any) => {
-    // 1. التحقق من رقم الفاتورة
-    const taken = await tx.purchaseInvoice.findUnique({
-      where: { invoiceNumber: data.invoiceNumber },
-      select: { id: true },
-    });
-    if (taken)
-      throw new Error(`رقم الفاتورة #${data.invoiceNumber} مستخدم مسبقاً`);
+  const result = await (await getTenantPrisma()).$transaction(async (tx: Prisma.TransactionClient) => {
+    // 1. التحقق من رقم الفاتورة أو توليده
+    let invoiceNumber = data.invoiceNumber;
+    if (invoiceNumber === 0) {
+      invoiceNumber = await SequenceService.getNextSequenceValue(tx, "PurchaseInvoice");
+    } else {
+      const taken = await tx.purchaseInvoice.findUnique({
+        where: { invoiceNumber },
+        select: { id: true },
+      });
+      if (taken)
+        throw new Error(`رقم الفاتورة #${invoiceNumber} مستخدم مسبقاً`);
+
+      // مزامنة التسلسل التلقائي إذا تم اقتراح رقم أو إدخاله يدوياً لمنع تكرار الأرقام
+      const sequence = await tx.systemSequence.findUnique({
+        where: { id: "PurchaseInvoice" },
+      });
+      if (!sequence || sequence.lastValue < invoiceNumber) {
+        await tx.systemSequence.upsert({
+          where: { id: "PurchaseInvoice" },
+          update: { lastValue: invoiceNumber },
+          create: { id: "PurchaseInvoice", lastValue: invoiceNumber },
+        });
+      }
+    }
 
     // 2. التحقق من الأصناف (يجب أن تكون نشطة)
     for (const item of data.items) {
@@ -212,7 +240,7 @@ export async function createPurchaseInvoice(data: {
     // 3. إنشاء الفاتورة
     const invoice = await tx.purchaseInvoice.create({
       data: {
-        invoiceNumber: data.invoiceNumber,
+        invoiceNumber,
         supplierId: data.supplierId,
         supplierName: data.supplierName,
         dueDate: data.dueDate ? new Date(data.dueDate) : null,
@@ -310,16 +338,11 @@ export async function createPurchaseInvoice(data: {
     const supplierAccountId = invoice.supplier?.accountId;
     if (!supplierAccountId) throw new Error("المورد غير مربوط بحساب محاسبي");
 
-    // جلب رقم القيد مرة واحدة واستخدام عداد محلي
-    const lastEntry = await tx.journalEntry.findFirst({
-      orderBy: { entryNumber: "desc" },
-      select: { entryNumber: true },
-    });
-    let currentEntryNo = (lastEntry?.entryNumber || 0) + 1;
+    const entryNumber = await SequenceService.getNextSequenceValue(tx, "JournalEntry");
 
     await tx.journalEntry.create({
       data: {
-        entryNumber: currentEntryNo++,
+        entryNumber,
         date: invoice.invoiceDate,
         description: `فاتورة مشتريات #${invoice.invoiceNumber} - ${invoice.supplierName}`,
         sourceType: "PURCHASE_INVOICE",
@@ -361,9 +384,10 @@ export async function createPurchaseInvoice(data: {
       }
 
       if (treasuryAccountId) {
+        const cashEntryNo = await SequenceService.getNextSequenceValue(tx, "JournalEntry");
         await tx.journalEntry.create({
           data: {
-            entryNumber: currentEntryNo++,
+            entryNumber: cashEntryNo,
             date: invoice.invoiceDate,
             description: `سداد نقدي فاتورة مشتريات #${invoice.invoiceNumber} - ${invoice.supplierName}`,
             sourceType: "PAYMENT_VOUCHER",
@@ -520,7 +544,7 @@ export async function updatePurchaseInvoice(
     }
   }
 
-  const result = await (await getTenantPrisma() as any).$transaction(async (tx: any) => {
+  const result = await (await getTenantPrisma()).$transaction(async (tx: Prisma.TransactionClient) => {
     const existingInvoice = await tx.purchaseInvoice.findUnique({
       where: { id },
       select: {
@@ -698,86 +722,85 @@ export async function updatePurchaseInvoice(
 
     const supplierAccountId = invoice.supplier?.accountId;
     if (supplierAccountId) {
-      const purchasesAccount = await tx.account.findUnique({
-        where: { code: "6104" },
+      // ✅ [مصلح] يستخدم نفس حساب المخزون 120301 المستخدم في الإنشاء
+      // كان يستخدم 6104 (المشتريات) بالخطأ — تناقض محاسبي مع createPurchaseInvoice
+      const inventoryAccount = await tx.account.findUnique({
+        where: { code: "120301" },
       });
-      if (purchasesAccount) {
-        // جلب رقم القيد مرة واحدة واستخدام عداد محلي
-        const lastEntry = await tx.journalEntry.findFirst({
-          orderBy: { entryNumber: "desc" },
-          select: { entryNumber: true },
-        });
-        let currentEntryNo = (lastEntry?.entryNumber || 0) + 1;
+      if (!inventoryAccount)
+        throw new Error("حساب مخزون البضاعة 120301 غير موجود");
 
-        await tx.journalEntry.create({
-          data: {
-            entryNumber: currentEntryNo++,
-            date: invoice.invoiceDate,
-            description: `تعديل فاتورة مشتريات #${invoice.invoiceNumber} - ${invoice.supplierName}`,
-            sourceType: "PURCHASE_INVOICE",
-            sourceId: invoice.id,
-            items: {
-              create: [
-                {
-                  accountId: purchasesAccount.id,
-                  debit: invoice.total,
-                  credit: 0,
-                  description: `تعديل قيمة فاتورة مشتريات #${invoice.invoiceNumber}`,
-                },
-                {
-                  accountId: supplierAccountId,
-                  debit: 0,
-                  credit: invoice.total,
-                  description: `تعديل استحقاق مورد فاتورة #${invoice.invoiceNumber}`,
-                },
-              ],
-            },
-          },
-        });
+      const entryNumber = await SequenceService.getNextSequenceValue(tx, "JournalEntry");
 
-        if (data.status === "cash") {
-          let treasuryAccountId: number | null = null;
-          if (data.safeId) {
-            const safe = await tx.treasurySafe.findUnique({
-              where: { id: data.safeId },
-              select: { accountId: true },
-            });
-            treasuryAccountId = safe?.accountId || null;
-          } else if (data.bankId) {
-            const bank = await tx.treasuryBank.findUnique({
-              where: { id: data.bankId },
-              select: { accountId: true },
-            });
-            treasuryAccountId = bank?.accountId || null;
-          }
-
-          if (treasuryAccountId) {
-            await tx.journalEntry.create({
-              data: {
-                entryNumber: currentEntryNo++,
-                date: invoice.invoiceDate,
-                description: `سداد نقدي فاتورة مشتريات #${invoice.invoiceNumber} - ${invoice.supplierName}`,
-                sourceType: "PAYMENT_VOUCHER",
-                sourceId: invoice.id,
-                items: {
-                  create: [
-                    {
-                      accountId: supplierAccountId,
-                      debit: invoice.total,
-                      credit: 0,
-                      description: `تسوية سداد فاتورة مشتريات #${invoice.invoiceNumber}`,
-                    },
-                    {
-                      accountId: treasuryAccountId,
-                      debit: 0,
-                      credit: invoice.total,
-                      description: `صرف نقدي فاتورة مشتريات #${invoice.invoiceNumber}`,
-                    },
-                  ],
-                },
+      await tx.journalEntry.create({
+        data: {
+          entryNumber,
+          date: invoice.invoiceDate,
+          description: `تعديل فاتورة مشتريات #${invoice.invoiceNumber} - ${invoice.supplierName}`,
+          sourceType: "PURCHASE_INVOICE",
+          sourceId: invoice.id,
+          items: {
+            create: [
+              {
+                accountId: inventoryAccount.id,
+                debit: invoice.total,
+                credit: 0,
+                description: `تعديل قيمة فاتورة مشتريات #${invoice.invoiceNumber}`,
               },
-            });
-          }
+              {
+                accountId: supplierAccountId,
+                debit: 0,
+                credit: invoice.total,
+                description: `تعديل استحقاق مورد فاتورة #${invoice.invoiceNumber}`,
+              },
+            ],
+          },
+        },
+      });
+
+      if (data.status === "cash") {
+        let treasuryAccountId: number | null = null;
+        if (data.safeId) {
+          const safe = await tx.treasurySafe.findUnique({
+            where: { id: data.safeId },
+            select: { accountId: true },
+          });
+          treasuryAccountId = safe?.accountId || null;
+        } else if (data.bankId) {
+          const bank = await tx.treasuryBank.findUnique({
+            where: { id: data.bankId },
+            select: { accountId: true },
+          });
+          treasuryAccountId = bank?.accountId || null;
+        }
+
+        if (treasuryAccountId) {
+          const cashEntryNo = await SequenceService.getNextSequenceValue(tx, "JournalEntry");
+          await tx.journalEntry.create({
+            data: {
+              entryNumber: cashEntryNo,
+              date: invoice.invoiceDate,
+              description: `سداد نقدي فاتورة مشتريات #${invoice.invoiceNumber} - ${invoice.supplierName}`,
+              sourceType: "PAYMENT_VOUCHER",
+              sourceId: invoice.id,
+              items: {
+                create: [
+                  {
+                    accountId: supplierAccountId,
+                    debit: invoice.total,
+                    credit: 0,
+                    description: `تسوية سداد فاتورة مشتريات #${invoice.invoiceNumber}`,
+                  },
+                  {
+                    accountId: treasuryAccountId,
+                    debit: 0,
+                    credit: invoice.total,
+                    description: `صرف نقدي فاتورة مشتريات #${invoice.invoiceNumber}`,
+                  },
+                ],
+              },
+            },
+          });
         }
       }
     }

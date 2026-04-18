@@ -333,6 +333,20 @@ function InvoiceFormStep({
 
   const addItem = (product: ProductData) => {
     if (isViewMode) return;
+    // حساب هامش الربح تلقائياً من سعري الشراء والبيع لتطابق فواتير البيع (الربح من سعر البيع)
+    const _calcProfitMargin = (buyPrice: number, sellPrice: number) => {
+      if (sellPrice > 0) {
+        if (buyPrice > 0) {
+          return Number(((1 - buyPrice / sellPrice) * 100).toFixed(2));
+        } else {
+          return 100;
+        }
+      }
+      return -100;
+    };
+    const calcBuyPrice = product.buyPrice || 0;
+    const calcSellPrice = product.sellPrice || 0;
+    const calcProfitMargin = _calcProfitMargin(calcBuyPrice, calcSellPrice);
     setItems((prev) => [
       ...prev,
       {
@@ -341,7 +355,7 @@ function InvoiceFormStep({
         quantity: 1,
         unitPrice: product.buyPrice,
         sellingPrice: product.sellPrice,
-        profitMargin: product.profitMargin || 0,
+        profitMargin: calcProfitMargin,
         taxRate: settings?.taxEnabled ? settings.taxPercentage : 0,
         discount: 0,
         total: product.buyPrice * (1 + (settings?.taxEnabled ? settings.taxPercentage : 0) / 100),
@@ -367,16 +381,24 @@ function InvoiceFormStep({
         }
         const updated = { ...item, [field]: finalValue };
 
-        // ربط الأسعار
-        if (field === "unitPrice") {
-          if (Number(updated.unitPrice) > 0) {
-            updated.profitMargin = Number((((Number(updated.sellingPrice) - Number(updated.unitPrice)) / Number(updated.unitPrice)) * 100).toFixed(2));
+        // ربط الأسعار بنقطة الربح (مطابقة لفواتير البيع)
+        if (field === "unitPrice" || field === "sellingPrice") {
+          const buyP = Number(updated.unitPrice) || 0;
+          const sellP = Number(updated.sellingPrice) || 0;
+          if (sellP > 0) {
+            if (buyP > 0) {
+              updated.profitMargin = Number(((1 - buyP / sellP) * 100).toFixed(2));
+            } else {
+              updated.profitMargin = 100; // سعر البيع كله ربح
+            }
+          } else {
+            updated.profitMargin = -100;
           }
         } else if (field === "profitMargin") {
-          updated.sellingPrice = Number((Number(updated.unitPrice) * (1 + Number(updated.profitMargin) / 100)).toFixed(2));
-        } else if (field === "sellingPrice") {
-          if (Number(updated.unitPrice) > 0) {
-            updated.profitMargin = Number((((Number(updated.sellingPrice) - Number(updated.unitPrice)) / Number(updated.unitPrice)) * 100).toFixed(2));
+          const margin = Number(updated.profitMargin) || 0;
+          const buyP = Number(updated.unitPrice) || 0;
+          if (margin < 100) {
+             updated.sellingPrice = Number((buyP / (1 - margin / 100)).toFixed(2));
           }
         }
 
@@ -626,6 +648,7 @@ function InvoiceFormStep({
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {/* Invoice Number */}
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold text-gray-500 uppercase tracking-wide flex items-center gap-1">
                       <Hash className="h-3 w-3" />
@@ -841,7 +864,7 @@ function InvoiceFormStep({
                       <th className="text-center font-bold text-gray-500 text-xs uppercase tracking-wide px-3 py-3 bg-gray-50/30 w-24">الكمية</th>
                       <th className="text-center font-bold text-gray-500 text-xs uppercase tracking-wide px-3 py-3 bg-gray-50/30 w-28">سعر الشراء</th>
                       <th className="text-center font-bold text-blue-600 text-xs uppercase tracking-wide px-3 py-3 bg-gray-50/30 w-28">سعر البيع</th>
-                      <th className="text-center font-bold text-emerald-500 text-xs uppercase tracking-wide px-3 py-3 bg-gray-50/30 w-24">الربح %</th>
+                      <th className="text-center font-bold text-emerald-500 text-xs uppercase tracking-wide px-3 py-3 bg-gray-50/30 w-32">الربح %</th>
                       <th className="text-center font-bold text-amber-500 text-xs uppercase tracking-wide px-3 py-3 bg-gray-50/30 w-20">ضريبة %</th>
                       <th className="text-center font-bold text-gray-500 text-xs uppercase tracking-wide px-5 py-3 bg-gray-50/30 w-32">الإجمالي</th>
                       {!isViewMode && <th className="w-10 bg-gray-50/30"></th>}
