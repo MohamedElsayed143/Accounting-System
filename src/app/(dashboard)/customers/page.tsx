@@ -37,6 +37,7 @@ import {
   DataTableToolbar,
   EmptyState,
   PaginationControls,
+  PermissionGuard,
 } from "@/components/shared";
 import { toast } from "sonner";
 import { PasswordProtectionGate } from "@/components/shared/PasswordProtectionGate";
@@ -247,6 +248,7 @@ export default function CustomersPage() {
   /* ========================= */
 
   return (
+    <PermissionGuard permissionKey="customers_view">
     <>
       <Navbar title="العملاء" />
 
@@ -629,5 +631,6 @@ export default function CustomersPage() {
 
       </div>
     </>
+    </PermissionGuard>
   );
 }

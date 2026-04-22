@@ -1,6 +1,6 @@
-// app/(dashboard)/purchase-returns/new/page.tsx
 "use client";
-
+import { PermissionGuard } from "@/components/shared";
+// app/(dashboard)/purchase-returns/new/page.tsx
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Save, X, FileText, User, Calendar, Hash, Tag, Percent, DollarSign, CreditCard, Landmark, Trash2 } from "lucide-react";
@@ -37,7 +37,7 @@ const INITIAL_PURCHASE_RETURN_FORM = {
   description: "",
 };
 
-export default function NewPurchaseReturnPage() {
+function NewPurchaseReturnPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [suppliers, setSuppliers] = useState<any[]>([]);
@@ -523,5 +523,13 @@ export default function NewPurchaseReturnPage() {
         </form>
       </div>
     </>
+  );
+}
+
+export default function ProtectedNewPurchaseReturnPage(props: any) {
+  return (
+    <PermissionGuard permissionKey="returns_purchase">
+      <NewPurchaseReturnPage {...props} />
+    </PermissionGuard>
   );
 }

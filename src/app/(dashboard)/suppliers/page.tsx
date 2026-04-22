@@ -36,6 +36,7 @@ import { Label } from "@/components/ui/label";
 import {
   EmptyState,
   PaginationControls,
+  PermissionGuard,
 } from "@/components/shared";
 import { toast } from "sonner";
 import { PasswordProtectionGate } from "@/components/shared/PasswordProtectionGate";
@@ -245,6 +246,7 @@ export default function SuppliersPage() {
   /* ========================= */
 
   return (
+    <PermissionGuard permissionKey="suppliers_view">
     <>
       <Navbar title="الموردين" />
 
@@ -645,5 +647,6 @@ export default function SuppliersPage() {
 
       </div>
     </>
+    </PermissionGuard>
   );
 }

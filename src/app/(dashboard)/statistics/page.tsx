@@ -33,6 +33,7 @@ import { getCompanySettingsAction } from "../settings/actions";
 import { Navbar } from "@/components/layout/navbar";
 import { getAuthSession } from "@/app/login/actions";
 import { cn } from "@/lib/utils";
+import { PermissionGuard } from "@/components/shared";
 
 // ─────────────────────────────────────────────
 // Types
@@ -296,9 +297,9 @@ export default function StatisticsPage() {
   };
 
   return (
-    <>
-      <Navbar title="الإحصائيات" />
-      <div className="flex-1 p-4 md:p-6 space-y-6 bg-slate-50/40 dark:bg-transparent min-h-screen" dir="rtl">
+    <PermissionGuard permissionKey="statistics_view">
+      <div className="flex-1 space-y-8 p-4 md:p-8 bg-slate-50/30 dark:bg-transparent min-h-screen rtl text-right" dir="rtl">
+        <Navbar title="الرئيسية" />
         {/* ── Header ── */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl bg-gradient-to-l from-primary/10 via-primary/5 to-transparent border border-primary/20 p-5 shadow-sm">
           <div>
@@ -840,6 +841,6 @@ export default function StatisticsPage() {
           </div>
         </div>
       </div>
-    </>
+    </PermissionGuard>
   );
 }

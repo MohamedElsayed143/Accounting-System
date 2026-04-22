@@ -1,14 +1,26 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { getTreasuryData, AccountSummary } from "../actions";
-import { createTransfer, getNextTransferNumber } from "../transfers/actions";
+import { createTransfer } from "../transfers/actions";
 import { toast } from "sonner";
 
 interface TransferDialogProps {
@@ -17,11 +29,14 @@ interface TransferDialogProps {
   onSuccess: () => void;
 }
 
-export default function TransferDialog({ open, onOpenChange, onSuccess }: TransferDialogProps) {
+export default function TransferDialog({
+  open,
+  onOpenChange,
+  onSuccess,
+}: TransferDialogProps) {
   const [accounts, setAccounts] = useState<AccountSummary[]>([]);
   const [loading, setLoading] = useState(false);
-  const [nextNumber, setNextNumber] = useState("");
-  
+
   const [fromAccount, setFromAccount] = useState<string>("");
   const [toAccount, setToAccount] = useState<string>("");
   const [amount, setAmount] = useState("");
@@ -34,14 +49,10 @@ export default function TransferDialog({ open, onOpenChange, onSuccess }: Transf
     }
   }, [open]);
 
-  const loadData = async () => {
-    const [data, num] = await Promise.all([
-      getTreasuryData(),
-      getNextTransferNumber()
-    ]);
-    setAccounts(data.accounts);
-    setNextNumber(num);
-  };
+const loadData = async () => {
+  const data = await getTreasuryData();
+  setAccounts(data?.accounts || []);
+};
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,7 +66,7 @@ export default function TransferDialog({ open, onOpenChange, onSuccess }: Transf
       return;
     }
 
-    const fromAcc = accounts.find(a => `${a.type}-${a.id}` === fromAccount);
+    const fromAcc = accounts.find((a) => `${a.type}-${a.id}` === fromAccount);
     if (fromAcc && fromAcc.balance < parseFloat(amount)) {
       toast.error("رصيد الحساب المصدر غير كافٍ");
       return;
@@ -67,7 +78,7 @@ export default function TransferDialog({ open, onOpenChange, onSuccess }: Transf
       const [toType, toId] = toAccount.split("-");
 
       const result = await createTransfer({
-        transferNumber: nextNumber,
+        transferNumber: "",
         date,
         amount: parseFloat(amount),
         description,
@@ -78,7 +89,9 @@ export default function TransferDialog({ open, onOpenChange, onSuccess }: Transf
       });
 
       if ((result as any).pending) {
-        toast.success((result as any).message || "✅ تم إرسال طلب التحويل للمدير للموافقة");
+        toast.success(
+          (result as any).message || "✅ تم إرسال طلب التحويل للمدير للموافقة",
+        );
       } else {
         toast.success("تم التحويل بنجاح");
       }
@@ -100,18 +113,19 @@ export default function TransferDialog({ open, onOpenChange, onSuccess }: Transf
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg" dir="rtl">
         <DialogHeader>
-          <DialogTitle className="text-xl font-bold">تحويل أموال بين الحسابات</DialogTitle>
+          <DialogTitle className="text-xl font-bold">
+            تحويل أموال بين الحسابات
+          </DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 mt-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>رقم العملية</Label>
-              <Input value={nextNumber} readOnly className="bg-slate-50 font-mono" />
-            </div>
-            <div className="space-y-2">
-              <Label>التاريخ</Label>
-              <Input type="date" value={date} onChange={e => setDate(e.target.value)} required />
-            </div>
+          <div className="space-y-2">
+            <Label>التاريخ</Label>
+            <Input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              required
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -122,9 +136,13 @@ export default function TransferDialog({ open, onOpenChange, onSuccess }: Transf
                   <SelectValue placeholder="اختر المصدر" />
                 </SelectTrigger>
                 <SelectContent>
-                  {accounts.map(acc => (
-                    <SelectItem key={`${acc.type}-${acc.id}`} value={`${acc.type}-${acc.id}`}>
-                      {acc.type === "safe" ? "📦" : "🏦"} {acc.name} ({acc.balance.toLocaleString()} ج.م)
+                  {accounts.map((acc) => (
+                    <SelectItem
+                      key={`${acc.type}-${acc.id}`}
+                      value={`${acc.type}-${acc.id}`}
+                    >
+                      {acc.type === "safe" ? "📦" : "🏦"} {acc.name} (
+                      {acc.balance.toLocaleString()} ج.م)
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -138,9 +156,13 @@ export default function TransferDialog({ open, onOpenChange, onSuccess }: Transf
                   <SelectValue placeholder="اختر الوجهة" />
                 </SelectTrigger>
                 <SelectContent>
-                  {accounts.map(acc => (
-                    <SelectItem key={`${acc.type}-${acc.id}`} value={`${acc.type}-${acc.id}`}>
-                      {acc.type === "safe" ? "📦" : "🏦"} {acc.name} ({acc.balance.toLocaleString()} ج.م)
+                  {accounts.map((acc) => (
+                    <SelectItem
+                      key={`${acc.type}-${acc.id}`}
+                      value={`${acc.type}-${acc.id}`}
+                    >
+                      {acc.type === "safe" ? "📦" : "🏦"} {acc.name} (
+                      {acc.balance.toLocaleString()} ج.م)
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -150,28 +172,32 @@ export default function TransferDialog({ open, onOpenChange, onSuccess }: Transf
 
           <div className="space-y-2">
             <Label>المبلغ المراد تحويله</Label>
-            <Input 
-              type="number" 
-              step="0.01" 
-              value={amount} 
-              onChange={e => setAmount(e.target.value)} 
+            <Input
+              type="number"
+              step="0.01"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
               placeholder="0.00"
-              required 
+              required
               className="text-lg font-bold text-center"
             />
           </div>
 
           <div className="space-y-2">
             <Label>ملاحظات / سبب التحويل</Label>
-            <Textarea 
-              value={description} 
-              onChange={e => setDescription(e.target.value)} 
+            <Textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
               placeholder="اكتب تفاصيل التحويل هنا..."
             />
           </div>
 
           <DialogFooter className="gap-2 pt-4">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
               إلغاء
             </Button>
             <Button type="submit" disabled={loading} className="px-8">

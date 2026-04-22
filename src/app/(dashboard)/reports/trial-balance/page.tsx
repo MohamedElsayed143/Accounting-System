@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { getCompanySettingsAction } from "../../settings/actions";
 import { cn } from "@/lib/utils";
+import { PermissionGuard } from "@/components/shared";
 
 export default function TrialBalancePage() {
   const [data, setData] = useState<any>(null);
@@ -43,6 +44,7 @@ export default function TrialBalancePage() {
   }, []);
 
   return (
+    <PermissionGuard permissionKey="reports_ledger">
     <>
       <Navbar title="ميزان المراجعة" />
       <div className="flex-1 p-4 md:p-8 space-y-8 bg-slate-50/30 dark:bg-transparent min-h-screen" dir="rtl">
@@ -127,5 +129,6 @@ export default function TrialBalancePage() {
         )}
       </div>
     </>
+    </PermissionGuard>
   );
 }

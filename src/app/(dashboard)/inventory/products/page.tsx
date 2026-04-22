@@ -26,6 +26,7 @@ import {
   DataTableToolbar,
   EmptyState,
   PaginationControls,
+  PermissionGuard,
 } from "@/components/shared";
 import { toast } from "sonner";
 import { ProductForm } from "./components/ProductForm";
@@ -132,6 +133,7 @@ export default function ProductsPage() {
   };
 
   return (
+    <PermissionGuard permissionKey="inventory_view">
     <>
       <Navbar title="الأصناف" />
       <div className="flex-1 space-y-6 p-6" dir="rtl">
@@ -383,5 +385,6 @@ export default function ProductsPage() {
         </DialogContent>
       </Dialog>
     </>
+    </PermissionGuard>
   );
 }

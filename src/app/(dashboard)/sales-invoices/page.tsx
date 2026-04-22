@@ -37,7 +37,7 @@ import { usePermissions } from "@/hooks/use-permissions";
 import { toast } from "sonner";
 import { PasswordProtectionGate } from "@/components/shared/PasswordProtectionGate";
 import { useManagementMode } from "@/hooks/use-management-mode";
-import { DateFilterButtons } from "@/components/shared";
+import { DateFilterButtons, PermissionGuard } from "@/components/shared";
 import { isDateInFilter } from "@/lib/date-filters";
 
 
@@ -180,6 +180,7 @@ export default function SalesInvoicesPage() {
   };
 
   return (
+    <PermissionGuard permissionKey="sales_view">
     <>
       <Navbar title="فواتير المبيعات" />
       <div className="flex-1 space-y-6 p-6" dir="rtl">
@@ -439,5 +440,6 @@ export default function SalesInvoicesPage() {
       />
 
     </>
+    </PermissionGuard>
   );
 }

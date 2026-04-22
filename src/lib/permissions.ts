@@ -1,4 +1,4 @@
-import { prisma } from "./prisma";
+import { publicPrisma, getPrismaForSchema } from "./tenant-prisma";
 
 export type PermissionKey = 
   | "sales_view" 
@@ -26,7 +26,11 @@ export type PermissionKey =
   | "reports_treasury_banks"
   | "reports_ledger"
   | "returns_sales"
-  | "returns_purchase";
+  | "returns_purchase"
+  | "accounting_ledger_view"
+  | "accounting_journal_view"
+  | "accounting_journal_add"
+  | "accounting_coa_view";
 
 /**
  * Checks if a user has a specific permission.
@@ -34,9 +38,9 @@ export type PermissionKey =
  * Workers are checked against the 'cashier' role in SystemSettings.
  */
 export async function hasPermission(userId: number, key: PermissionKey): Promise<boolean> {
-  const user = await prisma.user.findUnique({
+  const user = await publicPrisma.user.findUnique({
     where: { id: userId },
-    select: { role: true }
+    select: { role: true, tenantSchema: true }
   });
 
   if (!user) return false;
@@ -45,8 +49,11 @@ export async function hasPermission(userId: number, key: PermissionKey): Promise
     return true;
   }
 
-  // For WORKER, fetch system settings
-  const settingsRecord = await prisma.systemSettings.findFirst({
+  const tenantSchema = user.tenantSchema || "public";
+  const tenantPrisma = getPrismaForSchema(tenantSchema);
+
+  // For WORKER, fetch system settings from their specific tenant schema
+  const settingsRecord = await tenantPrisma.systemSettings.findFirst({
     where: { id: 1 }
   });
 

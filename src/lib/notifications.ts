@@ -1,14 +1,15 @@
-import { prisma } from "@/lib/prisma";
-// import { NotificationType } from "@prisma/client";
+import { getTenantPrisma } from "./tenant-prisma";
+
 type NotificationType = "INFO" | "WARNING" | "SUCCESS" | "ERROR";
 
 export async function getGeneralSettings() {
-  let settings = await (prisma as any).generalSettings.findFirst({
+  const db = await getTenantPrisma();
+  let settings = await (db as any).generalSettings.findFirst({
     where: { id: 1 },
   });
 
   if (!settings) {
-    settings = await (prisma as any).generalSettings.create({
+    settings = await (db as any).generalSettings.create({
       data: {
         id: 1,
         staffActivityAlerts: true,
@@ -30,7 +31,8 @@ export async function createNotification(data: {
   type: NotificationType;
   userId?: number;
 }) {
-  return await (prisma as any).notification.create({
+  const db = await getTenantPrisma();
+  return await (db as any).notification.create({
     data: {
       title: data.title,
       message: data.message,
@@ -59,19 +61,20 @@ export async function triggerStaffActivityAlert(
 }
 
 export async function triggerStockAlert(productName: string, currentStock: number, minStock: number) {
+  const db = await getTenantPrisma();
   const settings = await getGeneralSettings();
   if (!settings.inventoryAlerts) return;
 
   let threshold = minStock;
   if (threshold === 0) {
-    const sysRecord = await (prisma as any).systemSettings.findFirst({ where: { id: 1 } });
+    const sysRecord = await (db as any).systemSettings.findFirst({ where: { id: 1 } });
     if (sysRecord?.settings?.inventory?.lowStockThreshold) {
       threshold = sysRecord.settings.inventory.lowStockThreshold;
     }
   }
 
   if (currentStock <= threshold) {
-    const existing = await (prisma as any).notification.findFirst({
+    const existing = await (db as any).notification.findFirst({
       where: {
         title: "تنبيه مخزون منخفض",
         message: { contains: `المنتج "${productName}"` },
@@ -90,11 +93,12 @@ export async function triggerStockAlert(productName: string, currentStock: numbe
 }
 
 export async function triggerTreasuryAlert(accountName: string, balance: number) {
+  const db = await getTenantPrisma();
   const settings = await getGeneralSettings();
   if (!settings.vaultBankAlerts) return;
 
   if (balance <= settings.minVaultBalance) {
-    const existing = await (prisma as any).notification.findFirst({
+    const existing = await (db as any).notification.findFirst({
       where: {
         title: "تنبيه رصيد منخفض",
         message: { contains: `الحساب "${accountName}"` },
@@ -113,6 +117,7 @@ export async function triggerTreasuryAlert(accountName: string, balance: number)
 }
 
 export async function checkDueDates() {
+  const db = await getTenantPrisma();
   const settings = await getGeneralSettings();
   if (!settings.financialAlerts) return;
 
@@ -123,7 +128,7 @@ export async function checkDueDates() {
   threeDaysFromNow.setDate(today.getDate() + 3);
 
   // 1. Check Sales Invoices (due today or within 3 days, status is credit)
-  const salesInvoices = await (prisma as any).salesInvoice.findMany({
+  const salesInvoices = await (db as any).salesInvoice.findMany({
     where: {
       status: "credit",
       dueDate: {
@@ -140,7 +145,7 @@ export async function checkDueDates() {
     const statusText = isOverdue ? "متأخرة" : "قريبة الاستحقاق";
     
     // Check if notification already exists to avoid duplication
-    const existing = await (prisma as any).notification.findFirst({
+    const existing = await (db as any).notification.findFirst({
       where: {
         title: { contains: `فاتورة مبيعات #${inv.invoiceNumber}` },
       },
@@ -156,7 +161,7 @@ export async function checkDueDates() {
   }
 
   // 2. Check Purchase Invoices (due today or within 3 days, status is credit)
-  const purchaseInvoices = await (prisma as any).purchaseInvoice.findMany({
+  const purchaseInvoices = await (db as any).purchaseInvoice.findMany({
     where: {
       status: "credit",
       dueDate: {
@@ -172,7 +177,7 @@ export async function checkDueDates() {
     const type = isOverdue ? "ERROR" : "WARNING";
     const statusText = isOverdue ? "متأخرة" : "قريبة الاستحقاق";
 
-    const existing = await (prisma as any).notification.findFirst({
+    const existing = await (db as any).notification.findFirst({
       where: {
         title: { contains: `فاتورة مشتريات #${inv.invoiceNumber}` },
       },

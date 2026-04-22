@@ -28,7 +28,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { getPendingInvoices } from "./actions";
 import { ProcessInvoiceDialog } from "./components/ProcessInvoiceDialog";
-import { DateFilterButtons } from "@/components/shared";
+import { DateFilterButtons, PermissionGuard } from "@/components/shared";
 import { isDateInFilter } from "@/lib/date-filters";
 
 export default function PendingInvoicesPage() {
@@ -70,6 +70,7 @@ export default function PendingInvoicesPage() {
   });
 
   return (
+    <PermissionGuard permissionKey="sales_pending_view">
     <>
       <Navbar title="الفواتير المعلقة (المسودات)" />
       
@@ -233,5 +234,6 @@ export default function PendingInvoicesPage() {
         )}
       </div>
     </>
+    </PermissionGuard>
   );
 }

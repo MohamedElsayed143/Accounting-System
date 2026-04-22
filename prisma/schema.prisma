@@ -442,7 +442,7 @@ model User {
   email                    String?                 @unique @db.VarChar(255)
   tenantSchema             String?                 @db.VarChar(100)
   parentId                 Int?
-  parent                   User?                   @relation("UserHierarchy", fields: [parentId], references: [id])
+  parent                   User?                   @relation("UserHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
   children                 User[]                  @relation("UserHierarchy")
   modifiedAccounts         Account[]               @relation("AccountModifier")
   createdJournalEntries    JournalEntry[]          @relation("JournalCreator")
@@ -507,7 +507,7 @@ model Notification {
   isRead    Boolean          @default(false)
   userId    Int?
   createdAt DateTime         @default(now())
-  user      User?            @relation(fields: [userId], references: [id])
+  user      User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model GeneralSettings {
@@ -523,6 +523,7 @@ model GeneralSettings {
   requireApprovalForSafeCreation Boolean  @default(false)
   requireApprovalForBankCreation Boolean  @default(false)
   requireApprovalForVouchers     Boolean  @default(false)
+  allowWorkersManualJournals     Boolean  @default(false)
 }
 
 model TreasuryActionRequest {
@@ -535,8 +536,8 @@ model TreasuryActionRequest {
   approverId  Int?
   createdAt   DateTime           @default(now())
   updatedAt   DateTime           @updatedAt
-  approver    User?              @relation("Approver", fields: [approverId], references: [id])
-  requester   User               @relation("Requester", fields: [requesterId], references: [id])
+  approver    User?              @relation("Approver", fields: [approverId], references: [id], onDelete: SetNull)
+  requester   User               @relation("Requester", fields: [requesterId], references: [id], onDelete: Cascade)
 
   @@index([requesterId])
   @@index([approverId])

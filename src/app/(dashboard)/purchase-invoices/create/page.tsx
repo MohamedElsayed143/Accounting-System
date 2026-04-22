@@ -1,6 +1,6 @@
-// app/(dashboard)/purchase-invoices/create/page.tsx
 "use client";
-
+import { PermissionGuard } from "@/components/shared";
+// app/(dashboard)/purchase-invoices/create/page.tsx
 import { useState, useEffect, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -1125,7 +1125,7 @@ function InvoiceFormStep({
 // ============================================================
 // الصفحة الرئيسية
 // ============================================================
-export default function CreatePurchaseInvoicePage() {
+function CreatePurchaseInvoicePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const invoiceId = searchParams.get("id");
@@ -1198,5 +1198,13 @@ export default function CreatePurchaseInvoicePage() {
         />
       </div>
     </>
+  );
+}
+
+export default function ProtectedCreatePurchaseInvoicePage(props: any) {
+  return (
+    <PermissionGuard permissionKey="purchase_create">
+      <CreatePurchaseInvoicePage {...props} />
+    </PermissionGuard>
   );
 }

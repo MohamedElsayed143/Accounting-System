@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getSalesReturns } from "./actions";
 import { toast } from "sonner";
-import { DateFilterButtons } from "@/components/shared";
+import { DateFilterButtons, PermissionGuard } from "@/components/shared";
 import { isDateInFilter } from "@/lib/date-filters";
 
 type SalesReturn = {
@@ -72,6 +72,7 @@ export default function SalesReturnsPage() {
   };
 
   return (
+    <PermissionGuard permissionKey="returns_sales">
     <>
       <Navbar title="مرتجعات المبيعات" />
       <div className="p-6" dir="rtl">
@@ -164,5 +165,6 @@ export default function SalesReturnsPage() {
         </Card>
       </div>
     </>
+    </PermissionGuard>
   );
 }

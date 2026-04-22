@@ -1,6 +1,6 @@
-// app/(dashboard)/sales-quotations/create/page.tsx
 "use client";
-
+import { PermissionGuard } from "@/components/shared";
+// app/(dashboard)/sales-quotations/create/page.tsx
 import { Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Navbar } from "@/components/layout/navbar";
@@ -27,7 +27,7 @@ function CreateQuotationContent() {
   );
 }
 
-export default function CreateQuotationPage() {
+function CreateQuotationPage() {
   return (
     <Suspense 
       fallback={
@@ -38,5 +38,14 @@ export default function CreateQuotationPage() {
     >
       <CreateQuotationContent />
     </Suspense>
+  );
+}
+
+
+export default function ProtectedCreateQuotationPage(props: any) {
+  return (
+    <PermissionGuard permissionKey="sales_quotations_view">
+      <CreateQuotationPage {...props} />
+    </PermissionGuard>
   );
 }

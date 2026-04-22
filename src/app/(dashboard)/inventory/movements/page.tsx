@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { DataTableToolbar, EmptyState, PaginationControls } from "@/components/shared";
+import { DataTableToolbar, EmptyState, PaginationControls, PermissionGuard } from "@/components/shared";
 import { toast } from "sonner";
 import { getMovements, type MovementRow } from "./actions";
 
@@ -72,6 +72,7 @@ export default function MovementsPage() {
   );
 
   return (
+    <PermissionGuard permissionKey="inventory_view">
     <>
       <Navbar title="حركات المخزون" />
       <div className="flex-1 space-y-6 p-6" dir="rtl">
@@ -218,5 +219,6 @@ export default function MovementsPage() {
         </Card>
       </div>
     </>
+    </PermissionGuard>
   );
 }

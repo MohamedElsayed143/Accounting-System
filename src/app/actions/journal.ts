@@ -12,7 +12,9 @@ import { AccountType } from "@prisma/client";
  * Fetches leaf accounts (selectable) for journal entries, including their current balance.
  */
 export async function getJournalSelectableAccounts() {
-  const accounts = await (await getTenantPrisma()).account.findMany({
+  const accounts = await (
+    await getTenantPrisma()
+  ).account.findMany({
     where: {
       isTerminal: true,
       level: 4, // Only Level-4 accounts can have journal entries posted to them
@@ -85,16 +87,20 @@ export async function getJournalSelectableAccounts() {
  * Gets the next entry number for a manual journal entry.
  */
 export async function getNextEntryNumber() {
-  const sequence = await (await getTenantPrisma()).systemSequence.findUnique({
+  const sequence = await (
+    await getTenantPrisma()
+  ).systemSequence.findUnique({
     where: { id: "JournalEntry" },
     select: { lastValue: true },
   });
-  
+
   if (sequence) {
     return sequence.lastValue + 1;
   }
 
-  const lastEntry = await (await getTenantPrisma()).journalEntry.findFirst({
+  const lastEntry = await (
+    await getTenantPrisma()
+  ).journalEntry.findFirst({
     orderBy: { entryNumber: "desc" },
     select: { entryNumber: true },
   });
@@ -122,7 +128,12 @@ export async function saveJournalEntry(data: {
   }
 
   // 0. Admin Mode Enforcement
-  if (!data.isAdminMode) {
+  const db = await getTenantPrisma();
+  const settings = await (db as any).generalSettings.findFirst();
+  const allowWorkersManualJournals =
+    settings?.allowWorkersManualJournals || false;
+
+  if (!data.isAdminMode && !allowWorkersManualJournals) {
     throw new Error(
       "يجب تفعيل وضع الإدارة (Admin Mode) للقيام بالعمليات الحسابية اليدوية.",
     );
@@ -143,7 +154,9 @@ export async function saveJournalEntry(data: {
 
   // 1.5. Prevent manual entries on Customer/Supplier accounts UNLESS in Admin Mode
   if (!data.isAdminMode) {
-    const linkedAccounts = await (await getTenantPrisma()).account.findMany({
+    const linkedAccounts = await (
+      await getTenantPrisma()
+    ).account.findMany({
       where: {
         id: { in: accountIds },
         OR: [{ customer: { isNot: null } }, { supplier: { isNot: null } }],
@@ -159,7 +172,9 @@ export async function saveJournalEntry(data: {
   }
 
   // 1.5.1 Prevent manual journal entries on inventory asset account 120301 unless the user has inventory_manage permission.
-  const inventoryAccount = await (await getTenantPrisma()).account.findFirst({
+  const inventoryAccount = await (
+    await getTenantPrisma()
+  ).account.findFirst({
     where: {
       id: { in: accountIds },
       code: "120301",
@@ -180,7 +195,9 @@ export async function saveJournalEntry(data: {
   }
 
   // 1.6. Prohibit direct Revenue vs Expense offset
-  const accountDetails = await (await getTenantPrisma()).account.findMany({
+  const accountDetails = await (
+    await getTenantPrisma()
+  ).account.findMany({
     where: { id: { in: accountIds } },
     select: { id: true, type: true },
   });
@@ -195,7 +212,9 @@ export async function saveJournalEntry(data: {
   }
 
   // 1.7. Enforce terminal only — reject any account not terminal
-  const terminalCheck = await (await getTenantPrisma()).account.findMany({
+  const terminalCheck = await (
+    await getTenantPrisma()
+  ).account.findMany({
     where: { id: { in: accountIds }, isTerminal: false },
     select: { name: true, level: true },
   });
@@ -209,8 +228,13 @@ export async function saveJournalEntry(data: {
 
   // 2. Database Transaction
   try {
-    const result = await (await getTenantPrisma()).$transaction(async (tx) => {
-      const entryNumber = await SequenceService.getNextSequenceValue(tx, "JournalEntry");
+    const result = await (
+      await getTenantPrisma()
+    ).$transaction(async (tx) => {
+      const entryNumber = await SequenceService.getNextSequenceValue(
+        tx,
+        "JournalEntry",
+      );
 
       const entry = await tx.journalEntry.create({
         data: {
@@ -255,7 +279,9 @@ export async function saveJournalEntry(data: {
  * Fetches all manual journal entries with their associated items.
  */
 export async function getJournalEntries() {
-  return await (await getTenantPrisma()).journalEntry.findMany({
+  return await (
+    await getTenantPrisma()
+  ).journalEntry.findMany({
     where: { sourceType: "MANUAL" },
     include: {
       items: {

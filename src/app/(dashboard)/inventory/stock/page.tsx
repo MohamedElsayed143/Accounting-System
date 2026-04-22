@@ -14,7 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { DataTableToolbar, EmptyState, PaginationControls } from "@/components/shared";
+import { DataTableToolbar, EmptyState, PaginationControls, PermissionGuard } from "@/components/shared";
 import { toast } from "sonner";
 import { getStockLevels, type StockRow } from "./actions";
 
@@ -63,6 +63,7 @@ export default function StockPage() {
   const lowCount = rows.filter((r) => r.isLow).length;
 
   return (
+    <PermissionGuard permissionKey="inventory_view">
     <>
       <Navbar title="المخزون الحالي" />
       <div className="flex-1 space-y-6 p-6" dir="rtl">
@@ -249,5 +250,6 @@ export default function StockPage() {
         </Card>
       </div>
     </>
+    </PermissionGuard>
   );
 }

@@ -5,7 +5,10 @@ import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { getSession } from "@/lib/auth";
 import { hasPermission } from "@/lib/permissions";
-import { triggerStaffActivityAlert, triggerTreasuryAlert } from "@/lib/notifications";
+import {
+  triggerStaffActivityAlert,
+  triggerTreasuryAlert,
+} from "@/lib/notifications";
 import { SequenceService } from "@/lib/services/SequenceService";
 
 // تعريف الأنواع
@@ -44,43 +47,50 @@ export interface InitialData {
 
 // دالة مساعدة للتأكد من وجود الخزنة الرئيسية
 async function ensureMainSafe() {
-  const safe = await (await getTenantPrisma()).treasurySafe.findFirst({
+  const safe = await (
+    await getTenantPrisma()
+  ).treasurySafe.findFirst({
     where: { isPrimary: true },
-    include: { account: true }
+    include: { account: true },
   });
-  
+
   if (!safe || !safe.accountId) {
     // ✅ [مصلح] يربط الخزنة بالحساب الطرفي 120101 (الخزينة الرئيسية) لا بالمجموعة 1201
-    const result = await (await getTenantPrisma()).$transaction(async (tx) => {
+    const result = await (
+      await getTenantPrisma()
+    ).$transaction(async (tx) => {
       let existingSafe = await tx.treasurySafe.findFirst({
-        where: { OR: [{ isPrimary: true }, { name: "الخزنة الرئيسية" }] }
+        where: { OR: [{ isPrimary: true }, { name: "الخزنة الرئيسية" }] },
       });
 
       // البحث عن الحساب الطرفي الصحيح للخزينة الرئيسية
-      let account = await tx.account.findUnique({ where: { code: '120101' } });
+      let account = await tx.account.findUnique({ where: { code: "120101" } });
 
       if (!account) {
         // محاولة استخدام مجموعة 1201 كـ parent
-        const parent = await tx.account.findUnique({ where: { code: '1201' } });
-        if (!parent) throw new Error("حساب النقدية بالخزينة (1201) غير موجود في شجرة الحسابات");
+        const parent = await tx.account.findUnique({ where: { code: "1201" } });
+        if (!parent)
+          throw new Error(
+            "حساب النقدية بالخزينة (1201) غير موجود في شجرة الحسابات",
+          );
         account = await tx.account.create({
           data: {
-            code: '120101',
-            name: 'الخزينة الرئيسية',
-            nameEn: 'Main Safe Account',
+            code: "120101",
+            name: "الخزينة الرئيسية",
+            nameEn: "Main Safe Account",
             type: parent.type,
             parentId: parent.id,
             level: parent.level + 1,
             isTerminal: true,
             isSelectable: true,
-          }
+          },
         });
       }
 
       if (existingSafe) {
         return await tx.treasurySafe.update({
           where: { id: existingSafe.id },
-          data: { isPrimary: true, accountId: account.id }
+          data: { isPrimary: true, accountId: account.id },
         });
       }
 
@@ -90,121 +100,134 @@ async function ensureMainSafe() {
           balance: 0,
           description: "الخزنة الثابتة للنظام",
           isPrimary: true,
-          accountId: account.id
-        }
+          accountId: account.id,
+        },
       });
     });
     return result;
   }
-  
+
   return safe;
 }
 
-// 1. جلب بيانات الخزنة الرئيسية (البنوك النشطة فقط)
+// 1. جلب بيانات الخزنة (البنوك والخزائن النشطة فقط)
 export async function getTreasuryData() {
   const session = await getSession();
-  if (!session) return { accounts: [], stats: { totalAccounts: 0, totalBanksBalance: 0, totalSafeBalance: 0, grandTotal: 0 }, recentTransactions: [] };
+  if (!session) {
+    return {
+      accounts: [],
+      stats: {
+        totalAccounts: 0,
+        totalBanksBalance: 0,
+        totalSafeBalance: 0,
+        grandTotal: 0,
+      },
+      recentTransactions: [],
+    };
+  }
 
   const canView = await hasPermission(session.userId, "treasury_view");
-  if (!canView) return { accounts: [], stats: { totalAccounts: 0, totalBanksBalance: 0, totalSafeBalance: 0, grandTotal: 0 }, recentTransactions: [] };
-  
-  const [
-    safes,
-    banks,
-    recentReceipts,
-    recentPayments,
-    recentSalesInvoices,
-    recentPurchaseInvoices,
-    recentSalesReturns,
-    recentPurchaseReturns,
-    recentTransfers,
-    recentManualEntries,
-  ] = await Promise.all([
-    (await getTenantPrisma()).treasurySafe.findMany({ 
+  if (!canView) {
+    return {
+      accounts: [],
+      stats: {
+        totalAccounts: 0,
+        totalBanksBalance: 0,
+        totalSafeBalance: 0,
+        grandTotal: 0,
+      },
+      recentTransactions: [],
+    };
+  }
+
+  const prisma = await getTenantPrisma();
+
+  const [safes, banks, recentReceipts, recentPayments, recentSalesInvoices, recentPurchaseInvoices, recentSalesReturns, recentPurchaseReturns, recentTransfers, recentManualEntries] = await Promise.all([
+    prisma.treasurySafe.findMany({
       where: { isActive: true },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
       include: {
         account: {
           include: {
             journalItems: {
-              select: { debit: true, credit: true }
-            }
-          }
-        }
-      }
+              select: { debit: true, credit: true },
+            },
+          },
+        },
+      },
     }),
-    (await getTenantPrisma()).treasuryBank.findMany({ 
+    prisma.treasuryBank.findMany({
       where: { isActive: true },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
       include: {
         account: {
           include: {
             journalItems: {
-              select: { debit: true, credit: true }
-            }
-          }
-        }
-      }
+              select: { debit: true, credit: true },
+            },
+          },
+        },
+      },
     }),
-    (await getTenantPrisma()).receiptVoucher.findMany({
+    prisma.receiptVoucher.findMany({
       take: 20,
-      orderBy: { date: 'desc' },
+      orderBy: [{ date: "desc" }, { createdAt: "desc" }],
       include: {
         customer: { select: { name: true } },
         safe: { select: { name: true } },
         bank: { select: { name: true } },
-      }
+      },
     }),
-    (await getTenantPrisma()).paymentVoucher.findMany({
+    prisma.paymentVoucher.findMany({
       take: 20,
-      orderBy: { date: 'desc' },
+      orderBy: [{ date: "desc" }, { createdAt: "desc" }],
       include: {
         supplier: { select: { name: true } },
         safe: { select: { name: true } },
         bank: { select: { name: true } },
-      }
+      },
     }),
-    (await getTenantPrisma()).salesInvoice.findMany({
-      where: { status: 'cash' },
+    prisma.salesInvoice.findMany({
+      where: { status: "cash" },
       take: 20,
-      orderBy: { invoiceDate: 'desc' },
+      orderBy: [{ invoiceDate: "desc" }, { createdAt: "desc" }],
       include: {
         safe: { select: { name: true } },
         bank: { select: { name: true } },
-      }
+      },
     }),
-    (await getTenantPrisma()).purchaseInvoice.findMany({
-      where: { status: 'cash' },
+    prisma.purchaseInvoice.findMany({
+      where: { status: "cash" },
       take: 20,
-      orderBy: { invoiceDate: 'desc' },
+      orderBy: [{ invoiceDate: "desc" }, { createdAt: "desc" }],
       include: {
         safe: { select: { name: true } },
         bank: { select: { name: true } },
-      }
+      },
     }),
-    (await getTenantPrisma()).salesReturn.findMany({
-      where: { refundMethod: { in: ['cash', 'safe', 'bank'] } },
+    prisma.salesReturn.findMany({
+      where: { refundMethod: { in: ["cash", "safe", "bank"] } },
       take: 20,
-      orderBy: { returnDate: 'desc' },
+      orderBy: [{ returnDate: "desc" }, { createdAt: "desc" }],
       include: {
         customer: { select: { name: true } },
         safe: { select: { name: true } },
         bank: { select: { name: true } },
-      }
+      },
     }),
-    (await getTenantPrisma()).purchaseReturn.findMany({
-      where: { refundMethod: { in: ['cash', 'safe', 'bank'] } },
+    prisma.purchaseReturn.findMany({
+      where: { refundMethod: { in: ["cash", "safe", "bank"] } },
       take: 20,
-      orderBy: { returnDate: 'desc' },
+      orderBy: [{ returnDate: "desc" }, { createdAt: "desc" }],
       include: {
         supplier: { select: { name: true } },
         safe: { select: { name: true } },
         bank: { select: { name: true } },
-      }
+      },
     }),
-    (await getTenantPrisma()).treasuryTransfer.findMany({
+    prisma.treasuryTransfer.findMany({
       take: 20,
-      orderBy: { date: "desc" },
+      orderBy: [{ date: "desc" }, { createdAt: "desc" }],
       include: {
         fromSafe: { select: { name: true } },
         fromBank: { select: { name: true } },
@@ -212,7 +235,7 @@ export async function getTreasuryData() {
         toBank: { select: { name: true } },
       },
     }),
-    (await getTenantPrisma()).journalEntry.findMany({
+    prisma.journalEntry.findMany({
       where: {
         sourceType: "MANUAL",
         items: {
@@ -227,7 +250,7 @@ export async function getTreasuryData() {
         },
       },
       take: 20,
-      orderBy: { date: "desc" },
+      orderBy: [{ date: "desc" }, { createdAt: "desc" }],
       include: {
         items: {
           include: {
@@ -243,28 +266,41 @@ export async function getTreasuryData() {
     }),
   ]);
 
-  // Process real-time ledger balances
-  const processedSafes = safes.map(s => {
-    let balance = s.balance;
-    if (s.account) {
-      const totalDebit = s.account.journalItems.reduce((sum: number, item: { debit: number; credit: number }) => sum + (Number(item.debit) || 0), 0);
-      const totalCredit = s.account.journalItems.reduce((sum: number, item: { debit: number; credit: number }) => sum + (Number(item.credit) || 0), 0);
+  // معالجة أرصدة الخزائن بناءً على الحساب المحاسبي
+  const processedSafes = safes.map((safe) => {
+    let balance = safe.balance;
+    if (safe.account) {
+      const totalDebit = safe.account.journalItems.reduce(
+        (sum, item) => sum + (Number(item.debit) || 0),
+        0,
+      );
+      const totalCredit = safe.account.journalItems.reduce(
+        (sum, item) => sum + (Number(item.credit) || 0),
+        0,
+      );
       balance = totalDebit - totalCredit;
     }
-    return { ...s, balance };
+    return { ...safe, balance };
   });
 
-  const processedBanks = banks.map(b => {
-    let balance = b.balance;
-    if (b.account) {
-      const totalDebit = b.account.journalItems.reduce((sum: number, item: { debit: number; credit: number }) => sum + (Number(item.debit) || 0), 0);
-      const totalCredit = b.account.journalItems.reduce((sum: number, item: { debit: number; credit: number }) => sum + (Number(item.credit) || 0), 0);
+  // معالجة أرصدة البنوك
+  const processedBanks = banks.map((bank) => {
+    let balance = bank.balance;
+    if (bank.account) {
+      const totalDebit = bank.account.journalItems.reduce(
+        (sum, item) => sum + (Number(item.debit) || 0),
+        0,
+      );
+      const totalCredit = bank.account.journalItems.reduce(
+        (sum, item) => sum + (Number(item.credit) || 0),
+        0,
+      );
       balance = totalDebit - totalCredit;
     }
-    return { ...b, balance };
+    return { ...bank, balance };
   });
 
-  const stats: TreasuryStats = {
+  const stats = {
     totalAccounts: processedSafes.length + processedBanks.length,
     totalBanksBalance: processedBanks.reduce((sum, b) => sum + b.balance, 0),
     totalSafeBalance: processedSafes.reduce((sum, s) => sum + s.balance, 0),
@@ -272,186 +308,284 @@ export async function getTreasuryData() {
   };
   stats.grandTotal = stats.totalBanksBalance + stats.totalSafeBalance;
 
-  const allAccounts: AccountSummary[] = [
-    ...processedSafes.map(s => ({ 
-      id: s.id, 
-      name: s.name, 
-      type: "safe" as const, 
+  const accounts: AccountSummary[] = [
+    ...processedSafes.map((s) => ({
+      id: s.id,
+      name: s.name,
+      type: "safe" as const,      // ✅ هذا مسموح لأنه حرفي
       balance: s.balance,
       isPrimary: s.isPrimary,
       accountNumber: null,
-      branch: null
+      branch: null,
     })),
-    ...processedBanks.map(b => ({ 
-      id: b.id, 
-      name: b.name, 
-      type: "bank" as const, 
+    ...processedBanks.map((b) => ({
+      id: b.id,
+      name: b.name,
+      type: "bank" as const,      // ✅ هذا مسموح
       balance: b.balance,
       isPrimary: false,
       accountNumber: b.accountNumber,
-      branch: b.branch
+      branch: b.branch,
     })),
   ];
 
-  // تجميع آخر العمليات وترتيبها حسب تاريخ السند (الأحدث أولاً)
+  // تجميع المعاملات (بدون استخدام as const على كائنات ديناميكية)
   const recentTransactions = [
-    ...recentPayments.map(p => ({
+    ...recentPayments.map((p) => ({
       id: `p-${p.id}`,
-      type: 'payment' as const,
+      type: "payment" as const,
       voucherNumber: p.voucherNumber,
       amount: p.amount,
       date: p.date,
       partyName: p.supplier.name,
-      accountName: p.safe?.name || p.bank?.name || '',
+      accountName: p.safe?.name || p.bank?.name || "",
       description: p.description,
       createdAt: p.createdAt,
     })),
-    ...recentReceipts.map(r => ({
+    ...recentReceipts.map((r) => ({
       id: `r-${r.id}`,
-      type: 'receipt' as const,
+      type: "receipt" as const,
       voucherNumber: r.voucherNumber,
       amount: r.amount,
       date: r.date,
       partyName: r.customer.name,
-      accountName: r.safe?.name || r.bank?.name || '',
+      accountName: r.safe?.name || r.bank?.name || "",
       description: r.description,
       createdAt: r.createdAt,
     })),
-    ...recentSalesInvoices.map(s => ({
-      id: `si-${s.id}`,
-      type: 'sales-invoice' as const,
-      voucherNumber: `INV-${s.invoiceNumber}`,
-      amount: s.total,
-      date: s.invoiceDate,
-      partyName: s.customerName,
-      accountName: s.safe?.name || s.bank?.name || '',
-      description: s.description,
-      createdAt: s.createdAt,
+    ...recentSalesInvoices.map((inv) => ({
+      id: `si-${inv.id}`,
+      type: "sales-invoice" as const,
+      voucherNumber: `INV-${inv.invoiceNumber}`,
+      amount: inv.total,
+      date: inv.invoiceDate,
+      partyName: inv.customerName,
+      accountName: inv.safe?.name || inv.bank?.name || "",
+      description: inv.description,
+      createdAt: inv.createdAt,
     })),
-    ...recentPurchaseInvoices.map(p => ({
-      id: `pi-${p.id}`,
-      type: 'purchase-invoice' as const,
-      voucherNumber: `PUR-${p.invoiceNumber}`,
-      amount: p.total,
-      date: p.invoiceDate,
-      partyName: p.supplierName,
-      accountName: p.safe?.name || p.bank?.name || '',
-      description: p.description,
-      createdAt: p.createdAt,
+    ...recentPurchaseInvoices.map((inv) => ({
+      id: `pi-${inv.id}`,
+      type: "purchase-invoice" as const,
+      voucherNumber: `PUR-${inv.invoiceNumber}`,
+      amount: inv.total,
+      date: inv.invoiceDate,
+      partyName: inv.supplierName,
+      accountName: inv.safe?.name || inv.bank?.name || "",
+      description: inv.description,
+      createdAt: inv.createdAt,
     })),
-    ...recentSalesReturns.map(sr => ({
+    ...recentSalesReturns.map((sr) => ({
       id: `sr-${sr.id}`,
-      type: 'sales-return' as const,
+      type: "sales-return" as const,
       voucherNumber: `SR-${sr.returnNumber}`,
       amount: sr.total,
       date: sr.returnDate,
       partyName: sr.customer.name,
-      accountName: sr.safe?.name || sr.bank?.name || '',
+      accountName: sr.safe?.name || sr.bank?.name || "",
       description: sr.reason || sr.description,
       createdAt: sr.createdAt,
     })),
-    ...recentPurchaseReturns.map(pr => ({
+    ...recentPurchaseReturns.map((pr) => ({
       id: `pr-${pr.id}`,
-      type: 'purchase-return' as const,
+      type: "purchase-return" as const,
       voucherNumber: `PR-${pr.returnNumber}`,
       amount: pr.total,
       date: pr.returnDate,
       partyName: pr.supplier.name,
-      accountName: pr.safe?.name || pr.bank?.name || '',
+      accountName: pr.safe?.name || pr.bank?.name || "",
       description: pr.reason || pr.description,
       createdAt: pr.createdAt,
     })),
-    ...recentTransfers.map(tr => ({
+    ...recentTransfers.map((tr) => ({
       id: `tr-${tr.id}`,
-      type: 'transfer' as any, // We can handle this in UI later or use payment/receipt
+      type: "transfer" as const,
       voucherNumber: tr.transferNumber,
       amount: tr.amount,
       date: tr.date,
-      partyName: `${tr.fromSafe?.name || tr.fromBank?.name} ⬅️ ${tr.toSafe?.name || tr.toBank?.name}`,
-      accountName: 'تحويل',
-      description: tr.description || 'تحويل رصيد',
+      partyName: `${tr.fromSafe?.name || tr.fromBank?.name} ➡️ ${tr.toSafe?.name || tr.toBank?.name}`,
+      accountName: "تحويل",
+      description: tr.description || "تحويل رصيد",
       createdAt: tr.createdAt,
     })),
-    ...recentManualEntries.flatMap((entry) => {
-      // Find items that involve a treasury account
-      return entry.items
+    ...recentManualEntries.flatMap((entry) =>
+      entry.items
         .filter((item) => item.account.treasurySafe || item.account.treasuryBank)
         .map((item) => {
           const isDebit = (item.debit || 0) > 0;
           return {
             id: `manual-${entry.id}-${item.id}`,
-            type: (isDebit ? "receipt" : "payment") as any,
+            type: (isDebit ? "receipt" : "payment") as "receipt" | "payment",
             voucherNumber: `JV-${entry.entryNumber}`,
             amount: isDebit ? item.debit : item.credit,
             date: entry.date,
             partyName: "قيد يدوي",
-            accountName:
-              item.account.treasurySafe?.name ||
-              item.account.treasuryBank?.name ||
-              "",
+            accountName: item.account.treasurySafe?.name || item.account.treasuryBank?.name || "",
             description: item.description || entry.description,
             createdAt: entry.createdAt,
           };
-        });
-    }),
-  ]
-  .sort((a, b) => {
-    const dA = new Date(a.date);
-    dA.setHours(0, 0, 0, 0);
-    const dB = new Date(b.date);
-    dB.setHours(0, 0, 0, 0);
-    
-    const dateCompare = dB.getTime() - dA.getTime();
-    if (dateCompare !== 0) return dateCompare;
-    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-  })
-  .slice(0, 15);
+        }),
+    ),
+  ];
 
-  return { accounts: allAccounts, stats, recentTransactions };
+  // ترتيب المعاملات (الأحدث أولاً)
+  const sortedTransactions = recentTransactions.sort((a, b) => {
+    const dateA = new Date(a.date).setHours(0, 0, 0, 0);
+    const dateB = new Date(b.date).setHours(0, 0, 0, 0);
+    if (dateA !== dateB) return dateB - dateA;
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  }).slice(0, 15);
+
+  return {
+    accounts,
+    stats,
+    recentTransactions: sortedTransactions,
+  };
 }
 
 // 2. إنشاء بنك جديد
-export async function createBank(data: { name: string; accountNumber: string; branch: string; initialBalance: number }, skipApproval: boolean = false) {
+export async function createBank(
+  data: {
+    name: string;
+    accountNumber: string;
+    branch: string;
+    initialBalance: number;
+  },
+  skipApproval: boolean = false,
+) {
   const session = await getSession();
   if (!session) throw new Error("Unauthorized");
 
   const canManage = await hasPermission(session.userId, "treasury_manage");
-  if (!canManage) throw new Error("ليس لديك صلاحية إضافة حسابات بنكية");
 
   // Approval Interception
   if (!skipApproval) {
-    const settings = await (await getTenantPrisma() as any).generalSettings.findUnique({ where: { id: 1 } });
-    if (session.user.role === "WORKER" && (settings as any)?.requireApprovalForBankCreation) {
-      await (await getTenantPrisma() as any).treasuryActionRequest.create({
-        data: {
-          type: "CREATE_BANK",
-          data: data as any,
-          requesterId: session.userId,
-          status: "PENDING",
-        },
-      });
-      return { success: true, pending: true, message: "تم إرسال طلب إضافة البنك للمدير للموافقة" };
+    try {
+      const tenantDb = await getTenantPrisma();
+      const settings = await (tenantDb as any).generalSettings.findFirst();
+      if (
+        session.user.role === "WORKER" &&
+        (settings as any)?.requireApprovalForBankCreation
+      ) {
+        // Sync user to tenant schema
+        try {
+          await (tenantDb as any).user.upsert({
+            where: { id: session.userId },
+            update: {
+              username: session.user.username,
+              role: session.user.role,
+            },
+            create: {
+              id: session.userId,
+              username: session.user.username,
+              password: session.user.password || "",
+              role: session.user.role,
+              tenantSchema: (session.user as any).tenantSchema,
+              parentId: (session.user as any).parentId,
+              authorizedDevices: [],
+            },
+          });
+        } catch (syncErr) {
+          console.warn("[CreateBank] User sync failed:", syncErr);
+        }
+
+        await (tenantDb as any).treasuryActionRequest.create({
+          data: {
+            type: "CREATE_BANK",
+            data: data as any,
+            requesterId: session.userId,
+            status: "PENDING",
+          },
+        });
+
+        // Notify admin
+        try {
+          const adminUser = await publicPrisma.user.findFirst({
+            where: {
+              tenantSchema: (session.user as any).tenantSchema,
+              role: "ADMIN",
+            },
+            select: {
+              id: true,
+              username: true,
+              password: true,
+              role: true,
+              tenantSchema: true,
+              parentId: true,
+              authorizedDevices: true,
+            },
+          });
+          if (adminUser) {
+            // Sync admin user to tenant schema before creating notification
+            await (tenantDb as any).user.upsert({
+              where: { id: adminUser.id },
+              update: { username: adminUser.username, role: adminUser.role },
+              create: {
+                id: adminUser.id,
+                username: adminUser.username,
+                password: adminUser.password || "",
+                role: adminUser.role,
+                tenantSchema: adminUser.tenantSchema,
+                parentId: adminUser.parentId,
+                authorizedDevices: adminUser.authorizedDevices || [],
+              },
+            });
+            await (tenantDb as any).notification.create({
+              data: {
+                title: "طلب موافقة: إضافة بنك",
+                message:
+                  `الموظف "${session.user.username}" يطلب إضافة بنك جديد.\n` +
+                  `الاسم: ${data.name}\n` +
+                  `الرصيد الافتتاحي: ${Number(data.initialBalance || 0)} ج.م\n` +
+                  `راجع قسم الإشعارات للموافقة.`,
+                type: "WARNING",
+                userId: adminUser.id,
+              },
+            });
+          }
+        } catch (notifErr) {
+          console.warn("[CreateBank] Admin notification failed:", notifErr);
+        }
+
+        return {
+          success: true,
+          pending: true,
+          message: "تم إرسال طلب إضافة البنك للمدير للموافقة",
+        };
+      }
+    } catch (approvalErr: any) {
+      console.warn(
+        "[CreateBank] Approval interception failed:",
+        approvalErr?.message,
+      );
     }
   }
 
+  if (!canManage) throw new Error("ليس لديك صلاحية إضافة حسابات بنكية");
+
   try {
-    const result = await (await getTenantPrisma()).$transaction(async (tx) => {
+    const result = await (
+      await getTenantPrisma()
+    ).$transaction(async (tx) => {
       // 1. Find Bank Parent Account
       const parent = await tx.account.findUnique({
-        where: { code: '1205' }
+        where: { code: "1205" },
       });
 
-      if (!parent) throw new Error("حساب البنوك الرئيسي (1205) غير موجود في شجرة الحسابات"); // ✅ [مصلح] كان يقول 1102 بالخطأ
+      if (!parent)
+        throw new Error(
+          "حساب البنوك الرئيسي (1205) غير موجود في شجرة الحسابات",
+        ); // ✅ [مصلح] كان يقول 1102 بالخطأ
 
       // 2. Suggest Next Code
       const lastChild = await tx.account.findFirst({
         where: { parentId: parent.id },
-        orderBy: { code: 'desc' },
-        select: { code: true }
+        orderBy: { code: "desc" },
+        select: { code: true },
       });
-      
-      const newCode = lastChild 
-        ? (parseInt(lastChild.code) + 1).toString() 
+
+      const newCode = lastChild
+        ? (parseInt(lastChild.code) + 1).toString()
         : parent.code + "01";
 
       // 3. Create COA Account
@@ -464,7 +598,7 @@ export async function createBank(data: { name: string; accountNumber: string; br
           level: parent.level + 1,
           isSelectable: true,
           isTerminal: true,
-        }
+        },
       });
 
       // 4. Create Bank and link accountId
@@ -480,34 +614,54 @@ export async function createBank(data: { name: string; accountNumber: string; br
       });
 
       if (data.initialBalance > 0) {
-        const openingBalanceAccount = await tx.account.findFirst({ where: { code: '31' } });
-        const cap = await tx.account.findUnique({ where: { code: '3' } });
+        const openingBalanceAccount = await tx.account.findFirst({
+          where: { code: "31" },
+        });
+        const cap = await tx.account.findUnique({ where: { code: "3" } });
         let openingAccId = openingBalanceAccount?.id;
         if (!openingAccId && cap) {
           const newAcc = await tx.account.create({
             data: {
-              code: '3101', name: 'الأرصدة الافتتاحية', type: 'EQUITY',
-              parentId: cap.id, level: 3, isSelectable: true, isTerminal: true
-            }
+              code: "3101",
+              name: "الأرصدة الافتتاحية",
+              type: "EQUITY",
+              parentId: cap.id,
+              level: 3,
+              isSelectable: true,
+              isTerminal: true,
+            },
           });
           openingAccId = newAcc.id;
         }
 
         if (openingAccId) {
-          const entryNumber = await SequenceService.getNextSequenceValue(tx, "JournalEntry");
+          const entryNumber = await SequenceService.getNextSequenceValue(
+            tx,
+            "JournalEntry",
+          );
           await tx.journalEntry.create({
             data: {
               entryNumber,
               date: new Date(),
               description: `رصيد افتتاحي - ${data.name}`,
-              sourceType: 'MANUAL',
+              sourceType: "MANUAL",
               items: {
                 create: [
-                  { accountId: account.id, debit: data.initialBalance, credit: 0, description: 'رصيد افتتاحي' },
-                  { accountId: openingAccId, debit: 0, credit: data.initialBalance, description: `رصيد افتتاحي - ${data.name}` }
-                ]
-              }
-            }
+                  {
+                    accountId: account.id,
+                    debit: data.initialBalance,
+                    credit: 0,
+                    description: "رصيد افتتاحي",
+                  },
+                  {
+                    accountId: openingAccId,
+                    debit: 0,
+                    credit: data.initialBalance,
+                    description: `رصيد افتتاحي - ${data.name}`,
+                  },
+                ],
+              },
+            },
           });
         }
       }
@@ -520,7 +674,7 @@ export async function createBank(data: { name: string; accountNumber: string; br
       await triggerStaffActivityAlert(
         session.user,
         "إضافة بنك",
-        `تم إضافة بنك جديد: ${result.name} (رصيد: ${result.balance})`
+        `تم إضافة بنك جديد: ${result.name} (رصيد: ${result.balance})`,
       );
     }
 
@@ -542,10 +696,12 @@ export async function archiveBank(bankId: number) {
 
   try {
     console.log("Archiving bank:", bankId);
-    
+
     // تحقق من وجود البنك
-    const bank = await (await getTenantPrisma()).treasuryBank.findUnique({
-      where: { id: bankId }
+    const bank = await (
+      await getTenantPrisma()
+    ).treasuryBank.findUnique({
+      where: { id: bankId },
     });
 
     if (!bank) {
@@ -553,51 +709,59 @@ export async function archiveBank(bankId: number) {
     }
 
     // تحقق من وجود معاملات مرتبطة
-    const relatedVouchers = await (await getTenantPrisma()).paymentVoucher.count({
-      where: { bankId }
+    const relatedVouchers = await (
+      await getTenantPrisma()
+    ).paymentVoucher.count({
+      where: { bankId },
     });
 
-    const relatedReceipts = await (await getTenantPrisma()).receiptVoucher.count({
-      where: { bankId }
+    const relatedReceipts = await (
+      await getTenantPrisma()
+    ).receiptVoucher.count({
+      where: { bankId },
     });
 
     const hasTransactions = relatedVouchers > 0 || relatedReceipts > 0;
 
     if (!hasTransactions) {
       // لو مفيش معاملات، اقدر أحذفه فعلاً
-      await (await getTenantPrisma()).treasuryBank.delete({
-        where: { id: bankId }
+      await (
+        await getTenantPrisma()
+      ).treasuryBank.delete({
+        where: { id: bankId },
       });
-      
+
       revalidatePath("/treasury");
-      return { 
-        success: true, 
+      return {
+        success: true,
         message: "تم حذف البنك نهائياً",
-        deleted: true 
+        deleted: true,
       };
     } else {
       // لو في معاملات، اعمل أرشفة
-      await (await getTenantPrisma()).treasuryBank.update({
+      await (
+        await getTenantPrisma()
+      ).treasuryBank.update({
         where: { id: bankId },
-        data: { isActive: false }
+        data: { isActive: false },
       });
-      
+
       revalidatePath("/treasury");
-      
+
       const session = await getSession();
       if (session) {
         await triggerStaffActivityAlert(
           session.user,
           "أرشفة بنك",
-          `تم أرشفة البنك: ${bank.name}`
+          `تم أرشفة البنك: ${bank.name}`,
         );
       }
 
-      return { 
-        success: true, 
+      return {
+        success: true,
         message: "تم أرشفة البنك وإخفاؤه من القائمة مع الاحتفاظ بالمعاملات",
         archived: true,
-        transactionsCount: relatedVouchers + relatedReceipts
+        transactionsCount: relatedVouchers + relatedReceipts,
       };
     }
   } catch (error) {
@@ -611,60 +775,76 @@ export async function getInitialData(): Promise<InitialData> {
   try {
     // تأكد من وجود الخزنة الرئيسية
     await ensureMainSafe();
-    
+
     const [suppliers, safes, banks] = await Promise.all([
-      (await getTenantPrisma()).supplier.findMany({ 
+      (await getTenantPrisma()).supplier.findMany({
         orderBy: { name: "asc" },
-        select: { id: true, name: true, code: true }
+        select: { id: true, name: true, code: true },
       }),
-      (await getTenantPrisma()).treasurySafe.findMany({ 
+      (await getTenantPrisma()).treasurySafe.findMany({
         where: { isActive: true },
         orderBy: { name: "asc" },
         include: {
           account: {
             include: {
               journalItems: {
-                select: { debit: true, credit: true }
-              }
-            }
-          }
-        }
+                select: { debit: true, credit: true },
+              },
+            },
+          },
+        },
       }),
-      (await getTenantPrisma()).treasuryBank.findMany({ 
+      (await getTenantPrisma()).treasuryBank.findMany({
         where: { isActive: true },
         orderBy: { name: "asc" },
         include: {
           account: {
             include: {
               journalItems: {
-                select: { debit: true, credit: true }
-              }
-            }
-          }
-        }
+                select: { debit: true, credit: true },
+              },
+            },
+          },
+        },
       }),
     ]);
 
-    const processedSafes = safes.map(s => {
+    const processedSafes = safes.map((s) => {
       let balance = s.balance;
       if (s.account) {
-        const totalDebit = s.account.journalItems.reduce((sum: number, item: { debit: number; credit: number }) => sum + (Number(item.debit) || 0), 0);
-        const totalCredit = s.account.journalItems.reduce((sum: number, item: { debit: number; credit: number }) => sum + (Number(item.credit) || 0), 0);
+        const totalDebit = s.account.journalItems.reduce(
+          (sum: number, item: { debit: number; credit: number }) =>
+            sum + (Number(item.debit) || 0),
+          0,
+        );
+        const totalCredit = s.account.journalItems.reduce(
+          (sum: number, item: { debit: number; credit: number }) =>
+            sum + (Number(item.credit) || 0),
+          0,
+        );
         balance = totalDebit - totalCredit;
       }
       return { id: s.id, name: s.name, balance };
     });
 
-    const processedBanks = banks.map(b => {
+    const processedBanks = banks.map((b) => {
       let balance = b.balance;
       if (b.account) {
-        const totalDebit = b.account.journalItems.reduce((sum: number, item: { debit: number; credit: number }) => sum + (Number(item.debit) || 0), 0);
-        const totalCredit = b.account.journalItems.reduce((sum: number, item: { debit: number; credit: number }) => sum + (Number(item.credit) || 0), 0);
+        const totalDebit = b.account.journalItems.reduce(
+          (sum: number, item: { debit: number; credit: number }) =>
+            sum + (Number(item.debit) || 0),
+          0,
+        );
+        const totalCredit = b.account.journalItems.reduce(
+          (sum: number, item: { debit: number; credit: number }) =>
+            sum + (Number(item.credit) || 0),
+          0,
+        );
         balance = totalDebit - totalCredit;
       }
       return { id: b.id, name: b.name, balance };
     });
-    
+
     return { suppliers, safes: processedSafes, banks: processedBanks };
   } catch (error) {
     console.error("Error fetching initial data:", error);
@@ -840,7 +1020,7 @@ export async function createPaymentVoucher(data: PaymentVoucherInput, skipApprov
 */
 
 // 6. جلب تفاصيل حساب معين
-export async function getAccountDetails(id: number, type: 'safe' | 'bank') {
+export async function getAccountDetails(id: number, type: "safe" | "bank") {
   const session = await getSession();
   if (!session) throw new Error("Unauthorized");
 
@@ -848,53 +1028,55 @@ export async function getAccountDetails(id: number, type: 'safe' | 'bank') {
   if (!canView) throw new Error("ليس لديك صلاحية عرض تفاصيل الحساب");
 
   try {
-    if (type === 'safe') {
-      const safe = await (await getTenantPrisma()).treasurySafe.findUnique({
+    if (type === "safe") {
+      const safe = await (
+        await getTenantPrisma()
+      ).treasurySafe.findUnique({
         where: { id },
         include: {
           receiptVouchers: {
             include: { customer: { select: { name: true } } },
-            orderBy: { date: 'desc' }
+            orderBy: [{ date: "desc" }, { createdAt: "desc" }],
           },
           paymentVouchers: {
             include: { supplier: { select: { name: true } } },
-            orderBy: { date: 'desc' }
+            orderBy: [{ date: "desc" }, { createdAt: "desc" }],
           },
           salesInvoices: {
-            where: { status: 'cash' },
-            orderBy: { invoiceDate: 'desc' }
+            where: { status: "cash" },
+            orderBy: [{ invoiceDate: "desc" }, { createdAt: "desc" }],
           },
           purchaseInvoices: {
-            where: { status: 'cash' },
-            orderBy: { invoiceDate: 'desc' }
+            where: { status: "cash" },
+            orderBy: [{ invoiceDate: "desc" }, { createdAt: "desc" }],
           },
           salesReturns: {
-            where: { refundMethod: { in: ['cash', 'safe'] } },
+            where: { refundMethod: { in: ["cash", "safe"] } },
             include: { customer: { select: { name: true } } },
-            orderBy: { returnDate: 'desc' }
+            orderBy: [{ returnDate: "desc" }, { createdAt: "desc" }],
           },
           purchaseReturns: {
-            where: { refundMethod: { in: ['cash', 'safe'] } },
+            where: { refundMethod: { in: ["cash", "safe"] } },
             include: { supplier: { select: { name: true } } },
-            orderBy: { returnDate: 'desc' }
+            orderBy: [{ returnDate: "desc" }, { createdAt: "desc" }],
           },
           transfersFrom: {
             include: { toSafe: true, toBank: true },
-            orderBy: { date: 'desc' }
+            orderBy: [{ date: "desc" }, { createdAt: "desc" }],
           },
           transfersTo: {
             include: { fromSafe: true, fromBank: true },
-            orderBy: { date: 'desc' }
-          }
-        }
+            orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+          },
+        },
       });
 
       if (!safe) throw new Error("الخزنة غير موجودة");
 
       const transactions = [
-        ...safe.receiptVouchers.map(v => ({
+        ...safe.receiptVouchers.map((v) => ({
           id: `r-${v.id}`,
-          type: 'receipt' as const,
+          type: "receipt" as const,
           voucherNumber: v.voucherNumber,
           amount: v.amount,
           date: v.date,
@@ -972,13 +1154,18 @@ export async function getAccountDetails(id: number, type: 'safe' | 'bank') {
           description: v.description || "تحويل وارد",
           createdAt: v.createdAt,
         })),
-        ...(await (await getTenantPrisma()).journalEntry.findMany({
-          where: {
-            sourceType: "MANUAL",
-            items: { some: { accountId: safe.accountId || 0 } },
-          },
-          include: { items: { where: { accountId: safe.accountId || 0 } } },
-        })).flatMap((entry) =>
+        ...(
+          await (
+            await getTenantPrisma()
+          ).journalEntry.findMany({
+            where: {
+              sourceType: "MANUAL",
+              items: { some: { accountId: safe.accountId || 0 } },
+            },
+            orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+            include: { items: { where: { accountId: safe.accountId || 0 } } },
+          })
+        ).flatMap((entry) =>
           entry.items.map((item) => ({
             id: `manual-${entry.id}-${item.id}`,
             type: ((item.debit || 0) > 0 ? "receipt" : "payment") as any,
@@ -988,23 +1175,25 @@ export async function getAccountDetails(id: number, type: 'safe' | 'bank') {
             partyName: "قيد يدوي",
             description: item.description || entry.description,
             createdAt: entry.createdAt,
-          }))
+          })),
         ),
       ].sort((a, b) => {
         const dA = new Date(a.date);
         dA.setHours(0, 0, 0, 0);
         const dB = new Date(b.date);
         dB.setHours(0, 0, 0, 0);
-        
+
         const dateCompare = dB.getTime() - dA.getTime();
         if (dateCompare !== 0) return dateCompare;
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        return (
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
       });
 
       return {
         id: safe.id,
         name: safe.name,
-        type: 'safe',
+        type: "safe",
         balance: safe.balance,
         accountId: safe.accountId,
         createdAt: safe.createdAt,
@@ -1012,52 +1201,54 @@ export async function getAccountDetails(id: number, type: 'safe' | 'bank') {
         transactions,
       };
     } else {
-      const bank = await (await getTenantPrisma()).treasuryBank.findUnique({
+      const bank = await (
+        await getTenantPrisma()
+      ).treasuryBank.findUnique({
         where: { id },
         include: {
           receiptVouchers: {
             include: { customer: { select: { name: true } } },
-            orderBy: { date: 'desc' }
+            orderBy: [{ date: "desc" }, { createdAt: "desc" }],
           },
           paymentVouchers: {
             include: { supplier: { select: { name: true } } },
-            orderBy: { date: 'desc' }
+            orderBy: [{ date: "desc" }, { createdAt: "desc" }],
           },
           salesInvoices: {
-            where: { status: 'cash' },
-            orderBy: { invoiceDate: 'desc' }
+            where: { status: "cash" },
+            orderBy: [{ invoiceDate: "desc" }, { createdAt: "desc" }],
           },
           purchaseInvoices: {
-            where: { status: 'cash' },
-            orderBy: { invoiceDate: 'desc' }
+            where: { status: "cash" },
+            orderBy: [{ invoiceDate: "desc" }, { createdAt: "desc" }],
           },
           salesReturns: {
-            where: { refundMethod: 'bank' },
+            where: { refundMethod: "bank" },
             include: { customer: { select: { name: true } } },
-            orderBy: { returnDate: 'desc' }
+            orderBy: [{ returnDate: "desc" }, { createdAt: "desc" }],
           },
           purchaseReturns: {
-            where: { refundMethod: 'bank' },
+            where: { refundMethod: "bank" },
             include: { supplier: { select: { name: true } } },
-            orderBy: { returnDate: 'desc' }
+            orderBy: [{ returnDate: "desc" }, { createdAt: "desc" }],
           },
           transfersFrom: {
             include: { toSafe: true, toBank: true },
-            orderBy: { date: 'desc' }
+            orderBy: [{ date: "desc" }, { createdAt: "desc" }],
           },
           transfersTo: {
             include: { fromSafe: true, fromBank: true },
-            orderBy: { date: 'desc' }
-          }
-        }
+            orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+          },
+        },
       });
 
       if (!bank) throw new Error("البنك غير موجود");
 
       const transactions = [
-        ...bank.receiptVouchers.map(v => ({
+        ...bank.receiptVouchers.map((v) => ({
           id: `r-${v.id}`,
-          type: 'receipt' as const,
+          type: "receipt" as const,
           voucherNumber: v.voucherNumber,
           amount: v.amount,
           date: v.date,
@@ -1135,13 +1326,18 @@ export async function getAccountDetails(id: number, type: 'safe' | 'bank') {
           description: v.description || "تحويل وارد",
           createdAt: v.createdAt,
         })),
-        ...(await (await getTenantPrisma()).journalEntry.findMany({
-          where: {
-            sourceType: "MANUAL",
-            items: { some: { accountId: bank.accountId || 0 } },
-          },
-          include: { items: { where: { accountId: bank.accountId || 0 } } },
-        })).flatMap((entry) =>
+        ...(
+          await (
+            await getTenantPrisma()
+          ).journalEntry.findMany({
+            where: {
+              sourceType: "MANUAL",
+              items: { some: { accountId: bank.accountId || 0 } },
+            },
+            orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+            include: { items: { where: { accountId: bank.accountId || 0 } } },
+          })
+        ).flatMap((entry) =>
           entry.items.map((item) => ({
             id: `manual-${entry.id}-${item.id}`,
             type: ((item.debit || 0) > 0 ? "receipt" : "payment") as any,
@@ -1151,23 +1347,25 @@ export async function getAccountDetails(id: number, type: 'safe' | 'bank') {
             partyName: "قيد يدوي",
             description: item.description || entry.description,
             createdAt: entry.createdAt,
-          }))
+          })),
         ),
       ].sort((a, b) => {
         const dA = new Date(a.date);
         dA.setHours(0, 0, 0, 0);
         const dB = new Date(b.date);
         dB.setHours(0, 0, 0, 0);
-        
+
         const dateCompare = dB.getTime() - dA.getTime();
         if (dateCompare !== 0) return dateCompare;
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        return (
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
       });
 
       return {
         id: bank.id,
         name: bank.name,
-        type: 'bank',
+        type: "bank",
         balance: bank.balance,
         accountId: bank.accountId,
         accountNumber: bank.accountNumber,
@@ -1188,9 +1386,11 @@ export type AccountDetails = Awaited<ReturnType<typeof getAccountDetails>>;
 // 7. جلب العملاء لسند القبض
 export async function getCustomers() {
   try {
-    const customers = await (await getTenantPrisma()).customer.findMany({
+    const customers = await (
+      await getTenantPrisma()
+    ).customer.findMany({
       orderBy: { name: "asc" },
-      select: { id: true, name: true, code: true }
+      select: { id: true, name: true, code: true },
     });
     return customers;
   } catch (error) {
@@ -1200,13 +1400,17 @@ export async function getCustomers() {
 }
 
 export async function getNextReceiptVoucherNumber(): Promise<string> {
-  const sequence = await (await getTenantPrisma()).systemSequence.findUnique({
+  const sequence = await (
+    await getTenantPrisma()
+  ).systemSequence.findUnique({
     where: { id: "ReceiptVoucher" },
     select: { lastValue: true },
   });
   if (sequence) return `RV-${sequence.lastValue + 1}`;
 
-  const lastVoucher = await (await getTenantPrisma()).receiptVoucher.findFirst({
+  const lastVoucher = await (
+    await getTenantPrisma()
+  ).receiptVoucher.findFirst({
     orderBy: { id: "desc" },
     select: { voucherNumber: true },
   });
@@ -1215,44 +1419,140 @@ export async function getNextReceiptVoucherNumber(): Promise<string> {
   return `RV-${lastNum + 1}`;
 }
 
-async function generateReceiptVoucherNumber(tx: Prisma.TransactionClient): Promise<string> {
-  const nextVal = await SequenceService.getNextSequenceValue(tx, "ReceiptVoucher");
+async function generateReceiptVoucherNumber(
+  tx: Prisma.TransactionClient,
+): Promise<string> {
+  const nextVal = await SequenceService.getNextSequenceValue(
+    tx,
+    "ReceiptVoucher",
+  );
   return `RV-${nextVal}`;
 }
 
 // 8. إنشاء سند قبض
-export async function createReceiptVoucher(data: {
-  voucherNumber: string;
-  date: string;
-  amount: number;
-  customerId: number;
-  accountType: "safe" | "bank";
-  accountId: number;
-  description?: string;
-}, skipApproval: boolean = false) {
-  const session = await getSession();
-  if (!session) throw new Error("Unauthorized");
-
-  // Approval Interception
-  if (!skipApproval) {
-    const settings = await (await getTenantPrisma() as any).generalSettings.findUnique({ where: { id: 1 } });
-    if (session.user.role === "WORKER" && settings?.requireApprovalForVouchers) {
-      await (await getTenantPrisma() as any).treasuryActionRequest.create({
-        data: {
-          type: "RECEIPT_VOUCHER",
-          data: data as any,
-          requesterId: session.userId,
-          status: "PENDING",
-        },
-      });
-      return { success: true, pending: true, message: "تم إرسال طلب سند القبض للمدير للموافقة" };
-    }
-  }
-
-  const canManage = await hasPermission(session.userId, "treasury_manage");
-  if (!canManage) throw new Error("ليس لديك صلاحية إنشاء سندات قبض");
-
+export async function createReceiptVoucher(
+  data: {
+    voucherNumber: string;
+    date: string;
+    amount: number;
+    customerId: number;
+    accountType: "safe" | "bank";
+    accountId: number;
+    description?: string;
+  },
+  skipApproval: boolean = false,
+) {
   try {
+    const session = await getSession();
+    if (!session) throw new Error("Unauthorized");
+
+    // Approval Interception
+    if (!skipApproval) {
+      try {
+        const tenantDb = await getTenantPrisma();
+        const settings = await (tenantDb as any).generalSettings.findFirst();
+        if (
+          session.user.role === "WORKER" &&
+          settings?.requireApprovalForVouchers
+        ) {
+          // Ensure this worker exists in the tenant schema (sync if not)
+          try {
+            await (tenantDb as any).user.upsert({
+              where: { id: session.userId },
+              update: {
+                username: session.user.username,
+                role: session.user.role,
+              },
+              create: {
+                id: session.userId,
+                username: session.user.username,
+                password: session.user.password || "",
+                role: session.user.role,
+                tenantSchema: (session.user as any).tenantSchema,
+                parentId: (session.user as any).parentId,
+                authorizedDevices: [],
+              },
+            });
+          } catch (syncErr) {
+            console.warn("[ReceiptVoucher] User sync failed:", syncErr);
+          }
+
+          await (tenantDb as any).treasuryActionRequest.create({
+            data: {
+              type: "RECEIPT_VOUCHER",
+              data: data as any,
+              requesterId: session.userId,
+              status: "PENDING",
+            },
+          });
+
+          // إشعار المدير بوجود طلب جديد ينتظر الموافقة
+          try {
+            const adminUser = await publicPrisma.user.findFirst({
+              where: {
+                tenantSchema: (session.user as any).tenantSchema,
+                role: "ADMIN",
+              },
+              select: {
+                id: true,
+                username: true,
+                password: true,
+                role: true,
+                tenantSchema: true,
+                parentId: true,
+                authorizedDevices: true,
+              },
+            });
+            if (adminUser) {
+              // Sync admin user to tenant schema before creating notification
+              await (tenantDb as any).user.upsert({
+                where: { id: adminUser.id },
+                update: { username: adminUser.username, role: adminUser.role },
+                create: {
+                  id: adminUser.id,
+                  username: adminUser.username,
+                  password: adminUser.password || "",
+                  role: adminUser.role,
+                  tenantSchema: adminUser.tenantSchema,
+                  parentId: adminUser.parentId,
+                  authorizedDevices: adminUser.authorizedDevices || [],
+                },
+              });
+              await (tenantDb as any).notification.create({
+                data: {
+                  title: "طلب موافقة: سند قبض",
+                  message: `الموظف "${session.user.username}" يطلب إنشاء سند قبض بقيمة ${data.amount} ج.م. راجع قسم الإشعارات للموافقة.`,
+                  type: "WARNING",
+                  userId: adminUser.id,
+                },
+              });
+            }
+          } catch (notifErr) {
+            console.warn(
+              "[ReceiptVoucher] Admin notification failed:",
+              notifErr,
+            );
+          }
+
+          return {
+            success: true,
+            pending: true,
+            message: "تم إرسال طلب سند القبض للمدير للموافقة",
+          };
+        }
+      } catch (approvalErr: any) {
+        console.warn(
+          "Approval interception failed, proceeding directly:",
+          approvalErr?.message,
+        );
+      }
+    }
+
+    const canManage =
+      (await hasPermission(session.userId, "treasury_vouchers")) ||
+      (await hasPermission(session.userId, "treasury_manage"));
+    if (!canManage) throw new Error("ليس لديك صلاحية إنشاء سندات قبض");
+
     const {
       voucherNumber,
       date,
@@ -1267,59 +1567,83 @@ export async function createReceiptVoucher(data: {
     if (isNaN(accountId)) throw new Error("رقم الحساب غير صحيح");
     if (isNaN(customerId)) throw new Error("رقم العميل غير صحيح");
 
-    const pendingAlerts: { type: 'treasury', name: string, balance: number }[] = [];
+    const pendingAlerts: { type: "treasury"; name: string; balance: number }[] =
+      [];
 
-    const result = await (await getTenantPrisma()).$transaction(async (tx) => {
+    const result = await (
+      await getTenantPrisma()
+    ).$transaction(async (tx) => {
       // 1. Get current entry number using atomic sequence
-      const entryNumber = await SequenceService.getNextSequenceValue(tx, "JournalEntry");
+      const entryNumber = await SequenceService.getNextSequenceValue(
+        tx,
+        "JournalEntry",
+      );
 
       // 2. Find Treasury/Bank Account ID
       let treasuryAccountId: number;
       if (accountType === "safe") {
-        const safe = await tx.treasurySafe.findUnique({ 
+        const safe = await tx.treasurySafe.findUnique({
           where: { id: accountId },
-          select: { accountId: true, name: true, balance: true }
+          select: { accountId: true, name: true, balance: true },
         });
-        if (!safe || !safe.accountId) throw new Error("الخزنة غير مربوطة بحساب محاسبي");
+        if (!safe || !safe.accountId)
+          throw new Error("الخزنة غير مربوطة بحساب محاسبي");
         treasuryAccountId = safe.accountId;
 
         const updatedSafe = await tx.treasurySafe.update({
           where: { id: accountId },
           data: { balance: { increment: amount } },
-          select: { name: true, balance: true }
+          select: { name: true, balance: true },
         });
-        pendingAlerts.push({ type: 'treasury', name: updatedSafe.name, balance: updatedSafe.balance });
+        pendingAlerts.push({
+          type: "treasury",
+          name: updatedSafe.name,
+          balance: updatedSafe.balance,
+        });
       } else {
-        const bank = await tx.treasuryBank.findUnique({ 
+        const bank = await tx.treasuryBank.findUnique({
           where: { id: accountId },
-          select: { accountId: true, name: true, balance: true }
+          select: { accountId: true, name: true, balance: true },
         });
-        if (!bank || !bank.accountId) throw new Error("البنك غير مربوط بحساب محاسبي");
+        if (!bank || !bank.accountId)
+          throw new Error("البنك غير مربوط بحساب محاسبي");
         treasuryAccountId = bank.accountId;
 
         const updatedBank = await tx.treasuryBank.update({
           where: { id: accountId },
           data: { balance: { increment: amount } },
-          select: { name: true, balance: true }
+          select: { name: true, balance: true },
         });
-        pendingAlerts.push({ type: 'treasury', name: updatedBank.name, balance: updatedBank.balance });
+        pendingAlerts.push({
+          type: "treasury",
+          name: updatedBank.name,
+          balance: updatedBank.balance,
+        });
       }
 
       // 3. Get specifically linked Customer Account
       const customer = await tx.customer.findUnique({
         where: { id: customerId },
-        select: { accountId: true, name: true }
+        select: { accountId: true, name: true },
       });
-      if (!customer?.accountId) throw new Error("العميل غير مربوط بحساب محاسبي");
+      if (!customer?.accountId)
+        throw new Error("العميل غير مربوط بحساب محاسبي");
       const customerAccountId = customer.accountId;
 
       // 4. Create Receipt Voucher with Sequence
       let finalVoucherNumber = voucherNumber;
-      if (!finalVoucherNumber || finalVoucherNumber === "RV-0" || finalVoucherNumber === "") {
+      if (
+        !finalVoucherNumber ||
+        finalVoucherNumber === "RV-0" ||
+        finalVoucherNumber === ""
+      ) {
         finalVoucherNumber = await generateReceiptVoucherNumber(tx);
       } else {
-        const existing = await tx.receiptVoucher.findUnique({ where: { voucherNumber: finalVoucherNumber } });
-        if (existing) throw new Error(`رقم سند القبض ${finalVoucherNumber} مستخدم مسبقاً`);
+        const existing = await tx.receiptVoucher.findUnique({
+          where: { voucherNumber: finalVoucherNumber },
+        });
+        if (existing)
+          throw new Error(`رقم سند القبض ${finalVoucherNumber} مستخدم مسبقاً`);
       }
 
       const voucher = await tx.receiptVoucher.create({
@@ -1334,35 +1658,35 @@ export async function createReceiptVoucher(data: {
           bankId: accountType === "bank" ? accountId : null,
         },
         include: {
-          customer: { select: { name: true } }
-        }
+          customer: { select: { name: true } },
+        },
       });
 
       // 5. Create Journal Entry
       await tx.journalEntry.create({
-          data: {
-              entryNumber,
-              date: new Date(date),
-              description: `سند قبض #${voucher.voucherNumber} - ${voucher.customer.name}`,
-              sourceType: 'RECEIPT_VOUCHER',
-              sourceId: voucher.id,
-              items: {
-                  create: [
-                      {
-                          accountId: treasuryAccountId,
-                          debit: amount,
-                          credit: 0,
-                          description: `إيداع في ${accountType === 'safe' ? 'الخزينة' : 'البنك'}`
-                      },
-                      {
-                          accountId: customerAccountId,
-                          debit: 0,
-                          credit: amount,
-                          description: `تحصيل من العميل: ${voucher.customer.name}`
-                      }
-                  ]
-              }
-          }
+        data: {
+          entryNumber,
+          date: new Date(date),
+          description: `سند قبض #${voucher.voucherNumber} - ${voucher.customer.name}`,
+          sourceType: "RECEIPT_VOUCHER",
+          sourceId: voucher.id,
+          items: {
+            create: [
+              {
+                accountId: treasuryAccountId,
+                debit: amount,
+                credit: 0,
+                description: `إيداع في ${accountType === "safe" ? "الخزينة" : "البنك"}`,
+              },
+              {
+                accountId: customerAccountId,
+                debit: 0,
+                credit: amount,
+                description: `تحصيل من العميل: ${voucher.customer.name}`,
+              },
+            ],
+          },
+        },
       });
 
       return voucher;
@@ -1370,13 +1694,12 @@ export async function createReceiptVoucher(data: {
 
     revalidatePath("/treasury");
     revalidatePath(`/treasury/${accountId}?type=${accountType}`);
-    
-    const session = await getSession();
+
     if (session) {
       await triggerStaffActivityAlert(
         session.user,
         "سند قبض",
-        `تم إنشاء سند قبض #${result.voucherNumber} بقيمة ${result.amount} إلى ${result.accountType === "safe" ? "خزنة" : "بنك"}`
+        `تم إنشاء سند قبض #${result.voucherNumber} بقيمة ${result.amount} إلى ${result.accountType === "safe" ? "خزنة" : "بنك"}`,
       );
     }
 
@@ -1386,68 +1709,92 @@ export async function createReceiptVoucher(data: {
 
     return { success: true, data: result };
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : "وقع خطأ غير معروف";
+    const errorMessage =
+      error instanceof Error ? error.message : "وقع خطأ غير معروف";
     console.error("Receipt voucher creation error:", errorMessage);
     return { success: false, error: errorMessage };
   }
 }
 
-// 10. جلب الحسابات المؤرشفة (بنوك وخزائن)
+// 10. جلب الحسابات المؤرشفة (للإدارة فقط)
 export async function getArchivedAccounts() {
+  const session = await getSession();
+  if (!session) {
+    return { success: false, error: "غير مصرح", banks: [], safes: [] };
+  }
+
+  // ✅ فقط من لديه صلاحية إدارة الخزينة يمكنه رؤية المؤرشف
+  const canManage = await hasPermission(session.userId, "treasury_manage");
+  if (!canManage) {
+    return { success: false, error: "ليس لديك صلاحية لعرض الحسابات المؤرشفة", banks: [], safes: [] };
+  }
+
   try {
     const [banks, safes] = await Promise.all([
       (await getTenantPrisma()).treasuryBank.findMany({
         where: { isActive: false },
-        orderBy: { updatedAt: 'desc' },
+        orderBy: { updatedAt: "desc" },
         include: {
           account: {
             include: {
               journalItems: {
-                select: { debit: true, credit: true }
-              }
-            }
-          }
-        }
+                select: { debit: true, credit: true },
+              },
+            },
+          },
+        },
       }),
       (await getTenantPrisma()).treasurySafe.findMany({
         where: { isActive: false },
-        orderBy: { updatedAt: 'desc' },
+        orderBy: { updatedAt: "desc" },
         include: {
           account: {
             include: {
               journalItems: {
-                select: { debit: true, credit: true }
-              }
-            }
-          }
-        }
-      })
+                select: { debit: true, credit: true },
+              },
+            },
+          },
+        },
+      }),
     ]);
 
-    const processedBanks = banks.map(b => {
+    const processedBanks = banks.map((b) => {
       let balance = b.balance;
       if (b.account) {
-        const totalDebit = b.account.journalItems.reduce((sum, item) => sum + (Number(item.debit) || 0), 0);
-        const totalCredit = b.account.journalItems.reduce((sum, item) => sum + (Number(item.credit) || 0), 0);
+        const totalDebit = b.account.journalItems.reduce(
+          (sum, item) => sum + (Number(item.debit) || 0),
+          0,
+        );
+        const totalCredit = b.account.journalItems.reduce(
+          (sum, item) => sum + (Number(item.credit) || 0),
+          0,
+        );
         balance = totalDebit - totalCredit;
       }
-      return { ...b, balance, type: 'bank' as const };
+      return { ...b, balance, type: "bank" as const };
     });
 
-    const processedSafes = safes.map(s => {
+    const processedSafes = safes.map((s) => {
       let balance = s.balance;
       if (s.account) {
-        const totalDebit = s.account.journalItems.reduce((sum, item) => sum + (Number(item.debit) || 0), 0);
-        const totalCredit = s.account.journalItems.reduce((sum, item) => sum + (Number(item.credit) || 0), 0);
+        const totalDebit = s.account.journalItems.reduce(
+          (sum, item) => sum + (Number(item.debit) || 0),
+          0,
+        );
+        const totalCredit = s.account.journalItems.reduce(
+          (sum, item) => sum + (Number(item.credit) || 0),
+          0,
+        );
         balance = totalDebit - totalCredit;
       }
-      return { ...s, balance, type: 'safe' as const };
+      return { ...s, balance, type: "safe" as const };
     });
 
-    return { 
-      success: true, 
-      banks: processedBanks, 
-      safes: processedSafes 
+    return {
+      success: true,
+      banks: processedBanks,
+      safes: processedSafes,
     };
   } catch (error) {
     console.error("Error fetching archived accounts:", error);
@@ -1456,35 +1803,51 @@ export async function getArchivedAccounts() {
 }
 
 // 11. إرجاع حساب من الأرشيف
-export async function restoreAccount(id: number, type: 'safe' | 'bank') {
+export async function restoreAccount(id: number, type: "safe" | "bank") {
   const session = await getSession();
-  if (!session) throw new Error("يجب تسجيل الدخول أولاً");
+  if (!session) {
+    return { success: false, error: "يجب تسجيل الدخول أولاً" };
+  }
 
   const canManage = await hasPermission(session.userId, "treasury_manage");
-  if (!canManage) throw new Error("ليس لديك صلاحية استعادة الحسابات");
+  if (!canManage) {
+    return { success: false, error: "ليس لديك صلاحية استعادة الحسابات" };
+  }
 
   try {
-    if (type === 'bank') {
-        const account = await (await getTenantPrisma()).treasuryBank.update({
-          where: { id },
-          data: { isActive: true }
-        });
-        if (session) {
-          await triggerStaffActivityAlert(session.user, "استعادة حساب", `تم استعادة البنك: ${account.name}`);
-        }
+    if (type === "bank") {
+      const account = await (
+        await getTenantPrisma()
+      ).treasuryBank.update({
+        where: { id },
+        data: { isActive: true },
+      });
+      if (session) {
+        await triggerStaffActivityAlert(
+          session.user,
+          "استعادة حساب",
+          `تم استعادة البنك: ${account.name}`,
+        );
+      }
     } else {
-        const account = await (await getTenantPrisma()).treasurySafe.update({
-          where: { id },
-          data: { isActive: true }
-        });
-        if (session && account) {
-          await triggerStaffActivityAlert(session.user, "استعادة حساب", `تم استعادة الخزنة: ${account.name}`);
-        }
+      const account = await (
+        await getTenantPrisma()
+      ).treasurySafe.update({
+        where: { id },
+        data: { isActive: true },
+      });
+      if (session && account) {
+        await triggerStaffActivityAlert(
+          session.user,
+          "استعادة حساب",
+          `تم استعادة الخزنة: ${account.name}`,
+        );
+      }
     }
 
     revalidatePath("/treasury");
     revalidatePath("/treasury/archived");
-    
+
     return { success: true, message: "تم إرجاع الحساب بنجاح" };
   } catch (error) {
     console.error("Error restoring account:", error);
@@ -1497,60 +1860,76 @@ export async function getReceiptInitialData() {
   try {
     // تأكد من وجود الخزنة الرئيسية
     await ensureMainSafe();
-    
+
     const [customers, safes, banks] = await Promise.all([
-      (await getTenantPrisma()).customer.findMany({ 
+      (await getTenantPrisma()).customer.findMany({
         orderBy: { name: "asc" },
-        select: { id: true, name: true, code: true }
+        select: { id: true, name: true, code: true },
       }),
-      (await getTenantPrisma()).treasurySafe.findMany({ 
+      (await getTenantPrisma()).treasurySafe.findMany({
         where: { isActive: true },
         orderBy: { name: "asc" },
         include: {
           account: {
             include: {
               journalItems: {
-                select: { debit: true, credit: true }
-              }
-            }
-          }
-        }
+                select: { debit: true, credit: true },
+              },
+            },
+          },
+        },
       }),
-      (await getTenantPrisma()).treasuryBank.findMany({ 
+      (await getTenantPrisma()).treasuryBank.findMany({
         where: { isActive: true },
         orderBy: { name: "asc" },
         include: {
           account: {
             include: {
               journalItems: {
-                select: { debit: true, credit: true }
-              }
-            }
-          }
-        }
+                select: { debit: true, credit: true },
+              },
+            },
+          },
+        },
       }),
     ]);
 
-    const processedSafes = safes.map(s => {
+    const processedSafes = safes.map((s) => {
       let balance = s.balance;
       if (s.account) {
-        const totalDebit = s.account.journalItems.reduce((sum: number, item: { debit: number; credit: number }) => sum + (Number(item.debit) || 0), 0);
-        const totalCredit = s.account.journalItems.reduce((sum: number, item: { debit: number; credit: number }) => sum + (Number(item.credit) || 0), 0);
+        const totalDebit = s.account.journalItems.reduce(
+          (sum: number, item: { debit: number; credit: number }) =>
+            sum + (Number(item.debit) || 0),
+          0,
+        );
+        const totalCredit = s.account.journalItems.reduce(
+          (sum: number, item: { debit: number; credit: number }) =>
+            sum + (Number(item.credit) || 0),
+          0,
+        );
         balance = totalDebit - totalCredit;
       }
       return { id: s.id, name: s.name, balance };
     });
 
-    const processedBanks = banks.map(b => {
+    const processedBanks = banks.map((b) => {
       let balance = b.balance;
       if (b.account) {
-        const totalDebit = b.account.journalItems.reduce((sum: number, item: { debit: number; credit: number }) => sum + (Number(item.debit) || 0), 0);
-        const totalCredit = b.account.journalItems.reduce((sum: number, item: { debit: number; credit: number }) => sum + (Number(item.credit) || 0), 0);
+        const totalDebit = b.account.journalItems.reduce(
+          (sum: number, item: { debit: number; credit: number }) =>
+            sum + (Number(item.debit) || 0),
+          0,
+        );
+        const totalCredit = b.account.journalItems.reduce(
+          (sum: number, item: { debit: number; credit: number }) =>
+            sum + (Number(item.credit) || 0),
+          0,
+        );
         balance = totalDebit - totalCredit;
       }
       return { id: b.id, name: b.name, balance };
     });
-    
+
     return { customers, safes: processedSafes, banks: processedBanks };
   } catch (error) {
     console.error("Error fetching receipt initial data:", error);
@@ -1559,47 +1938,143 @@ export async function getReceiptInitialData() {
 }
 
 // 12. إنشاء خزنة جديدة
-export async function createSafe(data: { name: string; initialBalance: number; description?: string }, skipApproval: boolean = false) {
+export async function createSafe(
+  data: { name: string; initialBalance: number; description?: string },
+  skipApproval: boolean = false,
+) {
   const session = await getSession();
   if (!session) throw new Error("Unauthorized");
 
   const canManage = await hasPermission(session.userId, "treasury_manage");
-  if (!canManage) throw new Error("ليس لديك صلاحية إضافة خزائن");
 
   // Approval Interception
   if (!skipApproval) {
-    const settings = await (await getTenantPrisma() as any).generalSettings.findUnique({ where: { id: 1 } });
-    if (session.user.role === "WORKER" && (settings as any)?.requireApprovalForSafeCreation) {
-      await (await getTenantPrisma() as any).treasuryActionRequest.create({
-        data: {
-          type: "CREATE_SAFE",
-          data: data as any,
-          requesterId: session.userId,
-          status: "PENDING",
-        },
-      });
-      return { success: true, pending: true, message: "تم إرسال طلب إضافة الخزنة للمدير للموافقة" };
+    try {
+      const tenantDb = await getTenantPrisma();
+      const settings = await (tenantDb as any).generalSettings.findFirst();
+      if (
+        session.user.role === "WORKER" &&
+        (settings as any)?.requireApprovalForSafeCreation
+      ) {
+        // Sync user to tenant schema
+        try {
+          await (tenantDb as any).user.upsert({
+            where: { id: session.userId },
+            update: {
+              username: session.user.username,
+              role: session.user.role,
+            },
+            create: {
+              id: session.userId,
+              username: session.user.username,
+              password: session.user.password || "",
+              role: session.user.role,
+              tenantSchema: (session.user as any).tenantSchema,
+              parentId: (session.user as any).parentId,
+              authorizedDevices: [],
+            },
+          });
+        } catch (syncErr) {
+          console.warn("[CreateSafe] User sync failed:", syncErr);
+        }
+
+        await (tenantDb as any).treasuryActionRequest.create({
+          data: {
+            type: "CREATE_SAFE",
+            data: data as any,
+            requesterId: session.userId,
+            status: "PENDING",
+          },
+        });
+
+        // Notify admin
+        try {
+          const adminUser = await publicPrisma.user.findFirst({
+            where: {
+              tenantSchema: (session.user as any).tenantSchema,
+              role: "ADMIN",
+            },
+            select: {
+              id: true,
+              username: true,
+              password: true,
+              role: true,
+              tenantSchema: true,
+              parentId: true,
+              authorizedDevices: true,
+            },
+          });
+          if (adminUser) {
+            // Sync admin user to tenant schema before creating notification
+            await (tenantDb as any).user.upsert({
+              where: { id: adminUser.id },
+              update: { username: adminUser.username, role: adminUser.role },
+              create: {
+                id: adminUser.id,
+                username: adminUser.username,
+                password: adminUser.password || "",
+                role: adminUser.role,
+                tenantSchema: adminUser.tenantSchema,
+                parentId: adminUser.parentId,
+                authorizedDevices: adminUser.authorizedDevices || [],
+              },
+            });
+            await (tenantDb as any).notification.create({
+              data: {
+                title: "طلب موافقة: إضافة خزنة",
+                message:
+                  `الموظف "${session.user.username}" يطلب إنشاء خزنة جديدة.\n` +
+                  `الاسم: ${data.name}\n` +
+                  `الرصيد الافتتاحي: ${Number(data.initialBalance || 0)} ج.م\n` +
+                  `راجع قسم الإشعارات للموافقة.`,
+                type: "WARNING",
+                userId: adminUser.id,
+              },
+            });
+          }
+        } catch (notifErr) {
+          console.warn("[CreateSafe] Admin notification failed:", notifErr);
+        }
+
+        return {
+          success: true,
+          pending: true,
+          message: "تم إرسال طلب إضافة الخزنة للمدير للموافقة",
+        };
+      }
+    } catch (approvalErr: any) {
+      console.warn(
+        "[CreateSafe] Approval interception failed:",
+        approvalErr?.message,
+      );
     }
   }
 
+  if (!canManage) throw new Error("ليس لديك صلاحية إضافة خزائن");
+
   try {
-    const result = await (await getTenantPrisma()).$transaction(async (tx) => {
+    const result = await (
+      await getTenantPrisma()
+    ).$transaction(async (tx) => {
       // 1. Find Safe Parent Account
       const parent = await tx.account.findUnique({
-        where: { code: '1201' }
+        where: { code: "1201" },
       });
 
-      if (!parent) throw new Error("حساب النقدية بالخزينة الرئيسي (1201) غير موجود في شجرة الحسابات");
+      if (!parent)
+        throw new Error(
+          "حساب النقدية بالخزينة الرئيسي (1201) غير موجود في شجرة الحسابات",
+        );
 
       // 2. Suggest Next Code
       const lastChild = await tx.account.findFirst({
         where: { parentId: parent.id },
-        orderBy: { code: 'desc' },
-        select: { code: true }
+        orderBy: { code: "desc" },
+        select: { code: true },
       });
-      
-      const newCode = lastChild 
-        ? (parseInt(lastChild.code) + 1).toString() 
+
+      const newCode = lastChild
+        ? (parseInt(lastChild.code) + 1).toString()
         : parent.code + "01";
 
       // 3. Create COA Account
@@ -1612,7 +2087,7 @@ export async function createSafe(data: { name: string; initialBalance: number; d
           level: parent.level + 1,
           isSelectable: true,
           isTerminal: true,
-        }
+        },
       });
 
       // 4. Create Safe and link accountId
@@ -1628,34 +2103,54 @@ export async function createSafe(data: { name: string; initialBalance: number; d
       });
 
       if (data.initialBalance > 0) {
-        const openingBalanceAccount = await tx.account.findFirst({ where: { code: '31' } });
-        const cap = await tx.account.findUnique({ where: { code: '3' } });
+        const openingBalanceAccount = await tx.account.findFirst({
+          where: { code: "31" },
+        });
+        const cap = await tx.account.findUnique({ where: { code: "3" } });
         let openingAccId = openingBalanceAccount?.id;
         if (!openingAccId && cap) {
           const newAcc = await tx.account.create({
             data: {
-              code: '31', name: 'الأرصدة الافتتاحية', type: 'EQUITY',
-              parentId: cap.id, level: 3, isSelectable: true, isTerminal: true
-            }
+              code: "31",
+              name: "الأرصدة الافتتاحية",
+              type: "EQUITY",
+              parentId: cap.id,
+              level: 3,
+              isSelectable: true,
+              isTerminal: true,
+            },
           });
           openingAccId = newAcc.id;
         }
 
         if (openingAccId) {
-          const entryNumber = await SequenceService.getNextSequenceValue(tx, "JournalEntry");
+          const entryNumber = await SequenceService.getNextSequenceValue(
+            tx,
+            "JournalEntry",
+          );
           await tx.journalEntry.create({
             data: {
               entryNumber,
               date: new Date(),
               description: `رصيد افتتاحي - ${data.name}`,
-              sourceType: 'MANUAL',
+              sourceType: "MANUAL",
               items: {
                 create: [
-                  { accountId: account.id, debit: data.initialBalance, credit: 0, description: 'رصيد افتتاحي' },
-                  { accountId: openingAccId, debit: 0, credit: data.initialBalance, description: `رصيد افتتاحي - ${data.name}` }
-                ]
-              }
-            }
+                  {
+                    accountId: account.id,
+                    debit: data.initialBalance,
+                    credit: 0,
+                    description: "رصيد افتتاحي",
+                  },
+                  {
+                    accountId: openingAccId,
+                    debit: 0,
+                    credit: data.initialBalance,
+                    description: `رصيد افتتاحي - ${data.name}`,
+                  },
+                ],
+              },
+            },
           });
         }
       }
@@ -1668,7 +2163,7 @@ export async function createSafe(data: { name: string; initialBalance: number; d
       await triggerStaffActivityAlert(
         session.user,
         "إضافة خزنة",
-        `تم إضافة خزنة جديدة: ${result.name} (رصيد: ${result.balance})`
+        `تم إضافة خزنة جديدة: ${result.name} (رصيد: ${result.balance})`,
       );
     }
 
@@ -1689,33 +2184,56 @@ export async function archiveSafe(safeId: number) {
   if (!canManage) throw new Error("ليس لديك صلاحية أرشفة الخزائن");
 
   try {
-    const safe = await (await getTenantPrisma()).treasurySafe.findUnique({
-      where: { id: safeId }
+    const safe = await (
+      await getTenantPrisma()
+    ).treasurySafe.findUnique({
+      where: { id: safeId },
     });
 
     if (!safe) return { success: false, error: "الخزنة غير موجودة" };
-    if (safe.isPrimary) return { success: false, error: "لا يمكن أرشفة الخزنة الرئيسية" };
+    if (safe.isPrimary)
+      return { success: false, error: "لا يمكن أرشفة الخزنة الرئيسية" };
 
     // تحقق من وجود معاملات
-    const relatedVouchers = await (await getTenantPrisma()).paymentVoucher.count({ where: { safeId } });
-    const relatedReceipts = await (await getTenantPrisma()).receiptVoucher.count({ where: { safeId } });
-    const relatedSalesInvoices = await (await getTenantPrisma()).salesInvoice.count({ where: { safeId, status: 'cash' } });
-    const relatedPurchaseInvoices = await (await getTenantPrisma()).purchaseInvoice.count({ where: { safeId, status: 'cash' } });
-    
-    const hasTransactions = relatedVouchers > 0 || relatedReceipts > 0 || relatedSalesInvoices > 0 || relatedPurchaseInvoices > 0;
+    const relatedVouchers = await (
+      await getTenantPrisma()
+    ).paymentVoucher.count({ where: { safeId } });
+    const relatedReceipts = await (
+      await getTenantPrisma()
+    ).receiptVoucher.count({ where: { safeId } });
+    const relatedSalesInvoices = await (
+      await getTenantPrisma()
+    ).salesInvoice.count({ where: { safeId, status: "cash" } });
+    const relatedPurchaseInvoices = await (
+      await getTenantPrisma()
+    ).purchaseInvoice.count({ where: { safeId, status: "cash" } });
+
+    const hasTransactions =
+      relatedVouchers > 0 ||
+      relatedReceipts > 0 ||
+      relatedSalesInvoices > 0 ||
+      relatedPurchaseInvoices > 0;
 
     if (!hasTransactions) {
-      await (await getTenantPrisma()).treasurySafe.delete({ where: { id: safeId } });
+      await (
+        await getTenantPrisma()
+      ).treasurySafe.delete({ where: { id: safeId } });
       revalidatePath("/treasury");
       return { success: true, message: "تم حذف الخزنة نهائياً", deleted: true };
     } else {
-      const archivedSafe = await (await getTenantPrisma()).treasurySafe.update({
+      const archivedSafe = await (
+        await getTenantPrisma()
+      ).treasurySafe.update({
         where: { id: safeId },
-        data: { isActive: false }
+        data: { isActive: false },
       });
       const session = await getSession();
       if (session && archivedSafe) {
-        await triggerStaffActivityAlert(session.user, "أرشفة خزنة", `تم أرشفة الخزنة: ${archivedSafe.name}`);
+        await triggerStaffActivityAlert(
+          session.user,
+          "أرشفة خزنة",
+          `تم أرشفة الخزنة: ${archivedSafe.name}`,
+        );
       }
       revalidatePath("/treasury");
       return { success: true, message: "تم أرشفة الخزنة", archived: true };
@@ -1727,25 +2245,33 @@ export async function archiveSafe(safeId: number) {
 }
 export async function getBanks(activeOnly: boolean = true) {
   try {
-    const banks = await (await getTenantPrisma()).treasuryBank.findMany({
+    const banks = await (
+      await getTenantPrisma()
+    ).treasuryBank.findMany({
       where: activeOnly ? { isActive: true } : {},
-      orderBy: { name: 'asc' },
+      orderBy: { name: "asc" },
       include: {
         account: {
           include: {
             journalItems: {
-              select: { debit: true, credit: true }
-            }
-          }
-        }
-      }
+              select: { debit: true, credit: true },
+            },
+          },
+        },
+      },
     });
 
-    const processedBanks = banks.map(b => {
+    const processedBanks = banks.map((b) => {
       let balance = b.balance;
       if (b.account) {
-        const totalDebit = b.account.journalItems.reduce((sum, item) => sum + (Number(item.debit) || 0), 0);
-        const totalCredit = b.account.journalItems.reduce((sum, item) => sum + (Number(item.credit) || 0), 0);
+        const totalDebit = b.account.journalItems.reduce(
+          (sum, item) => sum + (Number(item.debit) || 0),
+          0,
+        );
+        const totalCredit = b.account.journalItems.reduce(
+          (sum, item) => sum + (Number(item.credit) || 0),
+          0,
+        );
         balance = totalDebit - totalCredit;
       }
       return { ...b, balance };

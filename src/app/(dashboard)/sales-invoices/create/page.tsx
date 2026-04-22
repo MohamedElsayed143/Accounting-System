@@ -1,6 +1,6 @@
-// app/(dashboard)/sales-invoices/create/page.tsx
 "use client";
-
+import { PermissionGuard } from "@/components/shared";
+// app/(dashboard)/sales-invoices/create/page.tsx
 import { useState, useEffect, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -1684,7 +1684,7 @@ function InvoiceFormStep({
 // ============================================================
 // الصفحة الرئيسية
 // ============================================================
-export default function CreateSalesInvoicePage() {
+function CreateSalesInvoicePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const invoiceId = searchParams.get("id");
@@ -1760,5 +1760,13 @@ export default function CreateSalesInvoicePage() {
         />
       </div>
     </>
+  );
+}
+
+export default function ProtectedCreateSalesInvoicePage(props: any) {
+  return (
+    <PermissionGuard permissionKey="sales_create">
+      <CreateSalesInvoicePage {...props} />
+    </PermissionGuard>
   );
 }

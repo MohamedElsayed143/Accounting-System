@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { getPurchaseReturns, deletePurchaseReturn } from "./actions";
-import { DateFilterButtons } from "@/components/shared";
+import { DateFilterButtons, PermissionGuard } from "@/components/shared";
 import { isDateInFilter } from "@/lib/date-filters";
 
 export default function PurchaseReturnsPage() {
@@ -85,6 +85,7 @@ export default function PurchaseReturnsPage() {
   };
 
   return (
+    <PermissionGuard permissionKey="returns_purchase">
     <>
       <Navbar title="مرتجعات المشتريات" />
       <div className="p-6" dir="rtl">
@@ -206,5 +207,6 @@ export default function PurchaseReturnsPage() {
         </DialogContent>
       </Dialog>
     </>
+    </PermissionGuard>
   );
 }

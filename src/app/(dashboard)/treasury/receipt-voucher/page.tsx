@@ -1,5 +1,6 @@
 "use client";
 
+import { PermissionGuard } from "@/components/shared";
 import React, { useEffect, useState } from "react";
 import { ArrowDownCircle, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -44,7 +45,7 @@ const INITIAL_RECEIPT_FORM = {
   description: "",
 };
 
-export default function ReceiptVoucherPage() {
+function ReceiptVoucherPage() {
   const { draft: formData, setDraft: setFormData, clearDraft, clearDraftSilently, isLoaded } = useFormDraft("receipt_voucher_new", INITIAL_RECEIPT_FORM);
 
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -352,5 +353,13 @@ export default function ReceiptVoucherPage() {
         </Card>
       </div>
     </>
+  );
+}
+
+export default function ProtectedReceiptVoucherPage(props: any) {
+  return (
+    <PermissionGuard permissionKey="treasury_vouchers">
+      <ReceiptVoucherPage {...props} />
+    </PermissionGuard>
   );
 }

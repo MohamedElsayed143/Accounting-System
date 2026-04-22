@@ -15,6 +15,7 @@ import {
 import { Navbar } from "@/components/layout/navbar";
 import { Card, CardContent } from "@/components/ui/card";
 import { getStockOverview } from "./stock/actions";
+import { PermissionGuard } from "@/components/shared";
 
 interface Summary {
   totalProducts: number;
@@ -81,6 +82,7 @@ export default function InventoryPage() {
   ];
 
   return (
+    <PermissionGuard permissionKey="inventory_view">
     <>
       <Navbar title="المخزون" />
       <div className="flex-1 space-y-6 p-6" dir="rtl">
@@ -149,5 +151,6 @@ export default function InventoryPage() {
         </div>
       </div>
     </>
+    </PermissionGuard>
   );
 }

@@ -4,3 +4,4 @@ export { EmptyState } from "./empty-state";
 export { StatusBadge } from "./status-badge";
 export { PaginationControls } from "./pagination-controls";
 export { DateFilterButtons } from "./DateFilterButtons";
+export { PermissionGuard } from "./PermissionGuard";

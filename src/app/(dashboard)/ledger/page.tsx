@@ -23,6 +23,7 @@ import { cn } from "@/lib/utils";
 import { useSearchParams, useRouter } from "next/navigation";
 import { getSelectableAccounts } from "./actions";
 import { LedgerPrintableStatement } from "@/components/accounting/LedgerPrintableStatement";
+import { PermissionGuard } from "@/components/shared";
 
 export default function LedgerExplorerPage() {
   const searchParams = useSearchParams();
@@ -103,6 +104,7 @@ export default function LedgerExplorerPage() {
     : `/reports?supplierId=${selectedAccount?.supplier?.id}`;
 
   return (
+    <PermissionGuard permissionKey="accounting_ledger_view">
     <>
       <Navbar title="سجل المعاملات التفصيلي" />
       <div className="flex-1 p-4 md:p-8 space-y-8 bg-slate-50/30 dark:bg-transparent min-h-screen" dir="rtl">
@@ -275,5 +277,6 @@ export default function LedgerExplorerPage() {
 
       </div>
     </>
+    </PermissionGuard>
   );
 }

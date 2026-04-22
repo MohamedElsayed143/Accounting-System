@@ -39,6 +39,7 @@ import { getCompanySettingsAction } from "../settings/actions";
 import { PrintableStatement } from "./components/PrintableStatement";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { PermissionGuard } from "@/components/shared";
 
 // --- Types imported from actions.tsx ---
 
@@ -561,6 +562,7 @@ export default function AccountStatementPage() {
   };
 
   return (
+    <PermissionGuard permissionKey="reports_customers_suppliers">
     <div
       className="p-4 md:p-8 space-y-6 bg-slate-50/30 dark:bg-transparent min-h-screen rtl text-right print:bg-white"
       dir="rtl"
@@ -943,5 +945,6 @@ export default function AccountStatementPage() {
       />
 
     </div>
+    </PermissionGuard>
   );
 }

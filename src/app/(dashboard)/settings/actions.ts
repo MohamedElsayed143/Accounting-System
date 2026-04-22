@@ -35,7 +35,10 @@ const CompanySettingsSchema = z.object({
 const FinancialSettingsSchema = z.object({
   taxEnabled: z.boolean(),
   taxName: z.string().min(1, "اسم الضريبة مطلوب"),
-  taxPercentage: z.number().min(0, "نسبة الضريبة يجب أن تكون 0 أو أكثر").max(100, "نسبة الضريبة لا تتخطى 100"),
+  taxPercentage: z
+    .number()
+    .min(0, "نسبة الضريبة يجب أن تكون 0 أو أكثر")
+    .max(100, "نسبة الضريبة لا تتخطى 100"),
   taxType: z.enum(["INCLUSIVE", "EXCLUSIVE"]),
   currencyCode: z.string().min(1, "رمز العملة مطلوب"),
   decimalPlaces: z.number().int().min(0, "0 أو أكثر").max(4, "4 كحد أقصى"),
@@ -55,13 +58,17 @@ async function verifyAdmin() {
  */
 export async function getSystemSettings() {
   try {
-    const record = await (await getTenantPrisma()).systemSettings.findFirst({
+    const record = await (
+      await getTenantPrisma()
+    ).systemSettings.findFirst({
       where: { id: 1 },
     });
-    
+
     // We cast to any here and return it
     // The frontend deals with merging it into the defaults
-    return record?.settings ? JSON.parse(JSON.stringify(record.settings)) : null;
+    return record?.settings
+      ? JSON.parse(JSON.stringify(record.settings))
+      : null;
   } catch (error) {
     console.error("getSystemSettings error:", error);
     return null; // Return null so frontend loads defaults
@@ -73,7 +80,9 @@ export async function getSystemSettings() {
  */
 export async function saveSystemSettings(settingsObject: any) {
   try {
-    await (await getTenantPrisma()).systemSettings.upsert({
+    await (
+      await getTenantPrisma()
+    ).systemSettings.upsert({
       where: { id: 1 },
       update: {
         settings: settingsObject,
@@ -95,7 +104,9 @@ export async function saveSystemSettings(settingsObject: any) {
  */
 export async function getCompanySettingsAction() {
   try {
-    const settings = await (await getTenantPrisma()).companySettings.findUnique({
+    const settings = await (
+      await getTenantPrisma()
+    ).companySettings.findUnique({
       where: { id: 1 },
     });
     return settings;
@@ -110,53 +121,55 @@ export async function getCompanySettingsAction() {
  */
 export async function updateCompanySettingsAction(data: any) {
   await verifyAdmin();
-  
+
   try {
     const validatedData = CompanySettingsSchema.parse(data);
-    
-    const res = await (await getTenantPrisma() as any).companySettings.upsert({
-      where: { id: 1 },
-      update: {
-        companyName: validatedData.companyName,
-        companyNameEn: validatedData.companyNameEn,
-        companyLogo: validatedData.companyLogo,
-        companyStamp: validatedData.companyStamp,
-        companyBarcode: validatedData.companyBarcode,
-        showLogoOnPrint: validatedData.showLogoOnPrint,
-        showStampOnPrint: validatedData.showStampOnPrint,
-        showBarcodeOnPrint: validatedData.showBarcodeOnPrint,
-        salesPrefix: validatedData.salesPrefix,
-        purchasePrefix: validatedData.purchasePrefix,
-        quotationPrefix: validatedData.quotationPrefix,
-        invoiceName: validatedData.invoiceName,
-        salesInvoiceName: validatedData.salesInvoiceName,
-        purchaseInvoiceName: validatedData.purchaseInvoiceName,
-        startNumber: validatedData.startNumber,
-        termsAndConditions: validatedData.termsAndConditions,
-        invoiceFooterNotes: validatedData.invoiceFooterNotes,
+
+    const res = await ((await getTenantPrisma()) as any).companySettings.upsert(
+      {
+        where: { id: 1 },
+        update: {
+          companyName: validatedData.companyName,
+          companyNameEn: validatedData.companyNameEn,
+          companyLogo: validatedData.companyLogo,
+          companyStamp: validatedData.companyStamp,
+          companyBarcode: validatedData.companyBarcode,
+          showLogoOnPrint: validatedData.showLogoOnPrint,
+          showStampOnPrint: validatedData.showStampOnPrint,
+          showBarcodeOnPrint: validatedData.showBarcodeOnPrint,
+          salesPrefix: validatedData.salesPrefix,
+          purchasePrefix: validatedData.purchasePrefix,
+          quotationPrefix: validatedData.quotationPrefix,
+          invoiceName: validatedData.invoiceName,
+          salesInvoiceName: validatedData.salesInvoiceName,
+          purchaseInvoiceName: validatedData.purchaseInvoiceName,
+          startNumber: validatedData.startNumber,
+          termsAndConditions: validatedData.termsAndConditions,
+          invoiceFooterNotes: validatedData.invoiceFooterNotes,
+        },
+        create: {
+          id: 1,
+          companyName: validatedData.companyName,
+          companyNameEn: validatedData.companyNameEn,
+          companyLogo: validatedData.companyLogo,
+          companyStamp: validatedData.companyStamp,
+          companyBarcode: validatedData.companyBarcode,
+          showLogoOnPrint: validatedData.showLogoOnPrint,
+          showStampOnPrint: validatedData.showStampOnPrint,
+          showBarcodeOnPrint: validatedData.showBarcodeOnPrint,
+          salesPrefix: validatedData.salesPrefix,
+          purchasePrefix: validatedData.purchasePrefix,
+          quotationPrefix: validatedData.quotationPrefix,
+          invoiceName: validatedData.invoiceName,
+          salesInvoiceName: validatedData.salesInvoiceName,
+          purchaseInvoiceName: validatedData.purchaseInvoiceName,
+          startNumber: validatedData.startNumber,
+          termsAndConditions: validatedData.termsAndConditions,
+          invoiceFooterNotes: validatedData.invoiceFooterNotes,
+        },
       },
-      create: {
-        id: 1,
-        companyName: validatedData.companyName,
-        companyNameEn: validatedData.companyNameEn,
-        companyLogo: validatedData.companyLogo,
-        companyStamp: validatedData.companyStamp,
-        companyBarcode: validatedData.companyBarcode,
-        showLogoOnPrint: validatedData.showLogoOnPrint,
-        showStampOnPrint: validatedData.showStampOnPrint,
-        showBarcodeOnPrint: validatedData.showBarcodeOnPrint,
-        salesPrefix: validatedData.salesPrefix,
-        purchasePrefix: validatedData.purchasePrefix,
-        quotationPrefix: validatedData.quotationPrefix,
-        invoiceName: validatedData.invoiceName,
-        salesInvoiceName: validatedData.salesInvoiceName,
-        purchaseInvoiceName: validatedData.purchaseInvoiceName,
-        startNumber: validatedData.startNumber,
-        termsAndConditions: validatedData.termsAndConditions,
-        invoiceFooterNotes: validatedData.invoiceFooterNotes,
-      },
-    });
-    
+    );
+
     revalidatePath("/settings");
     return { success: true, data: res };
   } catch (error) {
@@ -173,11 +186,13 @@ export async function updateCompanySettingsAction(data: any) {
  */
 export async function updateFinancialSettingsAction(data: any) {
   await verifyAdmin();
-  
+
   try {
     const validatedData = FinancialSettingsSchema.parse(data);
-    
-    const res = await (await getTenantPrisma()).companySettings.upsert({
+
+    const res = await (
+      await getTenantPrisma()
+    ).companySettings.upsert({
       where: { id: 1 },
       update: {
         taxEnabled: validatedData.taxEnabled,
@@ -197,7 +212,7 @@ export async function updateFinancialSettingsAction(data: any) {
         decimalPlaces: validatedData.decimalPlaces,
       },
     });
-    
+
     revalidatePath("/settings");
     return { success: true, data: res };
   } catch (error) {
@@ -215,7 +230,7 @@ export async function updateFinancialSettingsAction(data: any) {
 export async function getUsers() {
   const session = await verifyAdmin();
   const tenantSchema = (session.user as any).tenantSchema;
-  
+
   try {
     return await publicPrisma.user.findMany({
       where: {
@@ -238,18 +253,24 @@ export async function getUsers() {
 /**
  * Creates a new user (Worker/Admin).
  */
-export async function createUser(data: { username: string; password: string; role: string }) {
+export async function createUser(data: {
+  username: string;
+  password: string;
+  role: string;
+}) {
   const session = await verifyAdmin();
   const tenantSchema = (session.user as any).tenantSchema;
 
   try {
-    const existing = await publicPrisma.user.findUnique({ where: { username: data.username } });
+    const existing = await publicPrisma.user.findUnique({
+      where: { username: data.username },
+    });
     if (existing) {
       return { error: "اسم المستخدم موجود بالفعل" };
     }
 
     const hashed = hashPassword(data.password);
-    await publicPrisma.user.create({
+    const newUser = await publicPrisma.user.create({
       data: {
         username: data.username,
         password: hashed,
@@ -258,6 +279,38 @@ export async function createUser(data: { username: string; password: string; rol
         parentId: session.userId,
       },
     });
+
+    // مزامنة المستخدم الجديد مع tenant schema حتى تنجح FK constraints
+    if (tenantSchema) {
+      try {
+        const { getPrismaForSchema } = await import("@/lib/tenant-prisma");
+        const tenantDb = getPrismaForSchema(tenantSchema);
+        await (tenantDb as any).user.upsert({
+          where: { id: newUser.id },
+          update: {
+            username: newUser.username,
+            password: newUser.password,
+            role: newUser.role,
+            tenantSchema: newUser.tenantSchema,
+            parentId: newUser.parentId,
+          },
+          create: {
+            id: newUser.id,
+            username: newUser.username,
+            password: newUser.password,
+            role: newUser.role,
+            tenantSchema: newUser.tenantSchema,
+            parentId: newUser.parentId,
+            authorizedDevices: [],
+          },
+        });
+      } catch (syncErr) {
+        console.warn(
+          "[createUser] Failed to sync user to tenant schema:",
+          syncErr,
+        );
+      }
+    }
 
     revalidatePath("/settings");
     return { success: true };
@@ -273,7 +326,7 @@ export async function createUser(data: { username: string; password: string; rol
 export async function deleteUser(id: number) {
   const session = await verifyAdmin();
   const tenantSchema = (session.user as any).tenantSchema;
-  
+
   // Prevent admin from deleting themselves
   if (session.userId === id) {
     return { error: "لا يمكنك حذف حسابك الخاص" };
@@ -282,7 +335,7 @@ export async function deleteUser(id: number) {
   try {
     const target = await publicPrisma.user.findUnique({
       where: { id },
-      select: { tenantSchema: true }
+      select: { tenantSchema: true },
     });
 
     if (!target || target.tenantSchema !== tenantSchema) {
@@ -303,13 +356,17 @@ export async function deleteUser(id: number) {
  */
 export async function getGeneralSettingsAction() {
   try {
-    let settings = await (await getTenantPrisma() as any).generalSettings.findUnique({
-      where: { id: 1 }
+    let settings = await (
+      (await getTenantPrisma()) as any
+    ).generalSettings.findUnique({
+      where: { id: 1 },
     });
 
     if (!settings) {
-      settings = await (await getTenantPrisma() as any).generalSettings.create({
-        data: { id: 1 }
+      settings = await (
+        (await getTenantPrisma()) as any
+      ).generalSettings.create({
+        data: { id: 1 },
       });
     }
     return settings;
@@ -333,14 +390,17 @@ export async function updateGeneralSettingsAction(data: {
   requireApprovalForSafeCreation?: boolean;
   requireApprovalForBankCreation?: boolean;
   requireApprovalForVouchers?: boolean;
+  allowWorkersManualJournals?: boolean;
 }) {
   await verifyAdmin();
   try {
-    const res = await (await getTenantPrisma() as any).generalSettings.upsert({
-      where: { id: 1 },
-      update: data,
-      create: { id: 1, ...data }
-    });
+    const res = await ((await getTenantPrisma()) as any).generalSettings.upsert(
+      {
+        where: { id: 1 },
+        update: data,
+        create: { id: 1, ...data },
+      },
+    );
     revalidatePath("/settings");
     revalidatePath("/notifications");
     return { success: true, data: res };

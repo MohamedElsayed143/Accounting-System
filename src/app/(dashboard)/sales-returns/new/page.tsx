@@ -1,6 +1,6 @@
-// app/(dashboard)/sales-returns/new/page.tsx
 "use client";
-
+import { PermissionGuard } from "@/components/shared";
+// app/(dashboard)/sales-returns/new/page.tsx
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -67,7 +67,7 @@ const INITIAL_SALES_RETURN_FORM = {
   description: "",
 };
 
-export default function NewSalesReturnPage() {
+function NewSalesReturnPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [customers, setCustomers] = useState<any[]>([]);
@@ -700,5 +700,13 @@ export default function NewSalesReturnPage() {
         </form>
       </div>
     </>
+  );
+}
+
+export default function ProtectedNewSalesReturnPage(props: any) {
+  return (
+    <PermissionGuard permissionKey="returns_sales">
+      <NewSalesReturnPage {...props} />
+    </PermissionGuard>
   );
 }

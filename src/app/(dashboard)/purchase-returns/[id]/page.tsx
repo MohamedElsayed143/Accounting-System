@@ -1,5 +1,6 @@
 "use client";
 
+import { PermissionGuard } from "@/components/shared";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Printer, Edit } from "lucide-react";
@@ -9,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { getPurchaseReturnById } from "../actions";
 import { toast } from "sonner";
 
-export default function PurchaseReturnDetailsPage() {
+function PurchaseReturnDetailsPage() {
   const { id } = useParams();
   const router = useRouter();
   const [data, setData] = useState<any>(null);
@@ -160,5 +161,13 @@ export default function PurchaseReturnDetailsPage() {
         </div>
       </div>
     </>
+  );
+}
+
+export default function ProtectedPurchaseReturnDetailsPage(props: any) {
+  return (
+    <PermissionGuard permissionKey="returns_purchase">
+      <PurchaseReturnDetailsPage {...props} />
+    </PermissionGuard>
   );
 }

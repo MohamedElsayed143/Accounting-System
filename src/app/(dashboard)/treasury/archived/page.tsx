@@ -1,5 +1,6 @@
 "use client";
 
+import { PermissionGuard } from "@/components/shared";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -40,7 +41,7 @@ interface ArchivedAccount {
   updatedAt: string | Date;
 }
 
-export default function ArchivedAccountsPage() {
+function ArchivedAccountsPage() {
   const router = useRouter();
   const [banks, setBanks] = useState<ArchivedAccount[]>([]);
   const [safes, setSafes] = useState<ArchivedAccount[]>([]);
@@ -257,5 +258,14 @@ export default function ArchivedAccountsPage() {
         </AlertDialog>
       </div>
     </>
+  );
+}
+
+
+export default function ProtectedArchivedAccountsPage(props: any) {
+  return (
+    <PermissionGuard permissionKey="treasury_manage">   // تغيير من treasury_view إلى treasury_manage
+      <ArchivedAccountsPage {...props} />
+    </PermissionGuard>
   );
 }

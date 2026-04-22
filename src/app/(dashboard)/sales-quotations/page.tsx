@@ -17,7 +17,7 @@ import {
   DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  DataTableToolbar, EmptyState, PaginationControls,
+  DataTableToolbar, EmptyState, PaginationControls, PermissionGuard,
 } from "@/components/shared";
 import { getQuotations, deleteQuotation } from "./actions";
 import { getCompanySettingsAction } from "@/app/(dashboard)/settings/actions";
@@ -143,6 +143,7 @@ export default function SalesQuotationsPage() {
 
 
   return (
+    <PermissionGuard permissionKey="sales_quotations_view">
     <>
       <Navbar title="عروض الأسعار" />
       <div className="flex-1 space-y-6 p-6">
@@ -354,5 +355,6 @@ export default function SalesQuotationsPage() {
         </DialogContent>
       </Dialog>
     </>
+    </PermissionGuard>
   );
 }

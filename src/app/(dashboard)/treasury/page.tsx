@@ -44,7 +44,7 @@ import { toast } from "sonner";
 import TransferDialog from "./components/TransferDialog";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useManagementMode } from "@/hooks/use-management-mode";
-import { DateFilterButtons } from "@/components/shared";
+import { DateFilterButtons, PermissionGuard } from "@/components/shared";
 import { isDateInFilter } from "@/lib/date-filters";
 
 
@@ -70,7 +70,7 @@ interface StatCardProps {
   unit?: string;
 }
 
-export default function TreasuryPage() {
+function TreasuryContent() {
   const [data, setData] = useState<{
     accounts: AccountSummary[];
     stats: TreasuryStats;
@@ -254,7 +254,7 @@ export default function TreasuryPage() {
 
         {/* أزرار العمليات */}
         <div className="flex flex-wrap gap-3 justify-end">
-          {hasPermission("treasury_manage") && isManagementActive && (
+          {hasPermission("treasury_manage") && (
             <>
               <Button
                 variant="outline"
@@ -275,7 +275,7 @@ export default function TreasuryPage() {
           )}
 
           {/* زر البنوك المؤرشفة */}
-          {isAdmin && isManagementActive && (
+          {hasPermission("treasury_manage") && isManagementActive && (
             <Link href="/treasury/archived">
               <Button
                 variant="outline"
@@ -289,15 +289,14 @@ export default function TreasuryPage() {
           
             {hasPermission("treasury_manage") && (
               <>
-                {isManagementActive && (
-                    <Button 
-                        onClick={() => setShowTransfer(true)}
-                        className="bg-blue-600 hover:bg-blue-700"
-                    >
-                      <ArrowLeftRight className="ml-2 h-4 w-4" />
-                      تحويل أموال
-                    </Button>
-                )}
+                <Button 
+                    onClick={() => setShowTransfer(true)}
+                    className="bg-blue-600 hover:bg-blue-700"
+                >
+                  <ArrowLeftRight className="ml-2 h-4 w-4" />
+                  تحويل أموال
+                </Button>
+                
                 <Link href="/treasury/receipt-voucher">
                   <Button className="bg-emerald-600 hover:bg-emerald-700">
                     + سند قبض جديد
@@ -367,7 +366,7 @@ export default function TreasuryPage() {
                 </Link>
 
                 {/* زر الأرشفة - يظهر ثابت للبنوك */}
-                {acc.type === "bank" && isAdmin && isManagementActive && (
+                {acc.type === "bank" && hasPermission("treasury_manage") && isManagementActive && (
                   <Button
                     variant="secondary"
                     size="icon"
@@ -383,7 +382,7 @@ export default function TreasuryPage() {
                 )}
 
                 {/* زر أرشفة الخزنة (غير الرئيسية فقط) */}
-                {acc.type === "safe" && !acc.isPrimary && isAdmin && isManagementActive && (
+                {acc.type === "safe" && !acc.isPrimary && hasPermission("treasury_manage") && isManagementActive && (
                   <Button
                     variant="secondary"
                     size="icon"
@@ -614,7 +613,15 @@ export default function TreasuryPage() {
         onClose={() => setIsPassGateOpen(false)}
         onSuccess={() => toggleManagementMode(true)}
       />
-    </>
+      </>
+  );
+}
+
+export default function TreasuryPage() {
+  return (
+    <PermissionGuard permissionKey="treasury_view">
+      <TreasuryContent />
+    </PermissionGuard>
   );
 }
 

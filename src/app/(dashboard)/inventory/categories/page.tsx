@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { DataTableToolbar, EmptyState, PaginationControls } from "@/components/shared";
+import { DataTableToolbar, EmptyState, PaginationControls, PermissionGuard } from "@/components/shared";
 import { toast } from "sonner";
 import {
   getCategories,
@@ -143,6 +143,7 @@ export default function CategoriesPage() {
   };
 
   return (
+    <PermissionGuard permissionKey="inventory_view">
     <>
       <Navbar title="التصنيفات" />
       <div className="flex-1 space-y-6 p-6" dir="rtl">
@@ -389,5 +390,6 @@ export default function CategoriesPage() {
         </DialogContent>
       </Dialog>
     </>
+    </PermissionGuard>
   );
 }

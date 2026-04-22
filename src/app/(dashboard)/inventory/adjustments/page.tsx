@@ -20,6 +20,7 @@ import { toast } from "sonner";
 import { getProducts, type ProductData } from "../products/actions";
 import { createAdjustment, getCurrentStock } from "./actions";
 import { usePermissions } from "@/hooks/use-permissions";
+import { PermissionGuard } from "@/components/shared";
 
 export default function AdjustmentsPage() {
   const [products, setProducts] = useState<ProductData[]>([]);
@@ -93,6 +94,7 @@ export default function AdjustmentsPage() {
   };
 
   return (
+    <PermissionGuard permissionKey="inventory_manage">
     <>
       <Navbar title="تسويات المخزون" />
       <div className="flex-1 space-y-6 p-6" dir="rtl">
@@ -294,5 +296,6 @@ export default function AdjustmentsPage() {
         </div>
       </div>
     </>
+    </PermissionGuard>
   );
 }

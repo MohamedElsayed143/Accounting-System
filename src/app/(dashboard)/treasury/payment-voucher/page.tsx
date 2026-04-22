@@ -1,5 +1,6 @@
 "use client";
 
+import { PermissionGuard } from "@/components/shared";
 import React, { useEffect, useState } from "react";
 import { ArrowUpCircle, RotateCcw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -26,7 +27,7 @@ const INITIAL_PAYMENT_FORM = {
   description: "",
 };
 
-export default function PaymentVoucherPage() {
+function PaymentVoucherPage() {
   const { draft: formData, setDraft: setFormData, clearDraft, clearDraftSilently, isLoaded } = useFormDraft("payment_voucher_new", INITIAL_PAYMENT_FORM);
 
   const [data, setData] = useState<InitialData | null>(null);
@@ -308,5 +309,13 @@ export default function PaymentVoucherPage() {
         </Card>
       </div>
     </>
+  );
+}
+
+export default function ProtectedPaymentVoucherPage(props: any) {
+  return (
+    <PermissionGuard permissionKey="treasury_vouchers">
+      <PaymentVoucherPage {...props} />
+    </PermissionGuard>
   );
 }

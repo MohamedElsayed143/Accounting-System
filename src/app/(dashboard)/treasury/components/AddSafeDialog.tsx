@@ -68,15 +68,7 @@ export default function AddSafeDialog({ open, onOpenChange, onSuccess }: AddSafe
             />
           </div>
           
-          <div className="space-y-2">
-            <Label htmlFor="description">الوصف</Label>
-            <Textarea
-              id="description"
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              placeholder="وصف اختياري للخزنة"
-            />
-          </div>
+       
           
           <div className="space-y-2">
             <Label htmlFor="initialBalance">الرصيد الافتتاحي</Label>

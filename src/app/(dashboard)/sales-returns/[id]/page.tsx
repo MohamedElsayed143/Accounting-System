@@ -1,6 +1,6 @@
-// app/(dashboard)/sales-returns/[id]/page.tsx
 "use client";
-
+import { PermissionGuard } from "@/components/shared";
+// app/(dashboard)/sales-returns/[id]/page.tsx
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Printer, Edit } from "lucide-react";
@@ -33,7 +33,7 @@ type SalesReturn = {
   }>;
 };
 
-export default function SalesReturnDetailsPage() {
+function SalesReturnDetailsPage() {
   const { id } = useParams();
   const router = useRouter();
   const [data, setData] = useState<SalesReturn | null>(null);
@@ -188,5 +188,13 @@ export default function SalesReturnDetailsPage() {
         </div>
       </div>
     </>
+  );
+}
+
+export default function ProtectedSalesReturnDetailsPage(props: any) {
+  return (
+    <PermissionGuard permissionKey="returns_sales">
+      <SalesReturnDetailsPage {...props} />
+    </PermissionGuard>
   );
 }

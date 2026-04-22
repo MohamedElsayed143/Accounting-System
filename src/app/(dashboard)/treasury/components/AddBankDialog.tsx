@@ -79,15 +79,7 @@ export default function AddBankDialog({ open, onOpenChange, onSuccess }: AddBank
             />
           </div>
           
-          <div className="space-y-2">
-            <Label htmlFor="branch">الفرع</Label>
-            <Input
-              id="branch"
-              value={formData.branch}
-              onChange={(e) => setFormData({ ...formData, branch: e.target.value })}
-              placeholder="اسم الفرع"
-            />
-          </div>
+   
           
           <div className="space-y-2">
             <Label htmlFor="initialBalance">الرصيد الافتتاحي</Label>

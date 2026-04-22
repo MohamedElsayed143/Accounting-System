@@ -1,5 +1,6 @@
 "use client";
 
+import { PermissionGuard } from "@/components/shared";
 import React, { useState, useEffect, useMemo } from "react";
 import { 
   Printer, 
@@ -24,7 +25,7 @@ import { getCompanySettingsAction } from "../../settings/actions";
 import type { TransactionType } from "../actions";
 import { useSearchParams } from "next/navigation";
 
-export default function BankReportPage() {
+function BankReportPage() {
   const searchParams = useSearchParams();
   const [selectedBank, setSelectedBank] = useState<{ id: number; accountId: number; name: string; accountNumber?: string | null } | null>(null);
   const [fromDate, setFromDate] = useState<string>("");
@@ -265,5 +266,14 @@ export default function BankReportPage() {
         onClose={() => setSelectedTransaction(null)}
       />
     </div>
+  );
+}
+
+
+export default function ProtectedBankReportPage(props: any) {
+  return (
+    <PermissionGuard permissionKey="reports_treasury_banks">
+      <BankReportPage {...props} />
+    </PermissionGuard>
   );
 }

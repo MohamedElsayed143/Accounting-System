@@ -147,14 +147,14 @@ const treasuryNavItem = {
 };
 
 const accountingNavItem = {
-  title: "المحاسبة",
+  title: "المالية",
   href: "/ledger",
   icon: Calculator,
   subItems: [
-    { title: "دفتر الأستاذ العام", href: "/ledger" },
-    { title: "دفتر اليومية", href: "/journal" },
+    { title: "كشف الحسابات", href: "/ledger" },
+    { title: "سجل العمليات", href: "/journal" },
     { title: "إضافة قيد يدوي", href: "/journal/new" },
-    { title: "شجرة الحسابات", href: "/ledger/coa" },
+    { title: "دليل الحسابات", href: "/ledger/coa" },
   ],
 };
 
@@ -194,8 +194,10 @@ const otherNavItems = [
 export function AppSidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const [user, setUser] = useState<{ username: string; role: string } | null>(null);
-  const { hasPermission, isAdmin } = usePermissions();
+  const [user, setUser] = useState<{ username: string; role: string } | null>(
+    null,
+  );
+  const { hasPermission, isAdmin, generalSettings } = usePermissions();
   const { company } = useCompany();
 
   useEffect(() => {
@@ -228,16 +230,25 @@ export function AppSidebar() {
             <div className="flex items-center gap-3 group cursor-pointer">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl shadow-md group-hover:shadow-lg transition-all overflow-hidden bg-white">
                 {company?.logo ? (
-                  <img src={company.logo} alt="Logo" className="h-full w-full object-cover" />
+                  <img
+                    src={company.logo}
+                    alt="Logo"
+                    className="h-full w-full object-cover"
+                  />
                 ) : (
-                  <div className="bg-blue-600 w-full h-full flex items-center justify-center"><Zap className="h-5 w-5 text-white" /></div>
+                  <div className="bg-blue-600 w-full h-full flex items-center justify-center">
+                    <Zap className="h-5 w-5 text-white" />
+                  </div>
                 )}
               </div>
               <div className="flex flex-col">
                 <span className="text-sm font-black text-blue-600 dark:text-blue-500 truncate max-w-[140px]">
                   {company?.name || "فاست"}
                 </span>
-                <span className="text-[10px] text-slate-500 font-bold tracking-tight truncate max-w-[140px]" title={company?.nameEn}>
+                <span
+                  className="text-[10px] text-slate-500 font-bold tracking-tight truncate max-w-[140px]"
+                  title={company?.nameEn}
+                >
                   {company?.nameEn || "Fast System"}
                 </span>
               </div>
@@ -262,7 +273,7 @@ export function AppSidebar() {
               </DropdownMenuItem>
             </Link>
             <DropdownMenuSeparator />
-            <DropdownMenuItem 
+            <DropdownMenuItem
               className="cursor-pointer hover:bg-destructive/10 text-destructive transition-all gap-2"
               onClick={handleLogout}
             >
@@ -274,23 +285,24 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent className="px-2 py-4">
-        {user?.role === "ADMIN" && (
+        {(user?.role === "ADMIN" || hasPermission("statistics_view")) && (
           <SidebarGroup>
             <SidebarGroupLabel className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">
               نظرة عامة
             </SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                {mainNavItems
-                  .filter(item => user?.role === "ADMIN" || item.href !== "/statistics")
-                  .map((item) => (
+                {mainNavItems.map((item) => (
                   <SidebarMenuItem key={item.href}>
-                    <SidebarMenuButton 
-                      asChild 
+                    <SidebarMenuButton
+                      asChild
                       isActive={isActive(item.href)}
                       className="group hover:bg-primary/10 transition-all"
                     >
-                      <Link href={item.href} className="flex items-center gap-3">
+                      <Link
+                        href={item.href}
+                        className="flex items-center gap-3"
+                      >
                         <item.icon className="h-4 w-4 group-hover:scale-110 transition-transform" />
                         <span className="font-medium">{item.title}</span>
                       </Link>
@@ -302,28 +314,35 @@ export function AppSidebar() {
           </SidebarGroup>
         )}
 
-        {((hasPermission("customers_view") || hasPermission("suppliers_view") || user?.role === "ADMIN")) && (
+        {(hasPermission("customers_view") ||
+          hasPermission("suppliers_view") ||
+          user?.role === "ADMIN") && (
           <SidebarGroup className="mt-4">
             <SidebarGroupLabel className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">
-              الدليل
+              جهات التعامل
             </SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
                 {directoryNavItems
-                  .filter(item => {
+                  .filter((item) => {
                     if (user?.role === "ADMIN") return true;
-                    if (item.href === "/suppliers") return hasPermission("suppliers_view");
-                    if (item.href === "/customers") return hasPermission("customers_view");
+                    if (item.href === "/suppliers")
+                      return hasPermission("suppliers_view");
+                    if (item.href === "/customers")
+                      return hasPermission("customers_view");
                     return true;
                   })
                   .map((item) => (
                     <SidebarMenuItem key={item.href}>
-                      <SidebarMenuButton 
-                        asChild 
+                      <SidebarMenuButton
+                        asChild
                         isActive={isActive(item.href)}
                         className="group hover:bg-primary/10 transition-all"
                       >
-                        <Link href={item.href} className="flex items-center gap-3">
+                        <Link
+                          href={item.href}
+                          className="flex items-center gap-3"
+                        >
                           <item.icon className="h-4 w-4 group-hover:scale-110 transition-transform" />
                           <span className="font-medium">{item.title}</span>
                         </Link>
@@ -335,7 +354,13 @@ export function AppSidebar() {
           </SidebarGroup>
         )}
 
-        {(hasPermission("sales_view") || hasPermission("sales_create") || hasPermission("purchase_view") || hasPermission("purchase_create") || hasPermission("sales_quotations_view") || hasPermission("sales_pending_view") || user?.role === "ADMIN") && (
+        {(hasPermission("sales_view") ||
+          hasPermission("sales_create") ||
+          hasPermission("purchase_view") ||
+          hasPermission("purchase_create") ||
+          hasPermission("sales_quotations_view") ||
+          hasPermission("sales_pending_view") ||
+          user?.role === "ADMIN") && (
           <SidebarGroup className="mt-4">
             <SidebarGroupLabel className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">
               الفواتير
@@ -343,16 +368,130 @@ export function AppSidebar() {
             <SidebarGroupContent>
               <SidebarMenu>
                 {invoiceNavItems
-                  .filter(item => {
+                  .filter((item) => {
                     if (user?.role === "ADMIN") return true;
-                    if (item.href === "/sales-invoices") return hasPermission("sales_view") || hasPermission("sales_create");
-                    if (item.href === "/purchase-invoices") return hasPermission("purchase_view") || hasPermission("purchase_create");
-                    if (item.href === "/sales-quotations") return hasPermission("sales_quotations_view");
-                    if (item.href === "/pending-invoices") return hasPermission("sales_pending_view");
-                    return true; 
+                    if (item.href === "/sales-invoices")
+                      return (
+                        hasPermission("sales_view") ||
+                        hasPermission("sales_create")
+                      );
+                    if (item.href === "/purchase-invoices")
+                      return (
+                        hasPermission("purchase_view") ||
+                        hasPermission("purchase_create")
+                      );
+                    if (item.href === "/sales-quotations")
+                      return hasPermission("sales_quotations_view");
+                    if (item.href === "/pending-invoices")
+                      return hasPermission("sales_pending_view");
+                    return true;
+                  })
+                  .map((item) =>
+                    item.subItems ? (
+                      <Collapsible
+                        key={item.href}
+                        defaultOpen={isActive(item.href)}
+                        className="group/collapsible"
+                      >
+                        <SidebarMenuItem>
+                          <CollapsibleTrigger asChild>
+                            <SidebarMenuButton
+                              isActive={isActive(item.href)}
+                              className="group hover:bg-primary/10 transition-all"
+                            >
+                              <item.icon className="h-4 w-4 group-hover:scale-110 transition-transform" />
+                              <span className="font-medium">{item.title}</span>
+                              <ChevronDown className="mr-auto h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-180" />
+                            </SidebarMenuButton>
+                          </CollapsibleTrigger>
+                          <CollapsibleContent>
+                            <SidebarMenuSub className="mr-4 border-r-2 border-primary/20">
+                              {item.subItems
+                                .filter((sub) => {
+                                  if (user?.role === "ADMIN") return true;
+                                  if (item.href === "/sales-invoices") {
+                                    if (sub.href === "/sales-invoices")
+                                      return hasPermission("sales_view");
+                                    if (sub.href === "/sales-invoices/create")
+                                      return hasPermission("sales_create");
+                                  }
+                                  if (item.href === "/purchase-invoices") {
+                                    if (sub.href === "/purchase-invoices")
+                                      return hasPermission("purchase_view");
+                                    if (
+                                      sub.href === "/purchase-invoices/create"
+                                    )
+                                      return hasPermission("purchase_create");
+                                  }
+                                  if (item.href === "/sales-quotations") {
+                                    // quotations use sales_quotations_view for everything right now unless requested otherwise
+                                    return true;
+                                  }
+                                  return true;
+                                })
+                                .map((subItem) => (
+                                  <SidebarMenuSubItem key={subItem.href}>
+                                    <SidebarMenuSubButton
+                                      asChild
+                                      isActive={pathname === subItem.href}
+                                      className="hover:bg-primary/5 transition-all"
+                                    >
+                                      <Link
+                                        href={subItem.href}
+                                        className="text-sm font-medium"
+                                      >
+                                        {subItem.title}
+                                      </Link>
+                                    </SidebarMenuSubButton>
+                                  </SidebarMenuSubItem>
+                                ))}
+                            </SidebarMenuSub>
+                          </CollapsibleContent>
+                        </SidebarMenuItem>
+                      </Collapsible>
+                    ) : (
+                      <SidebarMenuItem key={item.href}>
+                        <SidebarMenuButton
+                          asChild
+                          isActive={isActive(item.href)}
+                          className="group hover:bg-primary/10 transition-all"
+                        >
+                          <Link
+                            href={item.href}
+                            className="flex items-center gap-3"
+                          >
+                            <item.icon className="h-4 w-4 group-hover:scale-110 transition-transform" />
+                            <span className="font-medium">{item.title}</span>
+                          </Link>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    ),
+                  )}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        {/* ✅ قسم المرتجعات */}
+        {(hasPermission("returns_sales") ||
+          hasPermission("returns_purchase") ||
+          user?.role === "ADMIN") && (
+          <SidebarGroup className="mt-4">
+            <SidebarGroupLabel className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">
+              المرتجعات
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {returnsNavItems
+                  .filter((item) => {
+                    if (user?.role === "ADMIN") return true;
+                    if (item.href === "/sales-returns")
+                      return hasPermission("returns_sales");
+                    if (item.href === "/purchase-returns")
+                      return hasPermission("returns_purchase");
+                    return true;
                   })
                   .map((item) => (
-                  item.subItems ? (
                     <Collapsible
                       key={item.href}
                       defaultOpen={isActive(item.href)}
@@ -360,7 +499,7 @@ export function AppSidebar() {
                     >
                       <SidebarMenuItem>
                         <CollapsibleTrigger asChild>
-                          <SidebarMenuButton 
+                          <SidebarMenuButton
                             isActive={isActive(item.href)}
                             className="group hover:bg-primary/10 transition-all"
                           >
@@ -371,31 +510,17 @@ export function AppSidebar() {
                         </CollapsibleTrigger>
                         <CollapsibleContent>
                           <SidebarMenuSub className="mr-4 border-r-2 border-primary/20">
-                            {item.subItems
-                              .filter(sub => {
-                                if (user?.role === "ADMIN") return true;
-                                if (item.href === "/sales-invoices") {
-                                  if (sub.href === "/sales-invoices") return hasPermission("sales_view");
-                                  if (sub.href === "/sales-invoices/create") return hasPermission("sales_create");
-                                }
-                                if (item.href === "/purchase-invoices") {
-                                  if (sub.href === "/purchase-invoices") return hasPermission("purchase_view");
-                                  if (sub.href === "/purchase-invoices/create") return hasPermission("purchase_create");
-                                }
-                                if (item.href === "/sales-quotations") {
-                                  // quotations use sales_quotations_view for everything right now unless requested otherwise
-                                  return true; 
-                                }
-                                return true;
-                              })
-                              .map((subItem) => (
+                            {item.subItems.map((subItem) => (
                               <SidebarMenuSubItem key={subItem.href}>
                                 <SidebarMenuSubButton
                                   asChild
                                   isActive={pathname === subItem.href}
                                   className="hover:bg-primary/5 transition-all"
                                 >
-                                  <Link href={subItem.href} className="text-sm font-medium">
+                                  <Link
+                                    href={subItem.href}
+                                    className="text-sm font-medium"
+                                  >
                                     {subItem.title}
                                   </Link>
                                 </SidebarMenuSubButton>
@@ -405,88 +530,21 @@ export function AppSidebar() {
                         </CollapsibleContent>
                       </SidebarMenuItem>
                     </Collapsible>
-                  ) : (
-                    <SidebarMenuItem key={item.href}>
-                      <SidebarMenuButton 
-                        asChild 
-                        isActive={isActive(item.href)}
-                        className="group hover:bg-primary/10 transition-all"
-                      >
-                        <Link href={item.href} className="flex items-center gap-3">
-                          <item.icon className="h-4 w-4 group-hover:scale-110 transition-transform" />
-                          <span className="font-medium">{item.title}</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  )
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )}
-
-        {/* ✅ قسم المرتجعات */}
-        {(hasPermission("returns_sales") || hasPermission("returns_purchase") || user?.role === "ADMIN") && (
-          <SidebarGroup className="mt-4">
-            <SidebarGroupLabel className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">
-              المرتجعات
-            </SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {returnsNavItems
-                  .filter(item => {
-                    if (user?.role === "ADMIN") return true;
-                    if (item.href === "/sales-returns") return hasPermission("returns_sales");
-                    if (item.href === "/purchase-returns") return hasPermission("returns_purchase");
-                    return true;
-                  })
-                  .map((item) => (
-                  <Collapsible
-                    key={item.href}
-                    defaultOpen={isActive(item.href)}
-                    className="group/collapsible"
-                  >
-                    <SidebarMenuItem>
-                      <CollapsibleTrigger asChild>
-                        <SidebarMenuButton 
-                          isActive={isActive(item.href)}
-                          className="group hover:bg-primary/10 transition-all"
-                        >
-                          <item.icon className="h-4 w-4 group-hover:scale-110 transition-transform" />
-                          <span className="font-medium">{item.title}</span>
-                          <ChevronDown className="mr-auto h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-180" />
-                        </SidebarMenuButton>
-                      </CollapsibleTrigger>
-                      <CollapsibleContent>
-                        <SidebarMenuSub className="mr-4 border-r-2 border-primary/20">
-                          {item.subItems.map((subItem) => (
-                            <SidebarMenuSubItem key={subItem.href}>
-                              <SidebarMenuSubButton
-                                asChild
-                                isActive={pathname === subItem.href}
-                                className="hover:bg-primary/5 transition-all"
-                              >
-                                <Link href={subItem.href} className="text-sm font-medium">
-                                  {subItem.title}
-                                </Link>
-                              </SidebarMenuSubButton>
-                            </SidebarMenuSubItem>
-                          ))}
-                        </SidebarMenuSub>
-                      </CollapsibleContent>
-                    </SidebarMenuItem>
-                  </Collapsible>
-                ))}
+                  ))}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
         )}
 
         {/* ✅ قسم المحاسبة */}
-        {(isAdmin || hasPermission("reports_ledger")) && (
+        {(isAdmin ||
+          hasPermission("accounting_ledger_view") ||
+          hasPermission("accounting_journal_view") ||
+          hasPermission("accounting_journal_add") ||
+          hasPermission("accounting_coa_view")) && (
           <SidebarGroup className="mt-4">
             <SidebarGroupLabel className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">
-              المحاسبة
+              المالية
             </SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
@@ -501,25 +559,47 @@ export function AppSidebar() {
                         className="group hover:bg-primary/10 transition-all"
                       >
                         <accountingNavItem.icon className="h-4 w-4 group-hover:scale-110 transition-transform" />
-                        <span className="font-medium">{accountingNavItem.title}</span>
+                        <span className="font-medium">
+                          {accountingNavItem.title}
+                        </span>
                         <ChevronDown className="mr-auto h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-180" />
                       </SidebarMenuButton>
                     </CollapsibleTrigger>
                     <CollapsibleContent>
                       <SidebarMenuSub className="mr-4 border-r-2 border-primary/20">
-                        {accountingNavItem.subItems.map((subItem) => (
-                          <SidebarMenuSubItem key={subItem.href}>
-                            <SidebarMenuSubButton
-                              asChild
-                              isActive={pathname === subItem.href}
-                              className="hover:bg-primary/5 transition-all"
-                            >
-                              <Link href={subItem.href} className="text-sm font-medium">
-                                {subItem.title}
-                              </Link>
-                            </SidebarMenuSubButton>
-                          </SidebarMenuSubItem>
-                        ))}
+                        {accountingNavItem.subItems
+                          .filter((sub) => {
+                            if (isAdmin) return true;
+                            if (sub.href === "/ledger")
+                              return hasPermission("accounting_ledger_view");
+                            if (sub.href === "/journal")
+                              return hasPermission("accounting_journal_view");
+                            if (sub.href === "/journal/new")
+                              return (
+                                hasPermission("accounting_journal_add") &&
+                                (isAdmin ||
+                                  generalSettings?.allowWorkersManualJournals)
+                              );
+                            if (sub.href === "/ledger/coa")
+                              return hasPermission("accounting_coa_view");
+                            return true;
+                          })
+                          .map((subItem) => (
+                            <SidebarMenuSubItem key={subItem.href}>
+                              <SidebarMenuSubButton
+                                asChild
+                                isActive={pathname === subItem.href}
+                                className="hover:bg-primary/5 transition-all"
+                              >
+                                <Link
+                                  href={subItem.href}
+                                  className="text-sm font-medium"
+                                >
+                                  {subItem.title}
+                                </Link>
+                              </SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                          ))}
                       </SidebarMenuSub>
                     </CollapsibleContent>
                   </SidebarMenuItem>
@@ -548,7 +628,9 @@ export function AppSidebar() {
                         className="group hover:bg-primary/10 transition-all"
                       >
                         <inventoryNavItem.icon className="h-4 w-4 group-hover:scale-110 transition-transform" />
-                        <span className="font-medium">{inventoryNavItem.title}</span>
+                        <span className="font-medium">
+                          {inventoryNavItem.title}
+                        </span>
                         <ChevronDown className="mr-auto h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-180" />
                       </SidebarMenuButton>
                     </CollapsibleTrigger>
@@ -561,7 +643,10 @@ export function AppSidebar() {
                               isActive={pathname === subItem.href}
                               className="hover:bg-primary/5 transition-all"
                             >
-                              <Link href={subItem.href} className="text-sm font-medium">
+                              <Link
+                                href={subItem.href}
+                                className="text-sm font-medium"
+                              >
                                 {subItem.title}
                               </Link>
                             </SidebarMenuSubButton>
@@ -576,7 +661,9 @@ export function AppSidebar() {
           </SidebarGroup>
         )}
 
-        {(hasPermission("treasury_view") || hasPermission("treasury_manage") || user?.role === "ADMIN") && (
+        {(hasPermission("treasury_view") ||
+          hasPermission("treasury_manage") ||
+          user?.role === "ADMIN") && (
           <SidebarGroup className="mt-4">
             <SidebarGroupLabel className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">
               النقدية
@@ -594,33 +681,41 @@ export function AppSidebar() {
                         className="group hover:bg-primary/10 transition-all"
                       >
                         <treasuryNavItem.icon className="h-4 w-4 group-hover:scale-110 transition-transform" />
-                        <span className="font-medium">{treasuryNavItem.title}</span>
+                        <span className="font-medium">
+                          {treasuryNavItem.title}
+                        </span>
                         <ChevronDown className="mr-auto h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-180" />
                       </SidebarMenuButton>
                     </CollapsibleTrigger>
                     <CollapsibleContent>
                       <SidebarMenuSub className="mr-4 border-r-2 border-primary/20">
                         {treasuryNavItem.subItems
-                          .filter(sub => {
+                          .filter((sub) => {
                             if (user?.role === "ADMIN") return true;
-                            if (sub.href === "/treasury/receipt-voucher" || sub.href === "/treasury/payment-voucher") {
+                            if (
+                              sub.href === "/treasury/receipt-voucher" ||
+                              sub.href === "/treasury/payment-voucher"
+                            ) {
                               return hasPermission("treasury_vouchers");
                             }
                             return true;
                           })
                           .map((subItem) => (
-                          <SidebarMenuSubItem key={subItem.href}>
-                            <SidebarMenuSubButton
-                              asChild
-                              isActive={pathname === subItem.href}
-                              className="hover:bg-primary/5 transition-all"
-                            >
-                              <Link href={subItem.href} className="text-sm font-medium">
-                                {subItem.title}
-                              </Link>
-                            </SidebarMenuSubButton>
-                          </SidebarMenuSubItem>
-                        ))}
+                            <SidebarMenuSubItem key={subItem.href}>
+                              <SidebarMenuSubButton
+                                asChild
+                                isActive={pathname === subItem.href}
+                                className="hover:bg-primary/5 transition-all"
+                              >
+                                <Link
+                                  href={subItem.href}
+                                  className="text-sm font-medium"
+                                >
+                                  {subItem.title}
+                                </Link>
+                              </SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                          ))}
                       </SidebarMenuSub>
                     </CollapsibleContent>
                   </SidebarMenuItem>
@@ -630,7 +725,10 @@ export function AppSidebar() {
           </SidebarGroup>
         )}
 
-        {(isAdmin || (hasPermission("reports_customers_suppliers") || hasPermission("reports_treasury_banks") || hasPermission("reports_ledger"))) && (
+        {(isAdmin ||
+          hasPermission("reports_customers_suppliers") ||
+          hasPermission("reports_treasury_banks") ||
+          hasPermission("reports_ledger")) && (
           <SidebarGroup className="mt-4">
             <SidebarGroupLabel className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">
               الإدارة
@@ -638,78 +736,98 @@ export function AppSidebar() {
             <SidebarGroupContent>
               <SidebarMenu>
                 {otherNavItems
-                  .filter(item => {
+                  .filter((item) => {
                     // Hide settings for worker
-                    if (item.href === "/settings" && user?.role !== "ADMIN") return false;
-                    
+                    if (item.href === "/settings" && user?.role !== "ADMIN")
+                      return false;
+
                     // Hide reports menu entirely if worker has no report permissions
                     if (item.href === "/reports" && user?.role === "WORKER") {
-                      const hasSomeReports = hasPermission("reports_customers_suppliers") || hasPermission("reports_treasury_banks") || hasPermission("reports_ledger");
+                      const hasSomeReports =
+                        hasPermission("reports_customers_suppliers") ||
+                        hasPermission("reports_treasury_banks") ||
+                        hasPermission("reports_ledger");
                       return hasSomeReports;
                     }
-                    
+
                     return true;
                   })
-                  .map((item) => (
-                  item.subItems ? (
-                    <Collapsible
-                      key={item.href}
-                      defaultOpen={isActive(item.href)}
-                      className="group/collapsible"
-                    >
-                      <SidebarMenuItem>
-                        <CollapsibleTrigger asChild>
-                          <SidebarMenuButton 
-                            isActive={isActive(item.href)}
-                            className="group hover:bg-primary/10 transition-all"
+                  .map((item) =>
+                    item.subItems ? (
+                      <Collapsible
+                        key={item.href}
+                        defaultOpen={isActive(item.href)}
+                        className="group/collapsible"
+                      >
+                        <SidebarMenuItem>
+                          <CollapsibleTrigger asChild>
+                            <SidebarMenuButton
+                              isActive={isActive(item.href)}
+                              className="group hover:bg-primary/10 transition-all"
+                            >
+                              <item.icon className="h-4 w-4 group-hover:scale-110 transition-transform" />
+                              <span className="font-medium">{item.title}</span>
+                              <ChevronDown className="mr-auto h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-180" />
+                            </SidebarMenuButton>
+                          </CollapsibleTrigger>
+                          <CollapsibleContent>
+                            <SidebarMenuSub className="mr-4 border-r-2 border-primary/20">
+                              {item.subItems
+                                .filter((sub) => {
+                                  if (user?.role === "ADMIN") return true;
+                                  if (sub.href === "/reports")
+                                    return hasPermission(
+                                      "reports_customers_suppliers",
+                                    );
+                                  if (
+                                    sub.href === "/reports/treasury" ||
+                                    sub.href === "/reports/banks"
+                                  )
+                                    return hasPermission(
+                                      "reports_treasury_banks",
+                                    );
+                                  if (sub.href === "/reports/trial-balance")
+                                    return hasPermission("reports_ledger");
+                                  return true;
+                                })
+                                .map((subItem) => (
+                                  <SidebarMenuSubItem key={subItem.href}>
+                                    <SidebarMenuSubButton
+                                      asChild
+                                      isActive={pathname === subItem.href}
+                                      className="hover:bg-primary/5 transition-all"
+                                    >
+                                      <Link
+                                        href={subItem.href}
+                                        className="text-sm font-medium"
+                                      >
+                                        {subItem.title}
+                                      </Link>
+                                    </SidebarMenuSubButton>
+                                  </SidebarMenuSubItem>
+                                ))}
+                            </SidebarMenuSub>
+                          </CollapsibleContent>
+                        </SidebarMenuItem>
+                      </Collapsible>
+                    ) : (
+                      <SidebarMenuItem key={item.href}>
+                        <SidebarMenuButton
+                          asChild
+                          isActive={isActive(item.href)}
+                          className="group hover:bg-primary/10 transition-all"
+                        >
+                          <Link
+                            href={item.href}
+                            className="flex items-center gap-3"
                           >
                             <item.icon className="h-4 w-4 group-hover:scale-110 transition-transform" />
                             <span className="font-medium">{item.title}</span>
-                            <ChevronDown className="mr-auto h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-180" />
-                          </SidebarMenuButton>
-                        </CollapsibleTrigger>
-                        <CollapsibleContent>
-                          <SidebarMenuSub className="mr-4 border-r-2 border-primary/20">
-                            {item.subItems
-                              .filter(sub => {
-                                if (user?.role === "ADMIN") return true;
-                                if (sub.href === "/reports") return hasPermission("reports_customers_suppliers");
-                                if (sub.href === "/reports/treasury" || sub.href === "/reports/banks") return hasPermission("reports_treasury_banks");
-                                if (sub.href === "/ledger") return hasPermission("reports_ledger");
-                                return true;
-                              })
-                              .map((subItem) => (
-                              <SidebarMenuSubItem key={subItem.href}>
-                                <SidebarMenuSubButton
-                                  asChild
-                                  isActive={pathname === subItem.href}
-                                  className="hover:bg-primary/5 transition-all"
-                                >
-                                  <Link href={subItem.href} className="text-sm font-medium">
-                                    {subItem.title}
-                                  </Link>
-                                </SidebarMenuSubButton>
-                              </SidebarMenuSubItem>
-                            ))}
-                          </SidebarMenuSub>
-                        </CollapsibleContent>
+                          </Link>
+                        </SidebarMenuButton>
                       </SidebarMenuItem>
-                    </Collapsible>
-                  ) : (
-                    <SidebarMenuItem key={item.href}>
-                      <SidebarMenuButton 
-                        asChild 
-                        isActive={isActive(item.href)}
-                        className="group hover:bg-primary/10 transition-all"
-                      >
-                        <Link href={item.href} className="flex items-center gap-3">
-                          <item.icon className="h-4 w-4 group-hover:scale-110 transition-transform" />
-                          <span className="font-medium">{item.title}</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  )
-                ))}
+                    ),
+                  )}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>

@@ -1,5 +1,6 @@
 "use client";
 
+import { PermissionGuard } from "@/components/shared";
 import { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import {
@@ -15,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { getAccountDetails, type AccountDetails } from "../actions";
 import { useRouter } from "next/navigation";
 
-export default function AccountDetailsPage() {
+function AccountDetailsPage() {
   const router = useRouter();
   const params = useParams();
   const searchParams = useSearchParams();
@@ -202,5 +203,13 @@ export default function AccountDetailsPage() {
         </Card>
       </div>
     </>
+  );
+}
+
+export default function ProtectedAccountDetailsPage(props: any) {
+  return (
+    <PermissionGuard permissionKey="treasury_view">
+      <AccountDetailsPage {...props} />
+    </PermissionGuard>
   );
 }

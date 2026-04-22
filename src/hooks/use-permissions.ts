@@ -2,16 +2,23 @@
 
 import { useEffect, useState } from "react";
 import { getRBACPermissions } from "@/lib/permissions-actions";
+import { getGeneralSettingsAction } from "@/app/(dashboard)/settings/actions";
 
 export function usePermissions() {
-  const [permissions, setPermissions] = useState<Record<string, boolean | string>>({});
+  const [permissions, setPermissions] = useState<
+    Record<string, boolean | string>
+  >({});
+  const [generalSettings, setGeneralSettings] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getRBACPermissions().then((res) => {
-      setPermissions(res as Record<string, boolean | string>);
-      setLoading(false);
-    });
+    Promise.all([getRBACPermissions(), getGeneralSettingsAction()]).then(
+      ([rbacRes, settingsRes]) => {
+        setPermissions(rbacRes as Record<string, boolean | string>);
+        setGeneralSettings(settingsRes);
+        setLoading(false);
+      },
+    );
   }, []);
 
   const hasPermission = (key: string) => {
@@ -22,5 +29,5 @@ export function usePermissions() {
 
   const isAdmin = permissions["isAdmin"] === true;
 
-  return { permissions, hasPermission, isAdmin, loading };
+  return { permissions, hasPermission, isAdmin, loading, generalSettings };
 }
