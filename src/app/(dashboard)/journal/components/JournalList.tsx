@@ -26,6 +26,7 @@ import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
 import { useManagementMode } from "@/hooks/use-management-mode";
+import { usePermissions } from "@/hooks/use-permissions";
 import { PasswordProtectionGate } from "@/components/shared/PasswordProtectionGate";
 import { toast } from "sonner";
 import { DateFilterButtons } from "@/components/shared";
@@ -58,9 +59,16 @@ export function JournalList({
 }) {
   const [searchTerm, setSearchTerm] = React.useState("");
   const { isManagementActive, toggleManagementMode, isUserAdmin } = useManagementMode();
+  const { hasPermission, generalSettings, isAdmin, loading: permissionsLoading } = usePermissions();
   const [isPassGateOpen, setIsPassGateOpen] = React.useState(false);
   const [printingEntry, setPrintingEntry] = React.useState<JournalEntry | null>(null);
   const [dateFilter, setDateFilter] = React.useState<"today" | "week" | "month" | "year" | "all">("all");
+
+  const canWorkerManualJournal = React.useMemo(() => {
+    return hasPermission("accounting_journal_add") && generalSettings?.allowWorkersManualJournals;
+  }, [hasPermission, generalSettings]);
+
+  const canAddEntry = isManagementActive || isAdmin || canWorkerManualJournal;
 
   const printVoucherRef = React.useRef<HTMLDivElement>(null);
 
@@ -110,7 +118,7 @@ export function JournalList({
           </div>
           
           <div className="flex items-center gap-4">
-            {isUserAdmin && (
+            {!permissionsLoading && (isAdmin || !canWorkerManualJournal) && (
               <Button
                 onClick={() => isManagementActive ? toggleManagementMode(false) : setIsPassGateOpen(true)}
                 variant={isManagementActive ? "default" : "outline"}
@@ -138,9 +146,9 @@ export function JournalList({
             )}
 
             <Link 
-              href={isManagementActive ? "/journal/new" : "#"} 
+              href={canAddEntry ? "/journal/new" : "#"} 
               onClick={(e) => {
-                if (!isManagementActive) {
+                if (!canAddEntry) {
                   e.preventDefault();
                   toast.error("يجب تفعيل وضع الإدارة لإضافة قيود يومية جديدة");
                 }
@@ -149,10 +157,10 @@ export function JournalList({
               <Button 
                 className={cn(
                   "h-14 px-8 gap-3 text-lg font-black rounded-2xl transition-all group",
-                  !isManagementActive && "bg-slate-100 text-slate-400 hover:bg-slate-100 shadow-none border-0"
+                  !canAddEntry && "bg-slate-100 text-slate-400 hover:bg-slate-100 shadow-none border-0"
                 )}
               >
-                {isManagementActive ? <Plus className="w-5 h-5 group-hover:rotate-90 transition-transform" /> : <Lock className="w-5 h-5" />}
+                {canAddEntry ? <Plus className="w-5 h-5 group-hover:rotate-90 transition-transform" /> : <Lock className="w-5 h-5" />}
                 إضافة قيد جديد
               </Button>
             </Link>

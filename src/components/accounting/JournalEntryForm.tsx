@@ -178,7 +178,7 @@ export function JournalEntryForm() {
           debit: l.debit,
           credit: l.credit
         })),
-        isAdminMode: isManagementActive || isAdmin
+        isAdminMode: isManagementActive || isAdmin || canWorkerManualJournal
       });
 
       if (result.success) {

@@ -132,6 +132,11 @@ export async function getStatisticsSummary(fromDate?: Date, toDate?: Date) {
 
 // ========== Monthly Revenue vs Purchases ==========
 export async function getMonthlyTrend(year: number) {
+  const session = await getSession();
+  if (!session) return [];
+  const canView = await hasPermission(session.userId, "statistics_view");
+  if (!canView) return [];
+
   try {
     const start = new Date(`${year}-01-01T00:00:00.000Z`);
     const end = new Date(`${year}-12-31T23:59:59.999Z`);
@@ -186,6 +191,11 @@ export async function getTopCustomers(
   fromDate?: Date,
   toDate?: Date
 ) {
+  const session = await getSession();
+  if (!session) return [];
+  const canView = await hasPermission(session.userId, "statistics_view");
+  if (!canView) return [];
+
   try {
     const dateFilter =
       fromDate && toDate
@@ -219,6 +229,11 @@ export async function getTopSuppliers(
   fromDate?: Date,
   toDate?: Date
 ) {
+  const session = await getSession();
+  if (!session) return [];
+  const canView = await hasPermission(session.userId, "statistics_view");
+  if (!canView) return [];
+
   try {
     const dateFilter =
       fromDate && toDate
@@ -251,6 +266,11 @@ export async function getSalesByPaymentMethod(
   fromDate?: Date,
   toDate?: Date
 ) {
+  const session = await getSession();
+  if (!session) return [];
+  const canView = await hasPermission(session.userId, "statistics_view");
+  if (!canView) return [];
+
   try {
     const dateFilter =
       fromDate && toDate
@@ -288,6 +308,11 @@ export async function getSalesByPaymentMethod(
 
 // ========== Inventory Alerts (below minimum stock OR zero stock) ==========
 export async function getInventoryAlerts() {
+  const session = await getSession();
+  if (!session) return [];
+  const canView = await hasPermission(session.userId, "statistics_view");
+  if (!canView) return [];
+
   try {
     const settings = await getSystemSettings();
     
@@ -357,6 +382,11 @@ export async function getBestSellingProducts(
   fromDate?: Date,
   toDate?: Date
 ) {
+  const session = await getSession();
+  if (!session) return [];
+  const canView = await hasPermission(session.userId, "statistics_view");
+  if (!canView) return [];
+
   try {
     const dateFilter =
       fromDate && toDate
@@ -411,6 +441,11 @@ export async function getBestSellingProducts(
 
 // ========== Recent Activity ==========
 export async function getRecentActivity(limit: number = 10) {
+  const session = await getSession();
+  if (!session) return [];
+  const canView = await hasPermission(session.userId, "statistics_view");
+  if (!canView) return [];
+
   try {
     const [sales, purchases] = await Promise.all([
       (await getTenantPrisma()).salesInvoice.findMany({
@@ -471,6 +506,11 @@ export async function getRecentActivity(limit: number = 10) {
 
 // ========== Returns Summary ==========
 export async function getReturnsSummary(fromDate?: Date, toDate?: Date) {
+  const session = await getSession();
+  if (!session) return { salesReturnsTotal: 0, salesReturnsCount: 0, purchaseReturnsTotal: 0, purchaseReturnsCount: 0 };
+  const canView = await hasPermission(session.userId, "statistics_view");
+  if (!canView) return { salesReturnsTotal: 0, salesReturnsCount: 0, purchaseReturnsTotal: 0, purchaseReturnsCount: 0 };
+
   try {
     const dateFilter =
       fromDate && toDate ? { returnDate: { gte: fromDate, lte: toDate } } : {};

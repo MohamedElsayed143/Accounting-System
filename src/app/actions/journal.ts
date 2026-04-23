@@ -127,17 +127,40 @@ export async function saveJournalEntry(data: {
     throw new Error("غير مصرح بالدخول. يرجى تسجيل الدخول.");
   }
 
-  // 0. Admin Mode Enforcement
+  // 0. Admin Mode & Permission Enforcement
   const db = await getTenantPrisma();
+  const sessionUser = await (publicPrisma as any).user.findUnique({
+    where: { id: session.userId },
+  });
+  const isAdmin = sessionUser?.role === "ADMIN";
+
   const settings = await (db as any).generalSettings.findFirst();
   const allowWorkersManualJournals =
     settings?.allowWorkersManualJournals || false;
 
-  if (!data.isAdminMode && !allowWorkersManualJournals) {
-    throw new Error(
-      "يجب تفعيل وضع الإدارة (Admin Mode) للقيام بالعمليات الحسابية اليدوية.",
+  // If not admin, they MUST have the permission
+  if (!isAdmin) {
+    const canAddJournal = await hasPermission(
+      session.userId,
+      "accounting_journal_add",
     );
+    if (!canAddJournal) {
+      throw new Error("ليس لديك صلاحية إضافة قيود يدوية.");
+    }
+
+    // They also need the general setting to be enabled to bypass Admin Mode
+    if (!data.isAdminMode && !allowWorkersManualJournals) {
+      throw new Error(
+        "يجب تفعيل خيار 'السماح للموظفين بإضافة قيود يدوية' من الإعدادات للقيام بهذه العملية بدون وضع الإدارة.",
+      );
+    }
   }
+
+  // If they have both permission AND the setting is enabled, we treat them as "Admin Mode" 
+  // for the purpose of linked accounts if they passed isAdminMode=true from client.
+  // Actually, we can just force it here if both are true.
+  const effectiveAdminMode =
+    data.isAdminMode || (isAdmin && true) || allowWorkersManualJournals;
   // 1. Validation: Total Debit must equal Total Credit
   const totalDebit = data.items.reduce((sum, item) => sum + item.debit, 0);
   const totalCredit = data.items.reduce((sum, item) => sum + item.credit, 0);
@@ -153,7 +176,7 @@ export async function saveJournalEntry(data: {
   const accountIds = data.items.map((item) => item.accountId);
 
   // 1.5. Prevent manual entries on Customer/Supplier accounts UNLESS in Admin Mode
-  if (!data.isAdminMode) {
+  if (!effectiveAdminMode) {
     const linkedAccounts = await (
       await getTenantPrisma()
     ).account.findMany({

@@ -252,8 +252,8 @@ export default function StatisticsPage() {
     setLoading(true);
     try {
       const session = await getAuthSession();
-      if (!session || session.user.role !== "ADMIN") {
-        window.location.href = "/sales-invoices";
+      if (!session) {
+        window.location.href = "/login";
         return;
       }
 

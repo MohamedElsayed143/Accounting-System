@@ -321,9 +321,9 @@ export function AppSidebar() {
           </SidebarGroup>
         )}
 
-        {(hasPermission("customers_view") ||
-          hasPermission("suppliers_view") ||
-          user?.role === "ADMIN") && (
+        {(isAdmin ||
+          hasPermission("customers_view") ||
+          hasPermission("suppliers_view")) && (
           <SidebarGroup className="mt-4">
             <SidebarGroupLabel className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">
               جهات التعامل
@@ -361,13 +361,13 @@ export function AppSidebar() {
           </SidebarGroup>
         )}
 
-        {(hasPermission("sales_view") ||
+        {(isAdmin ||
+          hasPermission("sales_view") ||
           hasPermission("sales_create") ||
           hasPermission("purchase_view") ||
           hasPermission("purchase_create") ||
           hasPermission("sales_quotations_view") ||
-          hasPermission("sales_pending_view") ||
-          user?.role === "ADMIN") && (
+          hasPermission("sales_pending_view")) && (
           <SidebarGroup className="mt-4">
             <SidebarGroupLabel className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">
               الفواتير
@@ -480,9 +480,9 @@ export function AppSidebar() {
         )}
 
         {/* ✅ قسم المرتجعات */}
-        {(hasPermission("returns_sales") ||
-          hasPermission("returns_purchase") ||
-          user?.role === "ADMIN") && (
+        {(isAdmin ||
+          hasPermission("returns_sales") ||
+          hasPermission("returns_purchase")) && (
           <SidebarGroup className="mt-4">
             <SidebarGroupLabel className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">
               المرتجعات
@@ -634,7 +634,7 @@ export function AppSidebar() {
         )}
 
         {/* ✅ قسم المخزون */}
-        {hasPermission("inventory_view") && (
+        {(isAdmin || hasPermission("inventory_view")) && (
           <SidebarGroup className="mt-4">
             <SidebarGroupLabel className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">
               المخزون
@@ -692,9 +692,10 @@ export function AppSidebar() {
           </SidebarGroup>
         )}
 
-        {(hasPermission("treasury_view") ||
+        {(isAdmin ||
+          hasPermission("treasury_view") ||
           hasPermission("treasury_manage") ||
-          user?.role === "ADMIN") && (
+          hasPermission("treasury_vouchers")) && (
           <SidebarGroup className="mt-4">
             <SidebarGroupLabel className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">
               النقدية
@@ -722,7 +723,7 @@ export function AppSidebar() {
                       <SidebarMenuSub className="mr-4 border-r-2 border-primary/20">
                         {treasuryNavItem.subItems
                           .filter((sub) => {
-                            if (user?.role === "ADMIN") return true;
+                            if (isAdmin) return true;
                             if (
                               sub.href === "/treasury/receipt-voucher" ||
                               sub.href === "/treasury/payment-voucher"
@@ -769,11 +770,10 @@ export function AppSidebar() {
                 {otherNavItems
                   .filter((item) => {
                     // Hide settings for worker
-                    if (item.href === "/settings" && user?.role !== "ADMIN")
-                      return false;
+                    if (item.href === "/settings" && !isAdmin) return false;
 
                     // Hide reports menu entirely if worker has no report permissions
-                    if (item.href === "/reports" && user?.role === "WORKER") {
+                    if (item.href === "/reports" && !isAdmin) {
                       const hasSomeReports =
                         hasPermission("reports_customers_suppliers") ||
                         hasPermission("reports_treasury_banks") ||
