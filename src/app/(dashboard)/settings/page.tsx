@@ -231,7 +231,6 @@ const PERMISSION_GROUPS = [
     perms: [
       { key: "sales_view", label: "عرض الفواتير" },
       { key: "sales_create", label: "إنشاء فاتورة" },
-      { key: "sales_edit", label: "تعديل فاتورة" },
       { key: "sales_delete", label: "حذف فاتورة" },
       { key: "sales_quotations_view", label: "عروض الأسعار" },
       { key: "sales_pending_view", label: "الفواتير المعلقة" },
@@ -242,7 +241,6 @@ const PERMISSION_GROUPS = [
     perms: [
       { key: "purchase_view", label: "عرض فواتير المشتريات" },
       { key: "purchase_create", label: "إنشاء فاتورة مشتريات" },
-      { key: "purchase_edit", label: "تعديل فاتورة مشتريات" },
       { key: "purchase_delete", label: "حذف فاتورة مشتريات" },
     ],
   },
@@ -265,7 +263,6 @@ const PERMISSION_GROUPS = [
     group: "المخزون",
     perms: [
       { key: "inventory_view", label: "عرض المخزون" },
-      { key: "inventory_manage", label: "إدارة المخزون والتسويات" },
     ],
   },
   {

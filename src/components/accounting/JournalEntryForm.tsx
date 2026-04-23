@@ -28,6 +28,7 @@ import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { getJournalSelectableAccounts, getNextEntryNumber, saveJournalEntry } from "@/app/actions/journal";
 import { useManagementMode } from "@/hooks/use-management-mode";
+import { usePermissions } from "@/hooks/use-permissions";
 import { useFormDraft } from "@/hooks/useFormDraft";
 import { PasswordProtectionGate } from "@/components/shared/PasswordProtectionGate";
 import {
@@ -88,6 +89,14 @@ export function JournalEntryForm() {
 
   const { isManagementActive, toggleManagementMode } = useManagementMode();
   const [isPassGateOpen, setIsPassGateOpen] = useState(false);
+  const { hasPermission, generalSettings, isAdmin, loading: permissionsLoading } = usePermissions();
+
+  const canWorkerManualJournal = useMemo(() => {
+    return hasPermission("accounting_journal_add") && generalSettings?.allowWorkersManualJournals;
+  }, [hasPermission, generalSettings]);
+
+  // If worker is allowed to do manual journals, we treat the form as active even without "Admin Mode"
+  const isFormEditable = isManagementActive || canWorkerManualJournal || isAdmin;
 
   useEffect(() => {
     getJournalSelectableAccounts().then(setAccounts);
@@ -169,7 +178,7 @@ export function JournalEntryForm() {
           debit: l.debit,
           credit: l.credit
         })),
-        isAdminMode: isManagementActive
+        isAdminMode: isManagementActive || isAdmin
       });
 
       if (result.success) {
@@ -225,29 +234,31 @@ export function JournalEntryForm() {
               <CardDescription className="text-sm font-medium">نظام القيود المزدوجة - يرجى التأكد من توازن القيد قبل الحفظ</CardDescription>
             </div>
             <div className="flex items-center gap-4">
-              <Button
-                type="button"
-                onClick={() => isManagementActive ? toggleManagementMode(false) : setIsPassGateOpen(true)}
-                variant={isManagementActive ? "default" : "outline"}
-                className={cn(
-                  "h-12 px-6 gap-3 font-black rounded-2xl transition-all shadow-lg",
-                  isManagementActive 
-                    ? "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200" 
-                    : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
-                )}
-              >
-                {isManagementActive ? (
-                  <>
-                    <ShieldCheck className="w-5 h-5" />
-                    وضع الإدارة مفعل
-                  </>
-                ) : (
-                  <>
-                    <ShieldAlert className="w-5 h-5 text-amber-500" />
-                    تفعيل الإدارة للحفظ
-                  </>
-                )}
-              </Button>
+              {!permissionsLoading && (isAdmin || !canWorkerManualJournal) && (
+                <Button
+                  type="button"
+                  onClick={() => isManagementActive ? toggleManagementMode(false) : setIsPassGateOpen(true)}
+                  variant={isManagementActive ? "default" : "outline"}
+                  className={cn(
+                    "h-12 px-6 gap-3 font-black rounded-2xl transition-all shadow-lg",
+                    isManagementActive 
+                      ? "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200" 
+                      : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
+                  )}
+                >
+                  {isManagementActive ? (
+                    <>
+                      <ShieldCheck className="w-5 h-5" />
+                      وضع الإدارة مفعل
+                    </>
+                  ) : (
+                    <>
+                      <ShieldAlert className="w-5 h-5 text-amber-500" />
+                      تفعيل الإدارة للحفظ
+                    </>
+                  )}
+                </Button>
+              )}
 
               <div className="px-4 py-2 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center gap-3">
                 <Hash className="w-4 h-4 text-slate-400" />
@@ -394,10 +405,10 @@ export function JournalEntryForm() {
                       variant="ghost" 
                       size="icon" 
                       onClick={() => removeLine(idx)}
-                      disabled={!isManagementActive}
+                      disabled={!isFormEditable}
                       className="text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition-all disabled:opacity-30"
                     >
-                      {isManagementActive ? <Trash2 className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
+                      {isFormEditable ? <Trash2 className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
                     </Button>
                   </div>
                 </div>
@@ -411,7 +422,7 @@ export function JournalEntryForm() {
               type="button"
               variant="outline" 
               onClick={addLine}
-              disabled={!isManagementActive}
+              disabled={!isFormEditable}
               className="w-full h-14 border-dashed border-2 bg-transparent hover:bg-white dark:hover:bg-slate-900 gap-3 text-slate-500 font-bold rounded-2xl transition-all disabled:opacity-50"
             >
               <Plus className="w-5 h-5" />
@@ -477,17 +488,17 @@ export function JournalEntryForm() {
       <div className="flex justify-end pt-4 gap-4">
         <Button 
           onClick={handleSubmit}
-          disabled={loading || !totals.isBalanced || !isManagementActive}
+          disabled={loading || !totals.isBalanced || !isFormEditable}
           className={cn(
             "h-16 px-12 gap-3 text-lg font-black shadow-2xl transition-all rounded-2xl group",
-            isManagementActive ? "shadow-primary/20 hover:shadow-primary/40" : "bg-slate-400 cursor-not-allowed shadow-none"
+            isFormEditable ? "shadow-primary/20 hover:shadow-primary/40" : "bg-slate-400 cursor-not-allowed shadow-none"
           )}
         >
           {loading ? "جاري المعالجة..." : (
             <>
-              {!isManagementActive && <Lock className="w-5 h-5 mb-0.5" />}
+              {!isFormEditable && <Lock className="w-5 h-5 mb-0.5" />}
               حفظ واعتماد القيد المحاسبي
-              {isManagementActive && <Save className="w-5 h-5 group-hover:scale-110 transition-transform" />}
+              {isFormEditable && <Save className="w-5 h-5 group-hover:scale-110 transition-transform" />}
             </>
           )}
         </Button>

@@ -92,6 +92,8 @@ export async function saveSystemSettings(settingsObject: any) {
         settings: settingsObject,
       },
     });
+    revalidatePath("/");
+    revalidatePath("/settings");
     return { success: true };
   } catch (error) {
     console.error("saveSystemSettings error:", error);

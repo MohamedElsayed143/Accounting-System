@@ -285,30 +285,37 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent className="px-2 py-4">
-        {(user?.role === "ADMIN" || hasPermission("statistics_view")) && (
+        {(isAdmin || hasPermission("statistics_view")) && (
           <SidebarGroup>
             <SidebarGroupLabel className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">
               نظرة عامة
             </SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                {mainNavItems.map((item) => (
-                  <SidebarMenuItem key={item.href}>
-                    <SidebarMenuButton
-                      asChild
-                      isActive={isActive(item.href)}
-                      className="group hover:bg-primary/10 transition-all"
-                    >
-                      <Link
-                        href={item.href}
-                        className="flex items-center gap-3"
+                {mainNavItems
+                  .filter((item) => {
+                    if (isAdmin) return true;
+                    if (item.href === "/statistics")
+                      return hasPermission("statistics_view");
+                    return true;
+                  })
+                  .map((item) => (
+                    <SidebarMenuItem key={item.href}>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={isActive(item.href)}
+                        className="group hover:bg-primary/10 transition-all"
                       >
-                        <item.icon className="h-4 w-4 group-hover:scale-110 transition-transform" />
-                        <span className="font-medium">{item.title}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
+                        <Link
+                          href={item.href}
+                          className="flex items-center gap-3"
+                        >
+                          <item.icon className="h-4 w-4 group-hover:scale-110 transition-transform" />
+                          <span className="font-medium">{item.title}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
@@ -325,7 +332,7 @@ export function AppSidebar() {
               <SidebarMenu>
                 {directoryNavItems
                   .filter((item) => {
-                    if (user?.role === "ADMIN") return true;
+                    if (isAdmin) return true;
                     if (item.href === "/suppliers")
                       return hasPermission("suppliers_view");
                     if (item.href === "/customers")
@@ -369,7 +376,7 @@ export function AppSidebar() {
               <SidebarMenu>
                 {invoiceNavItems
                   .filter((item) => {
-                    if (user?.role === "ADMIN") return true;
+                    if (isAdmin) return true;
                     if (item.href === "/sales-invoices")
                       return (
                         hasPermission("sales_view") ||
@@ -408,7 +415,7 @@ export function AppSidebar() {
                             <SidebarMenuSub className="mr-4 border-r-2 border-primary/20">
                               {item.subItems
                                 .filter((sub) => {
-                                  if (user?.role === "ADMIN") return true;
+                                  if (isAdmin) return true;
                                   if (item.href === "/sales-invoices") {
                                     if (sub.href === "/sales-invoices")
                                       return hasPermission("sales_view");
@@ -484,7 +491,7 @@ export function AppSidebar() {
               <SidebarMenu>
                 {returnsNavItems
                   .filter((item) => {
-                    if (user?.role === "ADMIN") return true;
+                    if (isAdmin) return true;
                     if (item.href === "/sales-returns")
                       return hasPermission("returns_sales");
                     if (item.href === "/purchase-returns")
@@ -510,22 +517,39 @@ export function AppSidebar() {
                         </CollapsibleTrigger>
                         <CollapsibleContent>
                           <SidebarMenuSub className="mr-4 border-r-2 border-primary/20">
-                            {item.subItems.map((subItem) => (
-                              <SidebarMenuSubItem key={subItem.href}>
-                                <SidebarMenuSubButton
-                                  asChild
-                                  isActive={pathname === subItem.href}
-                                  className="hover:bg-primary/5 transition-all"
-                                >
-                                  <Link
-                                    href={subItem.href}
-                                    className="text-sm font-medium"
+                            {item.subItems
+                              .filter((sub) => {
+                                if (isAdmin) return true;
+                                if (item.href === "/sales-returns") {
+                                  if (sub.href === "/sales-returns")
+                                    return hasPermission("returns_sales");
+                                  if (sub.href === "/sales-returns/new")
+                                    return hasPermission("returns_sales");
+                                }
+                                if (item.href === "/purchase-returns") {
+                                  if (sub.href === "/purchase-returns")
+                                    return hasPermission("returns_purchase");
+                                  if (sub.href === "/purchase-returns/new")
+                                    return hasPermission("returns_purchase");
+                                }
+                                return true;
+                              })
+                              .map((subItem) => (
+                                <SidebarMenuSubItem key={subItem.href}>
+                                  <SidebarMenuSubButton
+                                    asChild
+                                    isActive={pathname === subItem.href}
+                                    className="hover:bg-primary/5 transition-all"
                                   >
-                                    {subItem.title}
-                                  </Link>
-                                </SidebarMenuSubButton>
-                              </SidebarMenuSubItem>
-                            ))}
+                                    <Link
+                                      href={subItem.href}
+                                      className="text-sm font-medium"
+                                    >
+                                      {subItem.title}
+                                    </Link>
+                                  </SidebarMenuSubButton>
+                                </SidebarMenuSubItem>
+                              ))}
                           </SidebarMenuSub>
                         </CollapsibleContent>
                       </SidebarMenuItem>
@@ -636,22 +660,29 @@ export function AppSidebar() {
                     </CollapsibleTrigger>
                     <CollapsibleContent>
                       <SidebarMenuSub className="mr-4 border-r-2 border-primary/20">
-                        {inventoryNavItem.subItems.map((subItem) => (
-                          <SidebarMenuSubItem key={subItem.href}>
-                            <SidebarMenuSubButton
-                              asChild
-                              isActive={pathname === subItem.href}
-                              className="hover:bg-primary/5 transition-all"
-                            >
-                              <Link
-                                href={subItem.href}
-                                className="text-sm font-medium"
+                        {inventoryNavItem.subItems
+                          .filter((sub) => {
+                            if (isAdmin) return true;
+                            if (sub.href === "/inventory/adjustments")
+                              return hasPermission("inventory_manage");
+                            return true;
+                          })
+                          .map((subItem) => (
+                            <SidebarMenuSubItem key={subItem.href}>
+                              <SidebarMenuSubButton
+                                asChild
+                                isActive={pathname === subItem.href}
+                                className="hover:bg-primary/5 transition-all"
                               >
-                                {subItem.title}
-                              </Link>
-                            </SidebarMenuSubButton>
-                          </SidebarMenuSubItem>
-                        ))}
+                                <Link
+                                  href={subItem.href}
+                                  className="text-sm font-medium"
+                                >
+                                  {subItem.title}
+                                </Link>
+                              </SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                          ))}
                       </SidebarMenuSub>
                     </CollapsibleContent>
                   </SidebarMenuItem>
@@ -774,7 +805,7 @@ export function AppSidebar() {
                             <SidebarMenuSub className="mr-4 border-r-2 border-primary/20">
                               {item.subItems
                                 .filter((sub) => {
-                                  if (user?.role === "ADMIN") return true;
+                                  if (isAdmin) return true;
                                   if (sub.href === "/reports")
                                     return hasPermission(
                                       "reports_customers_suppliers",
