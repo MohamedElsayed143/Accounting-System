@@ -119,15 +119,7 @@ export async function getNextPurchaseInvoiceNumber(): Promise<number> {
     select: { lastValue: true },
   });
 
-  const last = await (await getTenantPrisma()).purchaseInvoice.findFirst({
-    orderBy: { invoiceNumber: "desc" },
-    select: { invoiceNumber: true },
-  });
-
-  const seqVal = sequence ? sequence.lastValue : 0;
-  const maxInvoice = last?.invoiceNumber ?? 0;
-
-  return Math.max(seqVal, maxInvoice) + 1;
+  return (sequence?.lastValue ?? 0) + 1;
 }
 
 // ─── التحقق من وجود رقم الفاتورة ───────────────────────────────────────────

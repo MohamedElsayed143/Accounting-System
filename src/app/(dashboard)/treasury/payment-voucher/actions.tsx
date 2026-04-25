@@ -118,17 +118,8 @@ export async function getNextPaymentVoucherNumber(): Promise<string> {
     where: { id: "PaymentVoucher" },
     select: { lastValue: true },
   });
-  if (sequence) return `PV-${sequence.lastValue + 1}`;
-
-  const lastVoucher = await (
-    await getTenantPrisma()
-  ).paymentVoucher.findFirst({
-    orderBy: { id: "desc" },
-    select: { voucherNumber: true },
-  });
-  if (!lastVoucher) return "PV-1";
-  const lastNum = parseInt(lastVoucher.voucherNumber.split("-")[1] || "0");
-  return `PV-${lastNum + 1}`;
+  const nextVal = (sequence?.lastValue ?? 0) + 1;
+  return `PV-${nextVal}`;
 }
 
 async function generatePaymentVoucherNumber(

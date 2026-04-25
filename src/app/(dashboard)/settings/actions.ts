@@ -32,6 +32,9 @@ const CompanySettingsSchema = z.object({
   decimalPlaces: z.number().int().min(0).max(4).default(2),
 });
 
+export type CompanySettingsType = z.infer<typeof CompanySettingsSchema>;
+export type FinancialSettingsType = z.infer<typeof FinancialSettingsSchema>;
+
 const FinancialSettingsSchema = z.object({
   taxEnabled: z.boolean(),
   taxName: z.string().min(1, "اسم الضريبة مطلوب"),
@@ -78,7 +81,7 @@ export async function getSystemSettings() {
 /**
  * Upserts the entire settings JSON object into row id=1
  */
-export async function saveSystemSettings(settingsObject: any) {
+export async function saveSystemSettings(settingsObject: Record<string, any>) {
   try {
     await (
       await getTenantPrisma()
@@ -121,13 +124,13 @@ export async function getCompanySettingsAction() {
 /**
  * Updates the singleton CompanySettings record.
  */
-export async function updateCompanySettingsAction(data: any) {
+export async function updateCompanySettingsAction(data: Partial<CompanySettingsType>) {
   await verifyAdmin();
 
   try {
     const validatedData = CompanySettingsSchema.parse(data);
 
-    const res = await ((await getTenantPrisma()) as any).companySettings.upsert(
+    const res = await (await getTenantPrisma()).companySettings.upsert(
       {
         where: { id: 1 },
         update: {
@@ -186,7 +189,7 @@ export async function updateCompanySettingsAction(data: any) {
 /**
  * Updates financial settings (Tax & Currency).
  */
-export async function updateFinancialSettingsAction(data: any) {
+export async function updateFinancialSettingsAction(data: FinancialSettingsType) {
   await verifyAdmin();
 
   try {

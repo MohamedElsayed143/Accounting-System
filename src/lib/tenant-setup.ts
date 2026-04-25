@@ -50,7 +50,8 @@ export async function setupNewTenantSchema(tenantSchema: string): Promise<void> 
     where: { tenantSchema: tenantSchema }
   });
   
-  const tenantDb = require("./tenant-prisma").getPrismaForSchema(tenantSchema);
+  const { getPrismaForSchema } = await import("./tenant-prisma");
+  const tenantDb = getPrismaForSchema(tenantSchema);
   for (const u of ownerUsers) {
     await tenantDb.user.upsert({
       where: { id: u.id },

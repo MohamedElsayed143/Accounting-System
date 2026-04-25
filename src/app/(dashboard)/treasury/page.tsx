@@ -24,12 +24,13 @@ import { Button } from "@/components/ui/button";
 import {
   getTreasuryData,
   archiveBank,
+  archiveSafe,
+  reconcileTreasury,
   type AccountSummary,
   type TreasuryStats,
 } from "./actions";
 import AddBankDialog from "./components/AddBankDialog";
 import AddSafeDialog from "./components/AddSafeDialog";
-import { archiveSafe } from "./actions";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -89,6 +90,7 @@ function TreasuryContent() {
     message: string;
   } | null>(null);
   const [isArchiving, setIsArchiving] = useState(false);
+  const [isReconciling, setIsReconciling] = useState(false);
   const [showTransfer, setShowTransfer] = useState(false);
   const { isManagementActive, toggleManagementMode, isUserAdmin } = useManagementMode();
   const [isPassGateOpen, setIsPassGateOpen] = useState(false);
@@ -179,6 +181,23 @@ function TreasuryContent() {
     }
   };
 
+  const handleReconcile = async () => {
+    setIsReconciling(true);
+    try {
+      const result = await reconcileTreasury();
+      if (result.success && 'safesReconciled' in result) {
+        toast.success(`✅ تم مطابقة الحسابات بنجاح. (خزائن: ${result.safesReconciled}, بنوك: ${result.banksReconciled})`);
+        loadData();
+      } else if (!result.success) {
+        toast.error(result.error || "فشل في مطابقة الحسابات");
+      }
+    } catch (error) {
+      toast.error("حدث خطأ أثناء مطابقة الحسابات");
+    } finally {
+      setIsReconciling(false);
+    }
+  };
+
   const [showAddSafe, setShowAddSafe] = useState(false);
 
   if (!data)
@@ -194,31 +213,44 @@ function TreasuryContent() {
             </div>
             <div className="flex gap-2 items-center">
             {isUserAdmin && (
-              <Button
-                variant={isManagementActive ? "destructive" : "outline"}
-                onClick={() => {
-                  if (isManagementActive) {
-                    toggleManagementMode(false);
-                    toast.info("تم إغلاق وضع الإدارة");
-                  } else {
-                    setIsPassGateOpen(true);
-                  }
-                }}
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleReconcile}
+                  disabled={isReconciling}
+                  className="gap-2 border-emerald-500 text-emerald-600 hover:bg-emerald-50"
+                >
+                  <ArrowLeftRight className={`h-4 w-4 ${isReconciling ? "animate-spin" : ""}`} />
+                  {isReconciling ? "جاري المطابقة..." : "مطابقة الأرصدة (Ledger)"}
+                </Button>
 
-                className="gap-2 border-dashed border-2 transition-all"
-              >
-                {isManagementActive ? (
-                  <>
-                    <ShieldAlert className="h-4 w-4" />
-                    إغلاق وضع الإدارة
-                  </>
-                ) : (
-                  <>
-                    <ShieldCheck className="h-4 w-4" />
-                    قائمة الحذف والتعديل
-                  </>
-                )}
-              </Button>
+                <Button
+                  variant={isManagementActive ? "destructive" : "outline"}
+                  onClick={() => {
+                    if (isManagementActive) {
+                      toggleManagementMode(false);
+                      toast.info("تم إغلاق وضع الإدارة");
+                    } else {
+                      setIsPassGateOpen(true);
+                    }
+                  }}
+
+                  className="gap-2 border-dashed border-2 transition-all"
+                >
+                  {isManagementActive ? (
+                    <>
+                      <ShieldAlert className="h-4 w-4" />
+                      إغلاق وضع الإدارة
+                    </>
+                  ) : (
+                    <>
+                      <ShieldCheck className="h-4 w-4" />
+                      قائمة الحذف والتعديل
+                    </>
+                  )}
+                </Button>
+              </div>
             )}
             </div>
         </div>

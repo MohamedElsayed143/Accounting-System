@@ -137,7 +137,7 @@ export function COAFlowTree({ data, onAddSub, isManagementActive }: COAFlowTreeP
       parentId: string | null = null, 
       xOffset: number = 0
     ) => {
-      let currentX = xOffset;
+      const currentX = xOffset;
       const totalWidthForLevel = items.length * HORIZONTAL_SPACING;
       const startX = xOffset - (totalWidthForLevel / 2) + (HORIZONTAL_SPACING / 2);
 

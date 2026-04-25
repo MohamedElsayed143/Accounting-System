@@ -2,18 +2,17 @@
 
 import { getTenantPrisma, publicPrisma } from "@/lib/tenant-prisma";
 import { revalidatePath } from "next/cache";
+import { SequenceService } from "@/lib/services/SequenceService";
+import { Prisma } from "@prisma/client";
 
 // ─── توليد رقم عرض السعر التالي ───
 export async function getNextQuotationCode(): Promise<string> {
-  const last = await (await getTenantPrisma()).quotation.findFirst({
-    orderBy: { id: "desc" },
-    select: { code: true },
+  const sequence = await (await getTenantPrisma()).systemSequence.findUnique({
+    where: { id: "Quotation" },
+    select: { lastValue: true },
   });
 
-  if (!last) return "QT-0001";
-
-  const numPart = parseInt(last.code.replace("QT-", ""), 10);
-  const next = numPart + 1;
+  const next = (sequence?.lastValue ?? 0) + 1;
   return `QT-${String(next).padStart(4, "0")}`;
 }
 
@@ -91,48 +90,51 @@ export async function createQuotation(data: {
 }) {
   if (data.items.length === 0) throw new Error("لا يمكن حفظ عرض سعر فارغ");
 
-  // التحقق من أن جميع المنتجات نشطة (فقط إذا كان هناك productId)
-  for (const item of data.items) {
-    if (item.productId) {
-      const product = await (await getTenantPrisma()).product.findUnique({
-        where: { id: item.productId, isActive: true } as any,
-        select: { name: true },
-      });
-      if (!product) throw new Error("أحد الأصناف المختارة غير متوفر أو تم إيقاف التعامل معه");
+  return (await getTenantPrisma()).$transaction(async (tx) => {
+    // التحقق من أن جميع المنتجات نشطة (فقط إذا كان هناك productId)
+    for (const item of data.items) {
+      if (item.productId) {
+        const product = await tx.product.findUnique({
+          where: { id: item.productId, isActive: true } as any,
+          select: { name: true },
+        });
+        if (!product) throw new Error("أحد الأصناف المختارة غير متوفر أو تم إيقاف التعامل معه");
+      }
     }
-  }
 
-  const code = await getNextQuotationCode();
+    const nextVal = await SequenceService.getNextSequenceValue(tx, "Quotation");
+    const code = `QT-${String(nextVal).padStart(4, "0")}`;
 
-  const quotation = await (await getTenantPrisma()).quotation.create({
-    data: {
-      code,
-      customerId: data.customerId || null,
-      customerName: data.customerName || null,
-      date: new Date(data.date),
-      subtotal: data.subtotal,
-      totalTax: data.totalTax,
-      discount: data.discount,
-      total: data.total,
-      topNotes: data.topNotes || [],
-      notes: data.notes || [],
-      printableTitle: data.printableTitle,
-      items: {
-        create: data.items.map((item) => ({
-          productId: item.productId || null,
-          description: item.description,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          taxRate: item.taxRate,
-          discount: item.discount,
-          total: item.total,
-        })),
+    const quotation = await tx.quotation.create({
+      data: {
+        code,
+        customerId: data.customerId || null,
+        customerName: data.customerName || null,
+        date: new Date(data.date),
+        subtotal: data.subtotal,
+        totalTax: data.totalTax,
+        discount: data.discount,
+        total: data.total,
+        topNotes: data.topNotes || [],
+        notes: data.notes || [],
+        printableTitle: data.printableTitle,
+        items: {
+          create: data.items.map((item) => ({
+            productId: item.productId || null,
+            description: item.description,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            taxRate: item.taxRate,
+            discount: item.discount,
+            total: item.total,
+          })),
+        },
       },
-    },
-  });
+    });
 
-  revalidatePath("/sales-quotations");
-  return quotation;
+    revalidatePath("/sales-quotations");
+    return quotation;
+  });
 }
 
 // ─── تعديل عرض سعر ───

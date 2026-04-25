@@ -211,7 +211,7 @@ export async function createTransfer(
     }
 
     // 3. توليد رقم التحويل بشكل آمن
-    let transferNumber = data.transferNumber;
+    const transferNumber = data.transferNumber;
     let finalTransferNumber: string;
 
     if (!transferNumber || transferNumber === "TRF-0" || transferNumber === "") {
@@ -349,13 +349,10 @@ export async function createTransfer(
 }
 
 export async function getNextTransferNumber(): Promise<string> {
-  const db = await getTenantPrisma();
-  const result = await db.$transaction(async (tx) => {
-    const nextVal = await SequenceService.getNextSequenceValue(
-      tx,
-      "TreasuryTransfer",
-    );
-    return `TRF-${nextVal}`;
+  const sequence = await (await getTenantPrisma()).systemSequence.findUnique({
+    where: { id: "TreasuryTransfer" },
+    select: { lastValue: true },
   });
-  return result;
+  const nextVal = (sequence?.lastValue ?? 0) + 1;
+  return `TRF-${nextVal}`;
 }

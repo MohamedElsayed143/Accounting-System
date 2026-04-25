@@ -46,13 +46,7 @@ export async function getNextSalesReturnNumber(): Promise<number> {
     where: { id: "SalesReturn" },
     select: { lastValue: true },
   });
-  if (sequence) return sequence.lastValue + 1;
-
-  const lastReturn = await (await getTenantPrisma()).salesReturn.findFirst({
-    orderBy: { returnNumber: 'desc' },
-    select: { returnNumber: true },
-  });
-  return lastReturn ? lastReturn.returnNumber + 1 : 1;
+  return (sequence?.lastValue ?? 0) + 1;
 }
 
 export async function getSalesReturns(

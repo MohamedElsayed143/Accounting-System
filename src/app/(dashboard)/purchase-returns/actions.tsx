@@ -47,13 +47,7 @@ export async function getNextPurchaseReturnNumber(): Promise<number> {
     where: { id: "PurchaseReturn" },
     select: { lastValue: true },
   });
-  if (sequence) return sequence.lastValue + 1;
-
-  const lastReturn = await (await getTenantPrisma()).purchaseReturn.findFirst({
-    orderBy: { returnNumber: 'desc' },
-    select: { returnNumber: true },
-  });
-  return lastReturn ? lastReturn.returnNumber + 1 : 1;
+  return (sequence?.lastValue ?? 0) + 1;
 }
 
 // جلب جميع مرتجعات المشتريات

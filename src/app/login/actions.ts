@@ -13,26 +13,14 @@ export async function loginAction(formData: FormData, deviceId?: string) {
 
   try {
     const user = await prisma.user.findUnique({ where: { username } });
-    
+
     if (!user) {
       return { error: "اسم المستخدم أو كلمة المرور غير صحيحة" };
     }
 
     const isValid = verifyPassword(password, user.password);
-    
-    // Fallback: IF it's a new system and the admin was freshly created in Studio and NOT hashed yet, 
-    // allow literal password match for the VERY FIRST TIME, and hash it on the fly.
-    // (Helps the user who will just type 'admin' directly into Prisma Studio).
-    let isPasswordOk = isValid;
-    if (!isPasswordOk && user.password === password) {
-       // It matches perfectly but wasn't hashed. Let's hash it!
-       const { hashPassword } = await import("@/lib/auth");
-       await prisma.user.update({
-         where: { id: user.id },
-         data: { password: hashPassword(password) }
-       });
-       isPasswordOk = true;
-    }
+
+    const isPasswordOk = isValid;
 
     if (!isPasswordOk) {
       return { error: "اسم المستخدم أو كلمة المرور غير صحيحة" };
@@ -45,11 +33,14 @@ export async function loginAction(formData: FormData, deviceId?: string) {
           // Add new device
           await prisma.user.update({
             where: { id: user.id },
-            data: { authorizedDevices: { push: deviceId } }
+            data: { authorizedDevices: { push: deviceId } },
           });
         } else {
           // Mismatch
-          return { error: "لقد وصلت للحد الأقصى من الأجهزة المسموح بها. يرجى التواصل مع المطور" };
+          return {
+            error:
+              "لقد وصلت للحد الأقصى من الأجهزة المسموح بها. يرجى التواصل مع المطور",
+          };
         }
       }
     }
@@ -59,15 +50,21 @@ export async function loginAction(formData: FormData, deviceId?: string) {
       data: {
         userId: user.id,
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
-      }
+      },
     });
 
     await setSessionCookie(session.id);
 
-    return { success: true, role: user.role, isDeveloper: user.email === 'mohmadelkhadry@gmail.com' };
+    return {
+      success: true,
+      role: user.role,
+      isDeveloper: user.email === "mohmadelkhadry@gmail.com",
+    };
   } catch (error: any) {
     console.error("Login error:", error);
-    return { error: `حدث خطأ غير متوقع: ${error?.message || "يرجى المحاولة لاحقاً."}` };
+    return {
+      error: `حدث خطأ غير متوقع: ${error?.message || "يرجى المحاولة لاحقاً."}`,
+    };
   }
 }
 
@@ -96,11 +93,11 @@ export async function getAuthSession() {
   const { getSession } = await import("@/lib/auth");
   const session = await getSession();
   if (!session) return null;
-  
+
   return {
     user: {
       username: session.user.username,
       role: session.user.role,
-    }
+    },
   };
 }

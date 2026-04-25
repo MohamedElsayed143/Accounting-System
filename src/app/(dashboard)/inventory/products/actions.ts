@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import type { Product } from "@prisma/client";
 import { getSession } from "@/lib/auth";
 import { hasPermission } from "@/lib/permissions";
+import { SequenceService } from "@/lib/services/SequenceService";
 
 export interface ProductData extends Product {
   category: { id: number; name: string } | null;
@@ -16,21 +17,12 @@ export interface ProductData extends Product {
 
 // دالة مساعدة لتوليد كود فريد للمنتج
 export async function getNextProductCode(): Promise<string> {
-  const products = await (await getTenantPrisma()).product.findMany({
-    where: { code: { startsWith: 'PRD-' } },
-    select: { code: true },
+  const sequence = await (await getTenantPrisma()).systemSequence.findUnique({
+    where: { id: "Product" },
+    select: { lastValue: true },
   });
 
-  let maxNumber = 0;
-  for (const p of products) {
-    const match = p.code.match(/PRD-(\d+)/);
-    if (match) {
-      const num = parseInt(match[1], 10);
-      if (num > maxNumber) maxNumber = num;
-    }
-  }
-
-  const nextNumber = maxNumber + 1;
+  const nextNumber = (sequence?.lastValue ?? 0) + 1;
   const paddedNumber = String(nextNumber).padStart(3, '0');
   return `PRD-${paddedNumber}`;
 }
@@ -104,9 +96,17 @@ export async function createProduct(data: {
     });
     if (exists) throw new Error(`الكود ${data.code} مستخدم مسبقاً`);
 
+    // If it's a standard PRD-xxx code, we should probably ensure the sequence is updated
+    // but the safest way is to just use the sequence in the first place.
+    // For now, let's just create the product.
+    // If the UI generated a code from the sequence, it's already "ahead" in the sequence's lastValue if we increment it here.
+    // Wait, getNextProductCode DOES NOT increment. So we MUST increment here if we use it.
+
+    const finalCode = data.code.trim();
+
     const product = await tx.product.create({
       data: {
-        code: data.code.trim(),
+        code: finalCode,
         name: data.name.trim(),
         unit: data.unit.trim(),
         buyPrice: data.buyPrice,
@@ -119,6 +119,12 @@ export async function createProduct(data: {
         isActive: true,
       },
     });
+    
+    // Increment sequence ONLY if it was an auto-generated code
+    if (finalCode.startsWith("PRD-")) {
+        await SequenceService.getNextSequenceValue(tx, "Product");
+    }
+
     revalidatePath("/inventory/products");
     revalidatePath("/inventory/stock");
     return product;

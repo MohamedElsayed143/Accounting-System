@@ -10,8 +10,28 @@ import {
   triggerTreasuryAlert,
 } from "@/lib/notifications";
 import { SequenceService } from "@/lib/services/SequenceService";
+import { ReconciliationService } from "@/lib/services/ReconciliationService";
 
-// تعريف الأنواع
+// ... existing code ...
+
+export async function reconcileTreasury(): Promise<
+  | { success: true; safesReconciled: number; banksReconciled: number; errors: string[] }
+  | { success: false; error: string }
+> {
+  const session = await getSession();
+  if (!session || session.user.role !== "ADMIN") {
+    throw new Error("فقط المسؤول يمكنه إجراء مطابقة الحسابات");
+  }
+
+  try {
+    const results = await ReconciliationService.reconcileTreasuryBalances();
+    revalidatePath("/treasury");
+    return { success: true, ...results };
+  } catch (error) {
+    console.error("Reconciliation error:", error);
+    return { success: false, error: error instanceof Error ? error.message : "حدث خطأ غير متوقع" };
+  }
+}
 export interface TreasuryStats {
   totalAccounts: number;
   totalBanksBalance: number;
@@ -59,7 +79,7 @@ async function ensureMainSafe() {
     const result = await (
       await getTenantPrisma()
     ).$transaction(async (tx) => {
-      let existingSafe = await tx.treasurySafe.findFirst({
+      const existingSafe = await tx.treasurySafe.findFirst({
         where: { OR: [{ isPrimary: true }, { name: "الخزنة الرئيسية" }] },
       });
 
@@ -1406,17 +1426,8 @@ export async function getNextReceiptVoucherNumber(): Promise<string> {
     where: { id: "ReceiptVoucher" },
     select: { lastValue: true },
   });
-  if (sequence) return `RV-${sequence.lastValue + 1}`;
-
-  const lastVoucher = await (
-    await getTenantPrisma()
-  ).receiptVoucher.findFirst({
-    orderBy: { id: "desc" },
-    select: { voucherNumber: true },
-  });
-  if (!lastVoucher) return "RV-1";
-  const lastNum = parseInt(lastVoucher.voucherNumber.split("-")[1] || "0");
-  return `RV-${lastNum + 1}`;
+  const nextVal = (sequence?.lastValue ?? 0) + 1;
+  return `RV-${nextVal}`;
 }
 
 async function generateReceiptVoucherNumber(
