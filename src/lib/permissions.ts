@@ -5,6 +5,7 @@ export type PermissionKey =
   | "sales_create" 
   | "sales_edit" 
   | "sales_delete"
+  | "sales_allow_negative_stock"
   | "sales_quotations_view"
   | "sales_pending_view"
   | "purchase_view"

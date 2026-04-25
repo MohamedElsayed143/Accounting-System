@@ -11,7 +11,7 @@ export async function getRBACPermissions(): Promise<Record<string, boolean | str
   if (!session) return {};
 
   const keys: PermissionKey[] = [
-    "sales_view", "sales_create", "sales_edit", "sales_delete", "sales_quotations_view", "sales_pending_view",
+    "sales_view", "sales_create", "sales_edit", "sales_delete", "sales_allow_negative_stock", "sales_quotations_view", "sales_pending_view",
     "purchase_view", "purchase_create", "purchase_edit", "purchase_delete",
     "customers_view", "customers_retail_only", "customers_manage",
     "suppliers_view", "suppliers_manage",

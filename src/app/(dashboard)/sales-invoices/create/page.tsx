@@ -79,6 +79,7 @@ import { DynamicNotes } from "@/components/shared/DynamicNotes";
 import { CustomerSelect } from "@/components/shared/CustomerSelect";
 import { PrintableInvoice } from "@/components/invoices/printable-invoice";
 import { useFormAutoSave } from "@/hooks/useFormAutoSave";
+import { usePermissions } from "@/hooks/use-permissions";
 
 import { getCustomers } from "@/app/(dashboard)/customers/actions";
 import {
@@ -220,6 +221,7 @@ function InvoiceFormStep({
   const [notesTitle, setNotesTitle] = useState<string>("ملاحظات إضافية");
 
   const [products, setProducts] = useState<ProductData[]>([]);
+  const { hasPermission, isAdmin } = usePermissions();
 
   // Draft handling
   const currentFormState = useMemo(
@@ -585,6 +587,10 @@ function InvoiceFormStep({
   const grandTotal = subtotal - itemsDiscount - discount + totalTax;
   const netTotal = grandTotal - returnsTotal;
 
+  const globalAllowNegative = systemSettings?.inventory?.allowNegativeStock ?? false;
+  const workerAllowNegative = hasPermission("sales_allow_negative_stock");
+  const allowNegativeStock = isAdmin ? globalAllowNegative : workerAllowNegative;
+
   const executeSave = async (invoiceData: any) => {
     try {
       setSaving(true);
@@ -703,7 +709,9 @@ function InvoiceFormStep({
       ),
     };
 
-    if (systemSettings?.inventory?.allowNegativeStock) {
+
+
+    if (allowNegativeStock) {
       const exceedingItems = items.filter(
         (i) => i.quantity > (i.stockBalance || 0),
       );
@@ -1206,7 +1214,7 @@ function InvoiceFormStep({
 
               {!isViewMode && (
                 <div className="flex items-center gap-3 flex-wrap">
-                  {systemSettings?.inventory?.allowNegativeStock && (
+                  {allowNegativeStock && (
                     <label className="flex items-center gap-2 text-xs font-medium text-gray-600 bg-white border border-gray-200 px-3 py-2 rounded-xl cursor-pointer hover:bg-gray-50 transition-colors select-none">
                       <input
                         type="checkbox"
@@ -1223,7 +1231,7 @@ function InvoiceFormStep({
                       disabled={loading}
                       onlyInStock={
                         !(
-                          systemSettings?.inventory?.allowNegativeStock &&
+                          allowNegativeStock &&
                           showZeroStock
                         )
                       }

@@ -50,10 +50,8 @@ export function Navbar({ title }: NavbarProps) {
 
       if (session?.user) {
         setUser(session.user);
-        if (session.user.role === "ADMIN") {
-          const count = await getUnreadNotificationsCount();
-          setUnreadCount(count);
-        }
+        const count = await getUnreadNotificationsCount();
+        setUnreadCount(count);
       } else {
         // If session is null (e.g. database reset but cookie exists), redirect to login
         router.push("/login");
@@ -78,10 +76,8 @@ export function Navbar({ title }: NavbarProps) {
 
     // Refresh count every 1 minute
     const interval = setInterval(async () => {
-      if (user?.role === "ADMIN") {
-        const count = await getUnreadNotificationsCount();
-        setUnreadCount(count);
-      }
+      const count = await getUnreadNotificationsCount();
+      setUnreadCount(count);
     }, 60000);
 
     return () => {

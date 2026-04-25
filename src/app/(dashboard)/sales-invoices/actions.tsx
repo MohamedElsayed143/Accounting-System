@@ -190,7 +190,9 @@ export async function createSalesInvoice(data: {
 
   // جلب الإعدادات مرة واحدة خارج المعاملة
   const settings = await getSystemSettings();
-  const allowNegativeStock = settings?.inventory?.allowNegativeStock ?? false;
+  const globalAllowNegative = settings?.inventory?.allowNegativeStock ?? false;
+  const hasNegativeStockPerm = await hasPermission(session.userId, "sales_allow_negative_stock");
+  const allowNegativeStock = (session.user?.role === "ADMIN") ? globalAllowNegative : hasNegativeStockPerm;
 
   const stockWarnings: string[] = [];
   const pendingAlerts: {
@@ -599,7 +601,9 @@ export async function updateSalesInvoice(
 
   // جلب الإعدادات مرة واحدة خارج المعاملة
   const settings = await getSystemSettings();
-  const allowNegativeStock = settings?.inventory?.allowNegativeStock ?? false;
+  const globalAllowNegative = settings?.inventory?.allowNegativeStock ?? false;
+  const hasNegativeStockPerm = await hasPermission(session.userId, "sales_allow_negative_stock");
+  const allowNegativeStock = (session.user?.role === "ADMIN") ? globalAllowNegative : hasNegativeStockPerm;
   const stockWarnings: string[] = [];
   const pendingAlerts: {
     type: "treasury" | "stock";

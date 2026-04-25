@@ -114,6 +114,7 @@ const DEFAULT: Settings = {
           sales_create: true,
           sales_edit: false,
           sales_delete: false,
+          sales_allow_negative_stock: false,
           purchase_view: false,
           purchase_create: false,
           purchase_edit: false,
@@ -231,7 +232,7 @@ const PERMISSION_GROUPS = [
     perms: [
       { key: "sales_view", label: "عرض الفواتير" },
       { key: "sales_create", label: "إنشاء فاتورة" },
-      { key: "sales_delete", label: "حذف فاتورة" },
+      { key: "sales_allow_negative_stock", label: "السماح بالبيع بدون رصيد" },
       { key: "sales_quotations_view", label: "عروض الأسعار" },
       { key: "sales_pending_view", label: "الفواتير المعلقة" },
     ],
@@ -241,7 +242,6 @@ const PERMISSION_GROUPS = [
     perms: [
       { key: "purchase_view", label: "عرض فواتير المشتريات" },
       { key: "purchase_create", label: "إنشاء فاتورة مشتريات" },
-      { key: "purchase_delete", label: "حذف فاتورة مشتريات" },
     ],
   },
   {

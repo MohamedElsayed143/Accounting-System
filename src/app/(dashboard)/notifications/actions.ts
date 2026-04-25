@@ -132,6 +132,7 @@ export async function approveTreasuryRequest(id: number) {
     (await getTenantPrisma()) as any
   ).treasuryActionRequest.findUnique({
     where: { id },
+    include: { requester: { select: { username: true } } }
   });
 
   if (!request || request.status !== "PENDING") {
@@ -187,16 +188,23 @@ export async function approveTreasuryRequest(id: number) {
     });
 
     const { createNotification } = await import("@/lib/notifications");
+    const typeLabel = 
+      request.type === "TRANSFER" ? "تحويل مالي" :
+      request.type === "CREATE_SAFE" ? "إنشاء خزنة" :
+      request.type === "CREATE_BANK" ? "إنشاء بنك" :
+      request.type === "RECEIPT_VOUCHER" ? "سند قبض" :
+      request.type === "PAYMENT_VOUCHER" ? "سند صرف" : request.type;
+
     await createNotification({
       title: "تمت الموافقة على طلبك",
-      message: `تمت الموافقة على طلبك: ${request.type}`,
+      message: `تمت الموافقة على طلبك (${typeLabel}) من قِبل ${session.user.username}`,
       type: "SUCCESS",
       userId: request.requesterId,
     });
 
     await createNotification({
       title: "تم تنفيذ العملية",
-      message: `تم تنفيذ طلب الـ ${request.type} الخاص بـ ${request.requester?.username || "موظف"}`,
+      message: `تم تنفيذ طلب الـ (${typeLabel}) الخاص بـ ${request.requester?.username || "موظف"}`,
       type: "SUCCESS",
       userId: session.userId,
     });
@@ -220,6 +228,7 @@ export async function rejectTreasuryRequest(id: number, reason?: string) {
     (await getTenantPrisma()) as any
   ).treasuryActionRequest.findUnique({
     where: { id },
+    include: { requester: { select: { username: true } } }
   });
 
   if (!request) throw new Error("Request not found");
@@ -234,9 +243,16 @@ export async function rejectTreasuryRequest(id: number, reason?: string) {
   });
 
   const { createNotification } = await import("@/lib/notifications");
+  const typeLabel = 
+    request.type === "TRANSFER" ? "تحويل مالي" :
+    request.type === "CREATE_SAFE" ? "إنشاء خزنة" :
+    request.type === "CREATE_BANK" ? "إنشاء بنك" :
+    request.type === "RECEIPT_VOUCHER" ? "سند قبض" :
+    request.type === "PAYMENT_VOUCHER" ? "سند صرف" : request.type;
+
   await createNotification({
     title: "تم رفض طلبك",
-    message: `تم رفض طلبك: ${request.type}. السبب: ${reason || "لم يذكر المدير سبباً."}`,
+    message: `تم رفض طلبك (${typeLabel}) من قِبل ${session.user.username}. السبب: ${reason || "لم يذكر المدير سبباً."}`,
     type: "ERROR",
     userId: request.requesterId,
   });
