@@ -1,6 +1,6 @@
 "use client";
 export const dynamic = 'force-dynamic'
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   Search,
@@ -390,7 +390,7 @@ const TransactionModal = ({
 };
 
 // --- Main Component ---
-export default function AccountStatementPage() {
+function AccountStatementInner() {
   const [reportType, setReportType] = useState<"customer" | "supplier">(
     "customer",
   );
@@ -946,5 +946,13 @@ export default function AccountStatementPage() {
 
     </div>
     </PermissionGuard>
+  );
+}
+
+export default function AccountStatementPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div></div>}>
+      <AccountStatementInner />
+    </Suspense>
   );
 }
