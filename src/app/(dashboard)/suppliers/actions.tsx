@@ -99,7 +99,7 @@ export async function saveSupplier(data: {
 
     const session = await getSession();
     if (session) {
-      await triggerStaffActivityAlert(
+      triggerStaffActivityAlert(
         session.user,
         "تعديل مورد",
         `تم تعديل بيانات المورد: ${data.name} (كود: ${data.code})`
@@ -136,7 +136,7 @@ export async function saveSupplier(data: {
 
     const session = await getSession();
     if (session) {
-      await triggerStaffActivityAlert(
+      triggerStaffActivityAlert(
         session.user,
         "إضافة مورد",
         `تم إضافة مورد جديد: ${data.name} (كود: ${data.code})`
@@ -164,7 +164,7 @@ export async function deleteSupplierAction(id: number) {
 
   const session = await getSession();
   if (session && supplier) {
-    await triggerStaffActivityAlert(
+    triggerStaffActivityAlert(
       session.user,
       "حذف مورد",
       `تم حذف المورد: ${supplier.name} (كود: ${supplier.code})`

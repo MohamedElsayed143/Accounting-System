@@ -330,14 +330,14 @@ export async function createTransfer(
 
   // Fire alerts outside transaction (نفس الكود)
   if (res.fromName)
-    await triggerTreasuryAlert(res.fromName.name, res.fromName.balance);
+    triggerTreasuryAlert(res.fromName.name, res.fromName.balance);
   if (res.toName)
-    await triggerTreasuryAlert(res.toName.name, res.toName.balance);
+    triggerTreasuryAlert(res.toName.name, res.toName.balance);
 
   if (session) {
     const fromName = res.fromName?.name || "حساب مجهول";
     const toName = res.toName?.name || "حساب مجهول";
-    await triggerStaffActivityAlert(
+    triggerStaffActivityAlert(
       session.user,
       "تحويل خزينة",
       `تم تحويل مبلغ ${res.transfer.amount} من ${fromName} إلى ${toName} (رقم التحويل: ${res.transfer.transferNumber})`,

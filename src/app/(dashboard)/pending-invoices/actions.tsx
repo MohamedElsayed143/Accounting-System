@@ -268,14 +268,14 @@ export async function finalizeSalesInvoice(
 
   // Fire alerts outside transaction
   if (result.updatedAccount) {
-    await triggerTreasuryAlert(
+    triggerTreasuryAlert(
       result.updatedAccount.name,
       result.updatedAccount.balance,
     );
   }
   if (result.updatedProducts) {
     for (const p of result.updatedProducts) {
-      if (p) await triggerStockAlert(p.name, p.currentStock, p.minStock);
+      if (p) triggerStockAlert(p.name, p.currentStock, p.minStock);
     }
   }
 
@@ -498,14 +498,14 @@ export async function finalizePurchaseInvoice(
 
   // Fire alerts outside transaction
   if (result.updatedAccount) {
-    await triggerTreasuryAlert(
+    triggerTreasuryAlert(
       result.updatedAccount.name,
       result.updatedAccount.balance,
     );
   }
   if (result.updatedProducts) {
     for (const p of result.updatedProducts) {
-      if (p) await triggerStockAlert(p.name, p.currentStock, p.minStock);
+      if (p) triggerStockAlert(p.name, p.currentStock, p.minStock);
     }
   }
 

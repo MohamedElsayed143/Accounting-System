@@ -691,7 +691,7 @@ export async function createBank(
 
     const session = await getSession();
     if (session) {
-      await triggerStaffActivityAlert(
+      triggerStaffActivityAlert(
         session.user,
         "إضافة بنك",
         `تم إضافة بنك جديد: ${result.name} (رصيد: ${result.balance})`,
@@ -770,7 +770,7 @@ export async function archiveBank(bankId: number) {
 
       const session = await getSession();
       if (session) {
-        await triggerStaffActivityAlert(
+        triggerStaffActivityAlert(
           session.user,
           "أرشفة بنك",
           `تم أرشفة البنك: ${bank.name}`,
@@ -1016,7 +1016,7 @@ export async function createPaymentVoucher(data: PaymentVoucherInput, skipApprov
 
     const session = await getSession();
     if (session) {
-      await triggerStaffActivityAlert(
+      triggerStaffActivityAlert(
         session.user,
         "سند صرف",
         `تم إنشاء سند صرف #${data.voucherNumber} بقيمة ${data.amount} من ${data.accountType === "safe" ? "خزنة" : "بنك"}`
@@ -1024,7 +1024,7 @@ export async function createPaymentVoucher(data: PaymentVoucherInput, skipApprov
     }
 
     for (const alert of pendingAlerts) {
-      await triggerTreasuryAlert(alert.name, alert.balance);
+      triggerTreasuryAlert(alert.name, alert.balance);
     }
 
     revalidatePath("/treasury");
@@ -1707,7 +1707,7 @@ export async function createReceiptVoucher(
     revalidatePath(`/treasury/${accountId}?type=${accountType}`);
 
     if (session) {
-      await triggerStaffActivityAlert(
+      triggerStaffActivityAlert(
         session.user,
         "سند قبض",
         `تم إنشاء سند قبض #${result.voucherNumber} بقيمة ${result.amount} إلى ${result.accountType === "safe" ? "خزنة" : "بنك"}`,
@@ -1715,7 +1715,7 @@ export async function createReceiptVoucher(
     }
 
     for (const alert of pendingAlerts) {
-      await triggerTreasuryAlert(alert.name, alert.balance);
+      triggerTreasuryAlert(alert.name, alert.balance);
     }
 
     return { success: true, data: result };
@@ -1834,7 +1834,7 @@ export async function restoreAccount(id: number, type: "safe" | "bank") {
         data: { isActive: true },
       });
       if (session) {
-        await triggerStaffActivityAlert(
+        triggerStaffActivityAlert(
           session.user,
           "استعادة حساب",
           `تم استعادة البنك: ${account.name}`,
@@ -1848,7 +1848,7 @@ export async function restoreAccount(id: number, type: "safe" | "bank") {
         data: { isActive: true },
       });
       if (session && account) {
-        await triggerStaffActivityAlert(
+        triggerStaffActivityAlert(
           session.user,
           "استعادة حساب",
           `تم استعادة الخزنة: ${account.name}`,
@@ -2171,7 +2171,7 @@ export async function createSafe(
 
     const session = await getSession();
     if (session) {
-      await triggerStaffActivityAlert(
+      triggerStaffActivityAlert(
         session.user,
         "إضافة خزنة",
         `تم إضافة خزنة جديدة: ${result.name} (رصيد: ${result.balance})`,
@@ -2240,7 +2240,7 @@ export async function archiveSafe(safeId: number) {
       });
       const session = await getSession();
       if (session && archivedSafe) {
-        await triggerStaffActivityAlert(
+        triggerStaffActivityAlert(
           session.user,
           "أرشفة خزنة",
           `تم أرشفة الخزنة: ${archivedSafe.name}`,

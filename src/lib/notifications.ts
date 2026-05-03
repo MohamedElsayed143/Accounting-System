@@ -31,18 +31,35 @@ export async function createNotification(data: {
   type: NotificationType;
   userId?: number;
 }) {
-  const db = await getTenantPrisma();
-  return await (db as any).notification.create({
-    data: {
-      title: data.title,
-      message: data.message,
-      type: data.type,
-      userId: data.userId || null,
-    },
+  try {
+    const db = await getTenantPrisma();
+    return await (db as any).notification.create({
+      data: {
+        title: data.title,
+        message: data.message,
+        type: data.type,
+        userId: data.userId || null,
+      },
+    });
+  } catch (e) {
+    // Notifications are non-critical – never let them crash a transaction
+    console.warn("[Notification] Failed to create notification:", e);
+  }
+}
+
+/**
+ * Fire-and-forget helper: schedules an async function to run after the current
+ * call stack, so the calling Action can return immediately to the client without
+ * waiting for notification DB queries to complete.
+ */
+function fireAndForget(fn: () => Promise<void>) {
+  // Use setImmediate in Node.js to defer to the next event-loop tick
+  setImmediate(() => {
+    fn().catch((e) => console.warn("[Notification background task] error:", e));
   });
 }
 
-export async function triggerStaffActivityAlert(
+export function triggerStaffActivityAlert(
   user: { username: string; role: string },
   action: string,
   details: string
@@ -50,70 +67,76 @@ export async function triggerStaffActivityAlert(
   // Only trigger for STAFF or WORKER
   if (user.role !== "WORKER" && user.role !== "STAFF") return;
 
-  const settings = await getGeneralSettings();
-  if (!settings.staffActivityAlerts) return;
+  fireAndForget(async () => {
+    const settings = await getGeneralSettings();
+    if (!settings.staffActivityAlerts) return;
 
-  await createNotification({
-    title: `نشاط موظف: ${user.username}`,
-    message: `${action}: ${details}`,
-    type: "INFO",
+    await createNotification({
+      title: `نشاط موظف: ${user.username}`,
+      message: `${action}: ${details}`,
+      type: "INFO",
+    });
   });
 }
 
-export async function triggerStockAlert(productName: string, currentStock: number, minStock: number) {
-  const db = await getTenantPrisma();
-  const settings = await getGeneralSettings();
-  if (!settings.inventoryAlerts) return;
+export function triggerStockAlert(productName: string, currentStock: number, minStock: number) {
+  fireAndForget(async () => {
+    const db = await getTenantPrisma();
+    const settings = await getGeneralSettings();
+    if (!settings.inventoryAlerts) return;
 
-  let threshold = minStock;
-  if (threshold === 0) {
-    const sysRecord = await (db as any).systemSettings.findFirst({ where: { id: 1 } });
-    if (sysRecord?.settings?.inventory?.lowStockThreshold) {
-      threshold = sysRecord.settings.inventory.lowStockThreshold;
-    }
-  }
-
-  if (currentStock <= threshold) {
-    const existing = await (db as any).notification.findFirst({
-      where: {
-        title: "تنبيه مخزون منخفض",
-        message: { contains: `المنتج "${productName}"` },
-        isRead: false
+    let threshold = minStock;
+    if (threshold === 0) {
+      const sysRecord = await (db as any).systemSettings.findFirst({ where: { id: 1 } });
+      if (sysRecord?.settings?.inventory?.lowStockThreshold) {
+        threshold = sysRecord.settings.inventory.lowStockThreshold;
       }
-    });
-
-    if (!existing) {
-      await createNotification({
-        title: "تنبيه مخزون منخفض",
-        message: `المنتج "${productName}" وصل إلى ${currentStock} (الحد الأدنى: ${minStock})`,
-        type: "WARNING",
-      });
     }
-  }
+
+    if (currentStock <= threshold) {
+      const existing = await (db as any).notification.findFirst({
+        where: {
+          title: "تنبيه مخزون منخفض",
+          message: { contains: `المنتج "${productName}"` },
+          isRead: false,
+        },
+      });
+
+      if (!existing) {
+        await createNotification({
+          title: "تنبيه مخزون منخفض",
+          message: `المنتج "${productName}" وصل إلى ${currentStock} (الحد الأدنى: ${minStock})`,
+          type: "WARNING",
+        });
+      }
+    }
+  });
 }
 
-export async function triggerTreasuryAlert(accountName: string, balance: number) {
-  const db = await getTenantPrisma();
-  const settings = await getGeneralSettings();
-  if (!settings.vaultBankAlerts) return;
+export function triggerTreasuryAlert(accountName: string, balance: number) {
+  fireAndForget(async () => {
+    const db = await getTenantPrisma();
+    const settings = await getGeneralSettings();
+    if (!settings.vaultBankAlerts) return;
 
-  if (balance <= settings.minVaultBalance) {
-    const existing = await (db as any).notification.findFirst({
-      where: {
-        title: "تنبيه رصيد منخفض",
-        message: { contains: `الحساب "${accountName}"` },
-        isRead: false
-      }
-    });
-
-    if (!existing) {
-      await createNotification({
-        title: "تنبيه رصيد منخفض",
-        message: `الحساب "${accountName}" رصيده حالياً ${balance} (الحد الأدنى: ${settings.minVaultBalance})`,
-        type: "WARNING",
+    if (balance <= settings.minVaultBalance) {
+      const existing = await (db as any).notification.findFirst({
+        where: {
+          title: "تنبيه رصيد منخفض",
+          message: { contains: `الحساب "${accountName}"` },
+          isRead: false,
+        },
       });
+
+      if (!existing) {
+        await createNotification({
+          title: "تنبيه رصيد منخفض",
+          message: `الحساب "${accountName}" رصيده حالياً ${balance} (الحد الأدنى: ${settings.minVaultBalance})`,
+          type: "WARNING",
+        });
+      }
     }
-  }
+  });
 }
 
 export async function checkDueDates() {

@@ -440,14 +440,14 @@ export async function createPaymentVoucher(
 
     // Fire alerts outside transaction
     if (result.updatedAccount) {
-      await triggerTreasuryAlert(
+      triggerTreasuryAlert(
         result.updatedAccount.name,
         result.updatedAccount.balance,
       );
     }
 
     if (session) {
-      await triggerStaffActivityAlert(
+      triggerStaffActivityAlert(
         session.user,
         "سند صرف",
         `تم إنشاء سند صرف #${result.voucher.voucherNumber} بقيمة ${result.voucher.amount} من ${result.voucher.accountType === "safe" ? "الخزنة" : "البنك"}`,

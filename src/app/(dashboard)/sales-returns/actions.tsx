@@ -394,7 +394,7 @@ export async function createSalesReturn(data: SalesReturnInput) {
     });
 
     if (result.updatedAccount) {
-      await triggerTreasuryAlert(result.updatedAccount.name, result.updatedAccount.balance);
+      triggerTreasuryAlert(result.updatedAccount.name, result.updatedAccount.balance);
     }
 
     revalidatePath("/sales-returns");

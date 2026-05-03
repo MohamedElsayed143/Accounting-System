@@ -458,7 +458,7 @@ export async function createPurchaseInvoice(data: {
   });
 
   if (user_session && result) {
-    await triggerStaffActivityAlert(
+    triggerStaffActivityAlert(
       user_session.user,
       "فاتورة مشتريات جديدة",
       `تم إنشاء فاتورة مشتريات #${result.invoiceNumber} من المورد ${result.supplierName} بقيمة ${result.total}`,
@@ -467,9 +467,9 @@ export async function createPurchaseInvoice(data: {
 
   for (const alert of pendingAlerts) {
     if (alert.type === "treasury") {
-      await triggerTreasuryAlert(alert.name, alert.value);
+      triggerTreasuryAlert(alert.name, alert.value);
     } else if (alert.type === "stock") {
-      await triggerStockAlert(alert.name, alert.value, alert.limit || 0);
+      triggerStockAlert(alert.name, alert.value, alert.limit || 0);
     }
   }
 
@@ -873,7 +873,7 @@ export async function updatePurchaseInvoice(
   });
 
   if (session) {
-    await triggerStaffActivityAlert(
+    triggerStaffActivityAlert(
       session.user,
       "تعديل فاتورة مشتريات",
       `تم تعديل فاتورة مشتريات #${data.invoiceNumber} للمورد ${data.supplierName} بقيمة ${data.total}`,
@@ -882,9 +882,9 @@ export async function updatePurchaseInvoice(
 
   for (const alert of pendingAlerts) {
     if (alert.type === "treasury") {
-      await triggerTreasuryAlert(alert.name, alert.value);
+      triggerTreasuryAlert(alert.name, alert.value);
     } else if (alert.type === "stock") {
-      await triggerStockAlert(alert.name, alert.value, alert.limit || 0);
+      triggerStockAlert(alert.name, alert.value, alert.limit || 0);
     }
   }
 
@@ -1005,7 +1005,7 @@ export async function deletePurchaseInvoice(id: number) {
     });
 
     if (user_session && deletedInvoice) {
-      await triggerStaffActivityAlert(
+      triggerStaffActivityAlert(
         user_session.user,
         "حذف فاتورة مشتريات",
         `تم حذف فاتورة مشتريات #${deletedInvoice.invoiceNumber} من المورد ${deletedInvoice.supplierName} بقيمة ${deletedInvoice.total}`,
@@ -1017,7 +1017,7 @@ export async function deletePurchaseInvoice(id: number) {
 
   for (const alert of pendingAlerts) {
     if (alert.type === "treasury") {
-      await triggerTreasuryAlert(alert.name, alert.value);
+      triggerTreasuryAlert(alert.name, alert.value);
     }
   }
 }

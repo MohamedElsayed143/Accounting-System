@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { publicPrisma, getPrismaForSchema } from "./tenant-prisma";
 
 export type PermissionKey = 
@@ -34,42 +35,58 @@ export type PermissionKey =
   | "accounting_coa_view";
 
 /**
- * Checks if a user has a specific permission.
- * Admins always have all permissions.
- * Workers are checked against the 'cashier' role in SystemSettings.
+ * Loads user role + rbac permissions in a SINGLE DB round-trip and caches
+ * the result for the entire HTTP request (React Server cache deduplication).
+ * This prevents the N×2 DB queries pattern where every server action calls
+ * hasPermission() multiple times.
  */
-export async function hasPermission(userId: number, key: PermissionKey): Promise<boolean> {
+const getUserPermissions = cache(async (userId: number) => {
   const user = await publicPrisma.user.findUnique({
     where: { id: userId },
-    select: { role: true, tenantSchema: true }
+    select: { role: true, tenantSchema: true },
   });
 
-  if (!user) return false;
+  if (!user) return null;
+
   if (user.role === "ADMIN") {
-    if (key === "customers_retail_only") return false;
-    return true;
+    return { role: "ADMIN" as const, permissions: null };
   }
 
   const tenantSchema = user.tenantSchema || "public";
   const tenantPrisma = getPrismaForSchema(tenantSchema);
 
-  // For WORKER, fetch system settings from their specific tenant schema
   const settingsRecord = await tenantPrisma.systemSettings.findFirst({
-    where: { id: 1 }
+    where: { id: 1 },
+    select: { settings: true },
   });
 
-  if (!settingsRecord) return false;
-
-  const settings = settingsRecord.settings as any;
+  const settings = settingsRecord?.settings as any;
   const rbac = settings?.rbac;
+  const workerRole = rbac?.roles?.["worker"];
+  const permissions: Record<string, boolean> = workerRole?.permissions ?? {};
 
-  if (!rbac || !rbac.roles) return false;
+  return { role: user.role, permissions };
+});
 
-  // We assume WORKER maps to the 'worker' role in settings (labeled 'Employee')
-  const workerRole = rbac.roles["worker"]; 
-  if (!workerRole || !workerRole.permissions) return false;
+/**
+ * Checks if a user has a specific permission.
+ * Admins always have all permissions.
+ * Workers are checked against the rbac settings in SystemSettings.
+ * Results are cached per-request to avoid repeated DB queries.
+ */
+export async function hasPermission(userId: number, key: PermissionKey): Promise<boolean> {
+  const userPerms = await getUserPermissions(userId);
 
-  return !!workerRole.permissions[key];
+  if (!userPerms) return false;
+
+  if (userPerms.role === "ADMIN") {
+    // Admins are always restricted from retail-only
+    return key !== "customers_retail_only";
+  }
+
+  if (!userPerms.permissions) return false;
+
+  return !!userPerms.permissions[key];
 }
 
 /**

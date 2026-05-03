@@ -104,7 +104,7 @@ export async function saveCustomer(data: {
       
       const session = await getSession();
       if (session) {
-        await triggerStaffActivityAlert(
+        triggerStaffActivityAlert(
           session.user,
           "تعديل عميل",
           `تم تعديل بيانات العميل: ${data.name} (كود: ${data.code})`
@@ -140,7 +140,7 @@ export async function saveCustomer(data: {
 
       const session = await getSession();
       if (session) {
-        await triggerStaffActivityAlert(
+        triggerStaffActivityAlert(
           session.user,
           "إضافة عميل",
           `تم إضافة عميل جديد: ${data.name} (كود: ${data.code})`
@@ -174,7 +174,7 @@ export async function deleteCustomerAction(id: number) {
 
   const session = await getSession();
   if (session && customer) {
-    await triggerStaffActivityAlert(
+    triggerStaffActivityAlert(
       session.user,
       "حذف عميل",
       `تم حذف العميل: ${customer.name} (كود: ${customer.code})`

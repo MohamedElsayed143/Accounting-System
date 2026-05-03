@@ -520,19 +520,19 @@ export async function createSalesInvoice(data: {
   });
 
   if (session) {
-    await triggerStaffActivityAlert(
+    triggerStaffActivityAlert(
       session.user,
       "فاتورة مبيعات جديدة",
       `تم إنشاء فاتورة مبيعات #${result.invoiceNumber} للعميل ${result.customerName} بقيمة ${result.total}`,
     );
   }
 
-  // Fire pending alerts outside transaction
+  // Fire-and-forget alerts (non-blocking)
   for (const alert of pendingAlerts) {
     if (alert.type === "treasury") {
-      await triggerTreasuryAlert(alert.name, alert.value);
+      triggerTreasuryAlert(alert.name, alert.value);
     } else if (alert.type === "stock") {
-      await triggerStockAlert(alert.name, alert.value, alert.limit || 0);
+      triggerStockAlert(alert.name, alert.value, alert.limit || 0);
     }
   }
 
@@ -1000,7 +1000,7 @@ export async function updateSalesInvoice(
   });
 
   if (session) {
-    await triggerStaffActivityAlert(
+    triggerStaffActivityAlert(
       session.user,
       "تعديل فاتورة مبيعات",
       `تم تعديل فاتورة مبيعات #${data.invoiceNumber} للعميل ${data.customerName} بقيمة ${data.total}`,
@@ -1009,9 +1009,9 @@ export async function updateSalesInvoice(
 
   for (const alert of pendingAlerts) {
     if (alert.type === "treasury") {
-      await triggerTreasuryAlert(alert.name, alert.value);
+      triggerTreasuryAlert(alert.name, alert.value);
     } else if (alert.type === "stock") {
-      await triggerStockAlert(alert.name, alert.value, alert.limit || 0);
+      triggerStockAlert(alert.name, alert.value, alert.limit || 0);
     }
   }
 
@@ -1114,14 +1114,14 @@ export async function deleteSalesInvoice(id: number) {
   // Fire pending alerts outside transaction
   for (const alert of pendingAlerts) {
     if (alert.type === "treasury") {
-      await triggerTreasuryAlert(alert.name, alert.value);
+      triggerTreasuryAlert(alert.name, alert.value);
     } else if (alert.limit !== undefined) {
-      await triggerStockAlert(alert.name, alert.value, alert.limit);
+      triggerStockAlert(alert.name, alert.value, alert.limit);
     }
   }
 
   if (session && result) {
-    await triggerStaffActivityAlert(
+    triggerStaffActivityAlert(
       session.user,
       "حذف فاتورة مبيعات",
       `تم حذف فاتورة مبيعات #${result.invoiceNumber} للعميل ${result.customerName} بقيمة ${result.total}`,

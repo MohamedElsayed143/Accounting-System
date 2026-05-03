@@ -360,7 +360,7 @@ export async function createPurchaseReturn(data: PurchaseReturnInput) {
     });
 
     if (result.updatedAccount) {
-      await triggerTreasuryAlert(result.updatedAccount.name, result.updatedAccount.balance);
+      triggerTreasuryAlert(result.updatedAccount.name, result.updatedAccount.balance);
     }
 
     revalidatePath("/purchase-returns");
