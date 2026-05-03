@@ -1,4 +1,4 @@
-import { publicPrisma } from "@/lib/tenant-prisma";
+import { publicPrisma, getPrismaForSchema } from "@/lib/tenant-prisma";
 import { seedTenantData } from "../../prisma/seed";
 
 export async function setupNewTenantSchema(tenantSchema: string): Promise<void> {
@@ -313,7 +313,8 @@ export async function setupNewTenantSchema(tenantSchema: string): Promise<void> 
 
   // 6. Seed Chart of Accounts and default data (Inside Transaction)
   console.log(`[Multi-Tenant] Seeding default data for: ${tenantSchema}...`);
-  await publicPrisma.$transaction(async (tx) => {
+  const tenantPrisma = getPrismaForSchema(tenantSchema);
+  await tenantPrisma.$transaction(async (tx) => {
     await seedTenantData(tx, tenantSchema);
   }, {
     timeout: 60000 // Increase timeout to 60 seconds
