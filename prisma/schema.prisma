@@ -81,6 +81,9 @@ model SalesInvoiceItem {
   profitMargin Float        @default(0)
   invoice      SalesInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   product      Product?     @relation(fields: [productId], references: [id])
+
+  @@index([invoiceId])
+  @@index([productId])
 }
 
 model PurchaseInvoice {
@@ -124,6 +127,9 @@ model PurchaseInvoiceItem {
   productId    Int?
   invoice      PurchaseInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   product      Product?        @relation(fields: [productId], references: [id])
+
+  @@index([invoiceId])
+  @@index([productId])
 }
 
 model TreasurySafe {
@@ -253,6 +259,9 @@ model SalesReturnItem {
   taxRate       Float       @default(0)
   total         Float
   return        SalesReturn @relation(fields: [returnId], references: [id], onDelete: Cascade)
+
+  @@index([returnId])
+  @@index([invoiceItemId])
 }
 
 model PurchaseReturn {
@@ -295,6 +304,9 @@ model PurchaseReturnItem {
   taxRate       Float          @default(0)
   total         Float
   return        PurchaseReturn @relation(fields: [returnId], references: [id], onDelete: Cascade)
+
+  @@index([returnId])
+  @@index([invoiceItemId])
 }
 
 model Category {
@@ -305,6 +317,8 @@ model Category {
   updatedAt DateTime  @updatedAt
   imageUrl  String?
   products  Product[]
+
+  @@index([code])
 }
 
 model Warehouse {
@@ -338,6 +352,9 @@ model Product {
   quotationItems       QuotationItem[]
   salesInvoiceItems    SalesInvoiceItem[]
   stockMovements       StockMovement[]
+
+  @@index([categoryId])
+  @@index([code])
 }
 
 model StockMovement {
@@ -398,6 +415,9 @@ model QuotationItem {
   total       Float
   product     Product?  @relation(fields: [productId], references: [id])
   quotation   Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+
+  @@index([quotationId])
+  @@index([productId])
 }
 
 model TreasuryTransfer {

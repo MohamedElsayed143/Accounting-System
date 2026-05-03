@@ -288,6 +288,27 @@ export async function setupNewTenantSchema(tenantSchema: string): Promise<void> 
     await publicPrisma.$executeRawUnsafe(sql);
   }
 
+  // 3.5 Create Indexes for Performance
+  const indexes = [
+    `CREATE INDEX IF NOT EXISTS "SalesInvoiceItem_invoiceId_idx" ON "${s}"."SalesInvoiceItem"("invoiceId")`,
+    `CREATE INDEX IF NOT EXISTS "SalesInvoiceItem_productId_idx" ON "${s}"."SalesInvoiceItem"("productId")`,
+    `CREATE INDEX IF NOT EXISTS "PurchaseInvoiceItem_invoiceId_idx" ON "${s}"."PurchaseInvoiceItem"("invoiceId")`,
+    `CREATE INDEX IF NOT EXISTS "PurchaseInvoiceItem_productId_idx" ON "${s}"."PurchaseInvoiceItem"("productId")`,
+    `CREATE INDEX IF NOT EXISTS "SalesReturnItem_returnId_idx" ON "${s}"."SalesReturnItem"("returnId")`,
+    `CREATE INDEX IF NOT EXISTS "SalesReturnItem_invoiceItemId_idx" ON "${s}"."SalesReturnItem"("invoiceItemId")`,
+    `CREATE INDEX IF NOT EXISTS "PurchaseReturnItem_returnId_idx" ON "${s}"."PurchaseReturnItem"("returnId")`,
+    `CREATE INDEX IF NOT EXISTS "PurchaseReturnItem_invoiceItemId_idx" ON "${s}"."PurchaseReturnItem"("invoiceItemId")`,
+    `CREATE INDEX IF NOT EXISTS "QuotationItem_quotationId_idx" ON "${s}"."QuotationItem"("quotationId")`,
+    `CREATE INDEX IF NOT EXISTS "QuotationItem_productId_idx" ON "${s}"."QuotationItem"("productId")`,
+    `CREATE INDEX IF NOT EXISTS "Product_categoryId_idx" ON "${s}"."Product"("categoryId")`,
+    `CREATE INDEX IF NOT EXISTS "Product_code_idx" ON "${s}"."Product"("code")`,
+    `CREATE INDEX IF NOT EXISTS "JournalItem_accountId_idx" ON "${s}"."JournalItem"("accountId")`,
+    `CREATE INDEX IF NOT EXISTS "JournalItem_journalEntryId_idx" ON "${s}"."JournalItem"("journalEntryId")`,
+  ];
+  for (const sql of indexes) {
+    await publicPrisma.$executeRawUnsafe(sql);
+  }
+
   // 4. Seed default CompanySettings & GeneralSettings rows
   await publicPrisma.$executeRawUnsafe(
     `INSERT INTO "${s}"."CompanySettings" ("id","updatedAt") VALUES (1,NOW()) ON CONFLICT DO NOTHING`

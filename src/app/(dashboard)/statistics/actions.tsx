@@ -393,46 +393,47 @@ export async function getBestSellingProducts(
         ? { invoice: { invoiceDate: { gte: fromDate, lte: toDate } } }
         : {};
 
-    const items = await (await getTenantPrisma()).salesInvoiceItem.findMany({
+    // Use Prisma native aggregation instead of fetching all rows into Node.js memory
+    const topProducts = await (await getTenantPrisma()).salesInvoiceItem.groupBy({
+      by: ["productId"],
       where: {
         productId: { not: null },
         ...dateFilter,
       },
-      select: {
-        productId: true,
+      _sum: {
         quantity: true,
         total: true,
-        product: { select: { name: true, code: true, unit: true, sellPrice: true } },
       },
+      _count: {
+        id: true, // number of orders
+      },
+      orderBy: {
+        _sum: { quantity: "desc" },
+      },
+      take: limit,
     });
 
-    // Aggregate by productId
-    const map = new Map<
-      number,
-      { name: string; code: string; unit: string | null; sellPrice: number; totalQty: number; totalRevenue: number; orderCount: number }
-    >();
+    if (topProducts.length === 0) return [];
 
-    items.forEach((item) => {
-      if (!item.productId || !item.product) return;
-      const existing = map.get(item.productId) ?? {
-        name: item.product.name,
-        code: item.product.code,
-        unit: item.product.unit,
-        sellPrice: item.product.sellPrice,
-        totalQty: 0,
-        totalRevenue: 0,
-        orderCount: 0,
+    const productIds = topProducts.map((p) => p.productId as number);
+    const productsDetails = await (await getTenantPrisma()).product.findMany({
+      where: { id: { in: productIds } },
+      select: { id: true, name: true, code: true, unit: true, sellPrice: true },
+    });
+
+    return topProducts.map((agg) => {
+      const p = productsDetails.find((prod) => prod.id === agg.productId);
+      return {
+        id: agg.productId as number,
+        name: p?.name || "منتج غير معروف",
+        code: p?.code || "-",
+        unit: p?.unit || null,
+        sellPrice: p?.sellPrice || 0,
+        totalQty: agg._sum.quantity ?? 0,
+        totalRevenue: agg._sum.total ?? 0,
+        orderCount: agg._count.id,
       };
-      existing.totalQty += item.quantity;
-      existing.totalRevenue += item.total;
-      existing.orderCount += 1;
-      map.set(item.productId, existing);
     });
-
-    return Array.from(map.entries())
-      .map(([id, data]) => ({ id, ...data }))
-      .sort((a, b) => b.totalQty - a.totalQty)
-      .slice(0, limit);
   } catch (error) {
     console.error("getBestSellingProducts error:", error);
     return [];
