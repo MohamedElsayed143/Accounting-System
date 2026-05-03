@@ -3,8 +3,8 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
 
@@ -23,6 +23,9 @@ model Customer {
   receiptVouchers ReceiptVoucher[]
   invoices        SalesInvoice[]
   salesReturns    SalesReturn[]
+
+  @@index([createdAt])
+  @@index([category])
 }
 
 model Supplier {
@@ -39,6 +42,9 @@ model Supplier {
   invoices        PurchaseInvoice[]
   purchaseReturns PurchaseReturn[]
   account         Account?          @relation(fields: [accountId], references: [id])
+
+  @@index([createdAt])
+  @@index([category])
 }
 
 model SalesInvoice {
@@ -66,6 +72,16 @@ model SalesInvoice {
   safe           TreasurySafe?      @relation(fields: [safeId], references: [id])
   items          SalesInvoiceItem[]
   salesReturns   SalesReturn[]
+
+  @@index([customerId])
+  @@index([invoiceDate])
+  @@index([createdAt])
+  @@index([status])
+  @@index([safeId])
+  @@index([bankId])
+  @@index([customerId, invoiceDate])
+  @@index([customerId, status])
+  @@index([dueDate])
 }
 
 model SalesInvoiceItem {
@@ -111,6 +127,16 @@ model PurchaseInvoice {
   supplier        Supplier              @relation(fields: [supplierId], references: [id])
   items           PurchaseInvoiceItem[]
   purchaseReturns PurchaseReturn[]
+
+  @@index([supplierId])
+  @@index([invoiceDate])
+  @@index([createdAt])
+  @@index([status])
+  @@index([safeId])
+  @@index([bankId])
+  @@index([supplierId, invoiceDate])
+  @@index([supplierId, status])
+  @@index([dueDate])
 }
 
 model PurchaseInvoiceItem {
@@ -151,6 +177,9 @@ model TreasurySafe {
   account          Account?           @relation(fields: [accountId], references: [id])
   transfersFrom    TreasuryTransfer[] @relation("TransferFromSafe")
   transfersTo      TreasuryTransfer[] @relation("TransferToSafe")
+
+  @@index([isActive])
+  @@index([isPrimary])
 }
 
 model TreasuryBank {
@@ -173,6 +202,8 @@ model TreasuryBank {
   account          Account?           @relation(fields: [accountId], references: [id])
   transfersFrom    TreasuryTransfer[] @relation("TransferFromBank")
   transfersTo      TreasuryTransfer[] @relation("TransferToBank")
+
+  @@index([isActive])
 }
 
 model ReceiptVoucher {
@@ -190,11 +221,14 @@ model ReceiptVoucher {
   bank            TreasuryBank?    @relation(fields: [bankId], references: [id])
   customer        Customer         @relation(fields: [customerId], references: [id])
   safe            TreasurySafe?    @relation(fields: [safeId], references: [id])
-  purchaseReturns PurchaseReturn[] @relation("PurchaseReturnToReceiptVoucher")
+  purchaseReturns PurchaseReturn[] @relation("Pur3nP5oFahNL86vESFrkKjmuupsQa1mPzN7")
 
   @@index([customerId])
   @@index([safeId])
   @@index([bankId])
+  @@index([date])
+  @@index([createdAt])
+  @@index([customerId, date])
 }
 
 model PaymentVoucher {
@@ -217,6 +251,9 @@ model PaymentVoucher {
   @@index([supplierId])
   @@index([safeId])
   @@index([bankId])
+  @@index([date])
+  @@index([createdAt])
+  @@index([supplierId, date])
 }
 
 model SalesReturn {
@@ -247,6 +284,10 @@ model SalesReturn {
   @@index([invoiceId])
   @@index([customerId])
   @@index([returnDate])
+  @@index([status])
+  @@index([createdAt])
+  @@index([customerId, returnDate])
+  @@index([customerId, status])
 }
 
 model SalesReturnItem {
@@ -287,11 +328,15 @@ model PurchaseReturn {
   safe            TreasurySafe?        @relation(fields: [safeId], references: [id])
   supplier        Supplier             @relation(fields: [supplierId], references: [id])
   items           PurchaseReturnItem[]
-  receiptVouchers ReceiptVoucher[]     @relation("PurchaseReturnToReceiptVoucher")
+  receiptVouchers ReceiptVoucher[]     @relation("Pur3nP5oFahNL86vESFrkKjmuupsQa1mPzN7")
 
   @@index([invoiceId])
   @@index([supplierId])
   @@index([returnDate])
+  @@index([status])
+  @@index([createdAt])
+  @@index([supplierId, returnDate])
+  @@index([supplierId, status])
 }
 
 model PurchaseReturnItem {
@@ -319,6 +364,7 @@ model Category {
   products  Product[]
 
   @@index([code])
+  @@index([createdAt])
 }
 
 model Warehouse {
@@ -329,6 +375,8 @@ model Warehouse {
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
   stockMovements StockMovement[]
+
+  @@index([isDefault])
 }
 
 model Product {
@@ -355,6 +403,10 @@ model Product {
 
   @@index([categoryId])
   @@index([code])
+  @@index([isActive])
+  @@index([createdAt])
+  @@index([isActive, categoryId])
+  @@index([currentStock])
 }
 
 model StockMovement {
@@ -378,6 +430,12 @@ model StockMovement {
   @@index([movementType])
   @@index([createdAt])
   @@index([warehouseId])
+  @@index([productId, createdAt])
+  @@index([productId, movementType])
+  @@index([purchaseInvoiceId])
+  @@index([salesInvoiceId])
+  @@index([purchaseReturnId])
+  @@index([salesReturnId])
 }
 
 model Quotation {
@@ -401,6 +459,10 @@ model Quotation {
 
   @@index([customerId])
   @@index([date])
+  @@index([status])
+  @@index([createdAt])
+  @@index([customerId, date])
+  @@index([customerId, status])
 }
 
 model QuotationItem {
@@ -443,6 +505,8 @@ model TreasuryTransfer {
   @@index([fromBankId])
   @@index([toSafeId])
   @@index([toBankId])
+  @@index([date])
+  @@index([createdAt])
 }
 
 model SystemSettings {
@@ -462,7 +526,7 @@ model User {
   updatedAt                DateTime                @updatedAt
   email                    String?                 @unique @db.VarChar(255)
   tenantSchema             String?                 @db.VarChar(100)
-  parentId                 Int?
+  parentId                 Int?                    
   parent                   User?                   @relation("UserHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
   children                 User[]                  @relation("UserHierarchy")
   modifiedAccounts         Account[]               @relation("AccountModifier")
@@ -471,6 +535,11 @@ model User {
   sessions                 Session[]
   approvedTreasuryRequests TreasuryActionRequest[] @relation("Approver")
   treasuryRequests         TreasuryActionRequest[] @relation("Requester")
+
+  @@index([parentId])
+  @@index([role])
+  @@index([tenantSchema])
+  @@index([createdAt])
 }
 
 /// Developer-controlled system branding (system name + logo).
@@ -490,6 +559,7 @@ model Session {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([expiresAt])
 }
 
 model CompanySettings {
@@ -529,6 +599,12 @@ model Notification {
   userId    Int?
   createdAt DateTime         @default(now())
   user      User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
+  @@index([userId, isRead])
+  @@index([userId, createdAt])
 }
 
 model GeneralSettings {
@@ -563,6 +639,9 @@ model TreasuryActionRequest {
   @@index([requesterId])
   @@index([approverId])
   @@index([status])
+  @@index([createdAt])
+  @@index([requesterId, status])
+  @@index([type, status])
 }
 
 model Account {
@@ -589,6 +668,12 @@ model Account {
 
   @@index([parentId])
   @@index([code])
+  @@index([type])
+  @@index([level])
+  @@index([isSelectable])
+  @@index([isTerminal])
+  @@index([parentId, type])
+  @@index([type, isSelectable])
 }
 
 model JournalEntry {
@@ -607,6 +692,10 @@ model JournalEntry {
 
   @@index([date])
   @@index([sourceType, sourceId])
+  @@index([createdAt])
+  @@index([createdById])
+  @@index([sourceType])
+  @@index([date, sourceType])
 }
 
 model JournalItem {
@@ -623,6 +712,7 @@ model JournalItem {
 
   @@index([accountId])
   @@index([journalEntryId])
+  @@index([accountId, journalEntryId])
 }
 
 model SystemSequence {
