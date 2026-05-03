@@ -37,6 +37,7 @@ import {
   EmptyState,
   PaginationControls,
   PermissionGuard,
+  TableSkeleton,
 } from "@/components/shared";
 import { toast } from "sonner";
 import { PasswordProtectionGate } from "@/components/shared/PasswordProtectionGate";
@@ -65,6 +66,7 @@ const ITEMS_PER_PAGE = 8;
 
 export default function SuppliersPage() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -90,6 +92,7 @@ export default function SuppliersPage() {
   const loadSuppliers = async () => {
     const data = await getSuppliers();
     setSuppliers(data);
+    setLoading(false);
   };
 
   useEffect(() => {
@@ -316,7 +319,9 @@ export default function SuppliersPage() {
               />
             </div>
 
-            {paginatedSuppliers.length ? (
+            {loading ? (
+              <TableSkeleton columns={7} rows={8} />
+            ) : paginatedSuppliers.length ? (
               <>
                 <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
                   <Table>

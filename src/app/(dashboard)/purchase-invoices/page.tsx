@@ -27,6 +27,7 @@ import {
   DataTableToolbar,
   EmptyState,
   PaginationControls,
+  TableSkeleton,
 } from "@/components/shared";
 import { getPurchaseInvoices, deletePurchaseInvoice, PurchaseInvoice } from "./actions";
 import { useRouter } from "next/navigation";
@@ -219,14 +220,7 @@ export default function PurchaseInvoicesPage() {
               </div>
 
               {loading ? (
-                <div className="flex items-center justify-center py-16">
-                  <div className="flex flex-col items-center gap-3">
-                    <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-                    <p className="text-sm text-muted-foreground font-medium">
-                      جاري تحميل الفواتير...
-                    </p>
-                  </div>
-                </div>
+                <TableSkeleton columns={7} rows={8} />
               ) : paginatedInvoices.length > 0 ? (
                 <>
                   <div className="rounded-lg border overflow-x-auto">

@@ -43,7 +43,6 @@ import { toast } from "sonner";
 import { PasswordProtectionGate } from "@/components/shared/PasswordProtectionGate";
 import { ShieldCheck, ShieldAlert } from "lucide-react";
 
-/* ✅ استيراد الـ Server Actions */
 import {
   getCustomers,
   saveCustomer,
@@ -51,6 +50,7 @@ import {
 } from "./actions";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useManagementMode } from "@/hooks/use-management-mode";
+import { TableSkeleton } from "@/components/shared";
 
 
 interface Customer {
@@ -67,6 +67,7 @@ const ITEMS_PER_PAGE = 8;
 
 export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [loading, setLoading] = useState(true);
   const { hasPermission, isAdmin } = usePermissions();
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -93,6 +94,7 @@ export default function CustomersPage() {
   const loadCustomers = async () => {
     const data = await getCustomers();
     setCustomers(data);
+    setLoading(false);
   };
 
   useEffect(() => {
@@ -318,7 +320,9 @@ export default function CustomersPage() {
               />
             </div>
 
-            {paginatedCustomers.length ? (
+            {loading ? (
+              <TableSkeleton columns={7} rows={8} />
+            ) : paginatedCustomers.length ? (
               <>
                 <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
                   <Table>

@@ -26,6 +26,7 @@ import {
   DataTableToolbar,
   EmptyState,
   PaginationControls,
+  TableSkeleton,
   PermissionGuard,
 } from "@/components/shared";
 import { toast } from "sonner";
@@ -173,14 +174,7 @@ export default function ProductsPage() {
               />
 
               {loading ? (
-                <div className="flex items-center justify-center py-16">
-                  <div className="flex flex-col items-center gap-3">
-                    <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-                    <p className="text-sm text-muted-foreground font-medium">
-                      جاري تحميل الأصناف...
-                    </p>
-                  </div>
-                </div>
+                <TableSkeleton columns={6} rows={8} />
               ) : paginated.length > 0 ? (
                 <>
                   <div className="rounded-lg border overflow-hidden">
