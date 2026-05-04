@@ -290,8 +290,34 @@ export async function createSalesInvoice(data: {
 
     // 3.1. إنشاء قيد المحاسبة (Auto-Posting)
     // ✅ [مصلح] الفاتورة المعلقة (pending) لا تُنشئ قيد إيراد — تجنب تضخيم الإيرادات مبكراً
-    const customerAccountId = invoice.customer?.accountId;
-    if (!customerAccountId) throw new Error("العميل غير مربوط بحساب محاسبي");
+    let customerAccountId = invoice.customer?.accountId;
+    if (!customerAccountId) {
+      const custParent = await tx.account.findUnique({ where: { code: "1202" } });
+      if (!custParent) throw new Error("حساب العملاء الرئيسي (1202) غير موجود");
+
+      const customerCode = await tx.customer.findUnique({ where: { id: invoice.customerId }, select: { code: true } });
+      if (!customerCode) throw new Error("العميل غير موجود");
+
+      const accountCode = `1202${customerCode.code.toString().padStart(4, "0")}`;
+      const newAccount = await tx.account.create({
+        data: {
+          code: accountCode,
+          name: `${customerCode.code} - ${invoice.customerName}`,
+          type: "ASSET",
+          parentId: custParent.id,
+          level: 4,
+          isTerminal: true,
+          isSelectable: true,
+        },
+      });
+
+      await tx.customer.update({
+        where: { id: invoice.customerId },
+        data: { accountId: newAccount.id },
+      });
+
+      customerAccountId = newAccount.id;
+    }
 
     if (data.status !== "pending") {
       const salesRevenueAccount = await tx.account.findUnique({
@@ -777,7 +803,35 @@ export async function updateSalesInvoice(
       },
     });
 
-    const customerAccountId = invoice.customer?.accountId;
+    let customerAccountId = invoice.customer?.accountId;
+    if (!customerAccountId) {
+      const custParent = await tx.account.findUnique({ where: { code: "1202" } });
+      if (!custParent) throw new Error("حساب العملاء الرئيسي (1202) غير موجود");
+
+      const customerCode = await tx.customer.findUnique({ where: { id: invoice.customerId }, select: { code: true } });
+      if (!customerCode) throw new Error("العميل غير موجود");
+
+      const accountCode = `1202${customerCode.code.toString().padStart(4, "0")}`;
+      const newAccount = await tx.account.create({
+        data: {
+          code: accountCode,
+          name: `${customerCode.code} - ${invoice.customerName}`,
+          type: "ASSET",
+          parentId: custParent.id,
+          level: 4,
+          isTerminal: true,
+          isSelectable: true,
+        },
+      });
+
+      await tx.customer.update({
+        where: { id: invoice.customerId },
+        data: { accountId: newAccount.id },
+      });
+
+      customerAccountId = newAccount.id;
+    }
+    
     if (customerAccountId) {
       const salesRevenueAccount = await tx.account.findUnique({
         where: { code: "4101" },

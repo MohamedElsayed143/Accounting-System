@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
-import { Trash2, Phone, MapPin, Hash, User, Search, Edit3, AlertTriangle, Tag, PackagePlus, Wallet } from "lucide-react";
+import { useState, useMemo, useEffect, useTransition } from "react";
+import { Trash2, Phone, MapPin, Hash, User, Search, Edit3, AlertTriangle, Tag, PackagePlus, Wallet, Loader2 } from "lucide-react";
 import { Navbar } from "@/components/layout/navbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -74,6 +74,7 @@ export default function SuppliersPage() {
   const [deleteSupplier, setDeleteSupplier] = useState<Supplier | null>(null);
   const { isManagementActive, toggleManagementMode, isUserAdmin } = useManagementMode();
   const [isPassGateOpen, setIsPassGateOpen] = useState(false);
+  const [isSaving, startSaving] = useTransition();
 
 
   const [formData, setFormData] = useState({
@@ -161,65 +162,66 @@ export default function SuppliersPage() {
   /* =========================
      ✅ الحفظ في DB مع معالجة الأخطاء
   ========================= */
-  const handleSave = async () => {
-    try {
-      if (!formData.name || !formData.code) {
-        toast.error("الاسم والكود مطلوبان", {
-          description: "يرجى ملء جميع الحقول المطلوبة قبل الحفظ",
-          duration: 4000,
-        });
-        return;
-      }
-
-      // ✅ فحص الكود المكرر محلياً
-      const codeExists = suppliers.some(
-        (supplier) =>
-          supplier.code === Number(formData.code) &&
-          supplier.id !== editingSupplier?.id
-      );
-
-      if (codeExists) {
-        setCodeError(`الكود ${formData.code} مستخدم بالفعل، يرجى اختيار كود مختلف.`);
-        return;
-      }
-
-      await saveSupplier({
-        id: editingSupplier?.id,
-        name: formData.name,
-        code: Number(formData.code),
-        phone: formData.phone,
-        address: formData.address,
-        category: formData.category,
+  const handleSave = () => {
+    if (!formData.name || !formData.code) {
+      toast.error("الاسم والكود مطلوبان", {
+        description: "يرجى ملء جميع الحقول المطلوبة قبل الحفظ",
+        duration: 4000,
       });
-
-      await loadSuppliers();
-
-      toast.success(
-        editingSupplier ? "تم التحديث بنجاح" : "تمت الإضافة بنجاح",
-        {
-          description: editingSupplier
-            ? `تم تحديث بيانات ${formData.name} بنجاح`
-            : `تمت إضافة المورد ${formData.name} إلى قاعدة البيانات`,
-          duration: 3000,
-        }
-      );
-
-      setIsModalOpen(false);
-    } catch (err) {
-      // ✅ Server Actions بترمي objects مش Error instances عادية
-      const errorMessage =
-        err instanceof Error
-          ? err.message
-          : typeof err === "object" && err !== null && "message" in err
-          ? String((err as { message: unknown }).message)
-          : "حدث خطأ أثناء الحفظ";
-
-      toast.error("فشل في حفظ البيانات", {
-        description: errorMessage,
-        duration: 5000,
-        icon: <AlertTriangle className="h-5 w-5" />,
-      });
+      return;
     }
+
+    // ✅ فحص الكود المكرر محلياً
+    const codeExists = suppliers.some(
+      (supplier) =>
+        supplier.code === Number(formData.code) &&
+        supplier.id !== editingSupplier?.id
+    );
+
+    if (codeExists) {
+      setCodeError(`الكود ${formData.code} مستخدم بالفعل، يرجى اختيار كود مختلف.`);
+      return;
+    }
+
+    startSaving(async () => {
+      try {
+        await saveSupplier({
+          id: editingSupplier?.id,
+          name: formData.name,
+          code: Number(formData.code),
+          phone: formData.phone,
+          address: formData.address,
+          category: formData.category,
+        });
+
+        await loadSuppliers();
+
+        toast.success(
+          editingSupplier ? "تم التحديث بنجاح" : "تمت الإضافة بنجاح",
+          {
+            description: editingSupplier
+              ? `تم تحديث بيانات ${formData.name} بنجاح`
+              : `تمت إضافة المورد ${formData.name} إلى قاعدة البيانات`,
+            duration: 3000,
+          }
+        );
+
+        setIsModalOpen(false);
+      } catch (err) {
+        const errorMessage =
+          err instanceof Error
+            ? err.message
+            : typeof err === "object" && err !== null && "message" in err
+            ? String((err as { message: unknown }).message)
+            : "حدث خطأ أثناء الحفظ";
+
+        toast.error("فشل في حفظ البيانات", {
+          description: errorMessage,
+          duration: 5000,
+          icon: <AlertTriangle className="h-5 w-5" />,
+        });
+      }
+    });
   };
 
   /* =========================
@@ -589,9 +591,11 @@ export default function SuppliersPage() {
             <DialogFooter className="gap-2">
               <Button
                 onClick={handleSave}
-                className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+                disabled={isSaving}
+                className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 gap-2"
               >
-                {editingSupplier ? "حفظ التعديلات" : "إضافة المورد"}
+                {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+                {isSaving ? "جاري الحفظ..." : editingSupplier ? "حفظ التعديلات" : "إضافة المورد"}
               </Button>
               <Button
                 variant="outline"

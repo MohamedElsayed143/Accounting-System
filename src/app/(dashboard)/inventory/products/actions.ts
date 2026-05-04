@@ -15,9 +15,11 @@ export interface ProductData extends Product {
   taxRate: number;
 }
 
-// دالة مساعدة لتوليد كود فريد للمنتج
+// دالة مساعدة لتوليد كود فريد للمنتج — قراءة سريعة من sequence
 export async function getNextProductCode(): Promise<string> {
-  const sequence = await (await getTenantPrisma()).systemSequence.findUnique({
+  const db = await getTenantPrisma();
+  // استخدام findFirst مع orderBy لسرعة أكبر من upsert
+  const sequence = await db.systemSequence.findUnique({
     where: { id: "Product" },
     select: { lastValue: true },
   });
@@ -213,9 +215,10 @@ export async function getProductCurrentStock(productId: number): Promise<number>
   return result?.currentStock ?? 0;
 }
 
-// دالة البحث عن الأصناف (للكمال التلقائي)
+// دالة البحث عن الأصناف (للإكمال التلقائي) — محسّنة بـ select بدلاً من include كامل
 export async function searchProducts(query: string, onlyInStock: boolean = false): Promise<ProductData[]> {
-  const products = await (await getTenantPrisma()).product.findMany({
+  const db = await getTenantPrisma();
+  const products = await db.product.findMany({
     where: {
       isActive: true,
       ...(onlyInStock ? { currentStock: { gt: 0 } } : {}),
@@ -224,14 +227,62 @@ export async function searchProducts(query: string, onlyInStock: boolean = false
         { code: { contains: query, mode: "insensitive" } },
       ],
     },
-    take: 10,
+    take: 12,
     orderBy: { name: "asc" },
-    include: {
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      unit: true,
+      buyPrice: true,
+      sellPrice: true,
+      profitMargin: true,
+      taxRate: true,
+      minStock: true,
+      currentStock: true,
+      isActive: true,
+      categoryId: true,
+      createdAt: true,
+      updatedAt: true,
+      imageUrl: true,
       category: { select: { id: true, name: true } },
     },
   });
 
-  return products as ProductData[];
+  return products as unknown as ProductData[];
+}
+
+// جلب أول 15 صنف بدون بحث (للتحميل المسبق عند فتح القائمة)
+export async function getTopProducts(onlyInStock: boolean = false): Promise<ProductData[]> {
+  const db = await getTenantPrisma();
+  const products = await db.product.findMany({
+    where: {
+      isActive: true,
+      ...(onlyInStock ? { currentStock: { gt: 0 } } : {}),
+    },
+    take: 15,
+    orderBy: { name: "asc" },
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      unit: true,
+      buyPrice: true,
+      sellPrice: true,
+      profitMargin: true,
+      taxRate: true,
+      minStock: true,
+      currentStock: true,
+      isActive: true,
+      categoryId: true,
+      createdAt: true,
+      updatedAt: true,
+      imageUrl: true,
+      category: { select: { id: true, name: true } },
+    },
+  });
+
+  return products as unknown as ProductData[];
 }
 
 /**

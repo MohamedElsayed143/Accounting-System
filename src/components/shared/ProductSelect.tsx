@@ -17,7 +17,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { searchProducts, type ProductData } from "@/app/(dashboard)/inventory/products/actions";
+import { searchProducts, getTopProducts, type ProductData } from "@/app/(dashboard)/inventory/products/actions";
 
 interface ProductSelectProps {
   onSelect: (product: ProductData) => void;
@@ -30,14 +30,46 @@ export function ProductSelect({ onSelect, disabled, onlyInStock = false }: Produ
   const [query, setQuery] = React.useState("");
   const [products, setProducts] = React.useState<ProductData[]>([]);
   const [loading, setLoading] = React.useState(false);
+  const [preloaded, setPreloaded] = React.useState(false);
 
-  // Debounce search
+  // تحميل مسبق عند فتح القائمة (قبل الكتابة)
   React.useEffect(() => {
-    const timer = setTimeout(async () => {
-      if (!query.trim()) {
-        setProducts([]);
-        return;
+    if (open && !preloaded && !query.trim()) {
+      setLoading(true);
+      getTopProducts(onlyInStock)
+        .then((results) => {
+          setProducts(results);
+          setPreloaded(true);
+        })
+        .catch(console.error)
+        .finally(() => setLoading(false));
+    }
+  }, [open, preloaded, onlyInStock, query]);
+
+  // إعادة ضبط عند الإغلاق
+  React.useEffect(() => {
+    if (!open) {
+      setQuery("");
+      setPreloaded(false);
+      setProducts([]);
+    }
+  }, [open]);
+
+  // Debounce البحث — 200ms بدلاً من 300ms
+  React.useEffect(() => {
+    if (!query.trim()) {
+      // عند حذف النص، أعد عرض الـ preloaded
+      if (preloaded) {
+        setLoading(true);
+        getTopProducts(onlyInStock)
+          .then(setProducts)
+          .catch(console.error)
+          .finally(() => setLoading(false));
       }
+      return;
+    }
+
+    const timer = setTimeout(async () => {
       setLoading(true);
       try {
         const results = await searchProducts(query, onlyInStock);
@@ -47,10 +79,10 @@ export function ProductSelect({ onSelect, disabled, onlyInStock = false }: Produ
       } finally {
         setLoading(false);
       }
-    }, 300);
+    }, 200);
 
     return () => clearTimeout(timer);
-  }, [query]);
+  }, [query, onlyInStock, preloaded]);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -84,7 +116,7 @@ export function ProductSelect({ onSelect, disabled, onlyInStock = false }: Produ
             {!loading && products.length === 0 && query.trim() !== "" && (
               <CommandEmpty>لم يتم العثور على نتائج.</CommandEmpty>
             )}
-            {!loading && query.trim() === "" && (
+            {!loading && products.length === 0 && query.trim() === "" && !preloaded && (
               <div className="py-6 text-center text-sm text-muted-foreground">
                 اكتب للبحث عن المنتجات...
               </div>

@@ -20,7 +20,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { getCategories } from "../../categories/actions";
-import { getNextProductCode } from "../actions";
 import { toast } from "sonner";
 import { PRODUCT_UNITS } from "@/constants/units";
 import { ImageUploader } from "@/components/shared/ImageUploader";
@@ -56,6 +55,8 @@ interface ProductFormProps {
   }) => Promise<void>;
   initialValues?: Partial<ProductFormValues> & { id?: number };
   title: string;
+  /** أكواد الأصناف الموجودة لتوليد الكود التالي محلياً بدون DB call */
+  existingCodes?: string[];
 }
 
 const defaultValues: ProductFormValues = {
@@ -75,11 +76,11 @@ export function ProductForm({
   onSubmit,
   initialValues,
   title,
+  existingCodes = [],
 }: ProductFormProps) {
   const [values, setValues] = useState<ProductFormValues>(defaultValues);
   const [categories, setCategories] = useState<Category[]>([]);
   const [submitting, setSubmitting] = useState(false);
-  const [loadingCode, setLoadingCode] = useState(false);
   const [updatingFromDiscount, setUpdatingFromDiscount] = useState(false);
   const [updatingFromBuyPrice, setUpdatingFromBuyPrice] = useState(false);
   const [updatingFromSellPrice, setUpdatingFromSellPrice] = useState(false);
@@ -88,18 +89,19 @@ export function ProductForm({
     getCategories().then((cats) => setCategories(cats));
   }, []);
 
-  // توليد كود افتراضي عند فتح النموذج للإضافة
+  // توليد كود افتراضي محلياً بدون استدعاء DB
   useEffect(() => {
     if (open && !initialValues?.id) {
-      setLoadingCode(true);
-      getNextProductCode()
-        .then((code) => {
-          setValues((prev) => ({ ...prev, code }));
-        })
-        .catch(() => toast.error("فشل في توليد الكود الافتراضي"))
-        .finally(() => setLoadingCode(false));
+      // استخراج أكبر رقم من الأكواد الموجودة وإضافة 1
+      const prdCodes = existingCodes
+        .filter((c) => c.startsWith("PRD-"))
+        .map((c) => parseInt(c.replace("PRD-", ""), 10))
+        .filter((n) => !isNaN(n));
+      const nextNum = prdCodes.length > 0 ? Math.max(...prdCodes) + 1 : 1;
+      const nextCode = `PRD-${String(nextNum).padStart(3, "0")}`;
+      setValues((prev) => ({ ...prev, code: nextCode }));
     }
-  }, [open, initialValues?.id]);
+  }, [open, initialValues?.id, existingCodes]);
 
   // حساب نسبة الخصم بناءً على سعر البيع والشراء
   useEffect(() => {
@@ -236,7 +238,7 @@ export function ProductForm({
               <Label htmlFor="code">كود الصنف *</Label>
               <Input
                 id="code"
-                placeholder={loadingCode ? "جاري التوليد..." : "مثال: PRD-001"}
+                placeholder="مثال: PRD-001"
                 value={values.code}
                 onChange={setField("code")}
                 dir="ltr"

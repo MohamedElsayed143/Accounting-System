@@ -1,42 +1,50 @@
 "use server";
 
 import { getTenantPrisma, publicPrisma } from "@/lib/tenant-prisma";
+import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { getSession } from "@/lib/auth";
 import { triggerStaffActivityAlert } from "@/lib/notifications";
 
-// جلب كل الموردين مع أرصدتهم
+// جلب كل الموردين مع أرصدتهم — استدعاء DB واحد بدلاً من اثنين
 export async function getSuppliers() {
-  const suppliers = await (await getTenantPrisma()).supplier.findMany({
-    orderBy: { code: "asc" },
-  });
+  const db = await getTenantPrisma();
 
-  const accountIds = suppliers.map((s) => s.accountId).filter(Boolean) as number[];
-  
-  const journalSums = await (await getTenantPrisma()).journalItem.groupBy({
-    by: ["accountId"],
-    _sum: { debit: true, credit: true },
-    where: { accountId: { in: accountIds } },
-  });
+  type SupplierRow = {
+    id: number;
+    name: string;
+    code: number;
+    phone: string | null;
+    address: string | null;
+    category: string | null;
+    balance: number;
+  };
 
-  const balanceMap = new Map(
-    journalSums.map((s) => [
-      s.accountId,
-      (s._sum.credit || 0) - (s._sum.debit || 0), // Liabilities = Credit - Debit
-    ])
-  );
+  const rows = await db.$queryRaw<SupplierRow[]>`
+    SELECT
+      s.id,
+      s.name,
+      s.code,
+      s.phone,
+      s.address,
+      s.category,
+      COALESCE(SUM(ji.credit) - SUM(ji.debit), 0)::float AS balance
+    FROM "Supplier" s
+    LEFT JOIN "Account" a ON s."accountId" = a.id
+    LEFT JOIN "JournalItem" ji ON ji."accountId" = a.id
+    GROUP BY s.id, s.name, s.code, s.phone, s.address, s.category
+    ORDER BY s.code ASC
+  `;
 
-  return suppliers.map((supplier) => {
-    return {
-      id: supplier.id,
-      name: supplier.name,
-      code: supplier.code,
-      phone: supplier.phone,
-      address: supplier.address,
-      category: supplier.category,
-      balance: supplier.accountId ? (balanceMap.get(supplier.accountId) || 0) : 0,
-    };
-  });
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    code: r.code,
+    phone: r.phone,
+    address: r.address,
+    category: r.category,
+    balance: Number(r.balance),
+  }));
 }
 
 // إضافة أو تعديل مورد

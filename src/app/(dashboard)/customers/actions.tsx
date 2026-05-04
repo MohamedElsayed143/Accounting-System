@@ -1,49 +1,60 @@
 "use server";
 
 import { getTenantPrisma, publicPrisma } from "@/lib/tenant-prisma";
+import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { getSession } from "@/lib/auth";
 import { hasPermission } from "@/lib/permissions";
 import { triggerStaffActivityAlert } from "@/lib/notifications";
 
-// جلب كل العملاء مع أرصدتهم
+// جلب كل العملاء مع أرصدتهم — استدعاء DB واحد بدلاً من اثنين
 export async function getCustomers() {
   const session = await getSession();
   if (!session) return [];
 
+  const db = await getTenantPrisma();
   const isRestricted = await hasPermission(session.userId, "customers_retail_only");
-  
-  const customers = await (await getTenantPrisma()).customer.findMany({
-    where: isRestricted ? { category: "قطاعي" } : {},
-    orderBy: { code: "asc" },
-  });
 
-  const accountIds = customers.map((c) => c.accountId).filter(Boolean) as number[];
-  
-  const journalSums = await (await getTenantPrisma()).journalItem.groupBy({
-    by: ["accountId"],
-    _sum: { debit: true, credit: true },
-    where: { accountId: { in: accountIds } },
-  });
+  type CustomerRow = {
+    id: number;
+    name: string;
+    code: number;
+    phone: string | null;
+    address: string | null;
+    category: string | null;
+    balance: number;
+  };
 
-  const balanceMap = new Map(
-    journalSums.map((s) => [
-      s.accountId,
-      (s._sum.debit || 0) - (s._sum.credit || 0), // Assets = Debit - Credit
-    ])
-  );
+  const whereClause = isRestricted
+    ? Prisma.sql`WHERE c.category = 'قطاعي'`
+    : Prisma.sql``;
 
-  return customers.map((customer) => {
-    return {
-      id: customer.id,
-      name: customer.name,
-      code: customer.code,
-      phone: customer.phone,
-      address: customer.address,
-      category: customer.category,
-      balance: customer.accountId ? (balanceMap.get(customer.accountId) || 0) : 0,
-    };
-  });
+  const rows = await db.$queryRaw<CustomerRow[]>`
+    SELECT
+      c.id,
+      c.name,
+      c.code,
+      c.phone,
+      c.address,
+      c.category,
+      COALESCE(SUM(ji.debit) - SUM(ji.credit), 0)::float AS balance
+    FROM "Customer" c
+    LEFT JOIN "Account" a ON c."accountId" = a.id
+    LEFT JOIN "JournalItem" ji ON ji."accountId" = a.id
+    ${whereClause}
+    GROUP BY c.id, c.name, c.code, c.phone, c.address, c.category
+    ORDER BY c.code ASC
+  `;
+
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    code: r.code,
+    phone: r.phone,
+    address: r.address,
+    category: r.category,
+    balance: Number(r.balance),
+  }));
 }
 
 // إضافة أو تعديل عميل

@@ -307,6 +307,7 @@ export default function ProductsPage() {
         onClose={() => setFormOpen(false)}
         onSubmit={handleSubmit}
         title={editingProduct ? "تعديل الصنف" : "إضافة صنف جديد"}
+        existingCodes={products.map((p) => p.code)}
         initialValues={
           editingProduct
             ? {
