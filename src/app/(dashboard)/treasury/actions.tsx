@@ -700,9 +700,9 @@ export async function createBank(
 
     revalidatePath("/treasury");
     return { success: true, data: result };
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error creating bank:", error);
-    return { success: false, error: "فشل في إضافة البنك وتزامن الحسابات" };
+    return { success: false, error: error.message || "فشل في إضافة البنك وتزامن الحسابات" };
   }
 }
 
@@ -2180,9 +2180,9 @@ export async function createSafe(
 
     revalidatePath("/treasury");
     return { success: true, data: result };
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error creating safe:", error);
-    return { success: false, error: "فشل في إضافة الخزنة وتزامن الحسابات" };
+    return { success: false, error: error.message || "فشل في إضافة الخزنة وتزامن الحسابات" };
   }
 }
 

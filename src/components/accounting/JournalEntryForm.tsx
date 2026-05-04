@@ -565,7 +565,7 @@ function AccountPicker({ accounts, selectedId, onSelect }: { accounts: Account[]
             </Button>
           </div>
           <CommandList className="max-h-[300px]">
-            <CommandEmpty>لا يوجد حسابات بهذا الاسم</CommandEmpty>
+            <CommandEmpty>{accounts.length === 0 ? "جاري تحميل الحسابات..." : "لا يوجد حسابات بهذا الاسم"}</CommandEmpty>
             <CommandGroup heading="اختر الحساب الفرعي">
               {filteredAccounts.map((acc) => {
                 const isTreasuryOrBank = acc.isTreasury || acc.isBank;

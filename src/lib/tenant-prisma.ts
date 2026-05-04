@@ -17,7 +17,11 @@ import { cache } from "react";
 import { getSession } from "./auth";
 
 // ── Connection pool (one PrismaClient per schema, shared globally) ───────────
-const clientCache = new Map<string, PrismaClient>();
+const globalForClients = global as unknown as { prismaClients: Map<string, PrismaClient> };
+const clientCache = globalForClients.prismaClients || new Map<string, PrismaClient>();
+if (process.env.NODE_ENV !== "production") {
+  globalForClients.prismaClients = clientCache;
+}
 
 export function getPrismaForSchema(tenantSchema: string): PrismaClient {
   if (clientCache.has(tenantSchema)) {

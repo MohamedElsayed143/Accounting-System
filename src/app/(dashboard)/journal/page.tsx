@@ -30,14 +30,11 @@ export default function JournalPage() {
           <Navbar title="قيود اليومية" />
         </div>
         <div className="flex-1 p-4 md:p-8 space-y-8 bg-slate-50/30 dark:bg-transparent min-h-screen print:p-0 print:bg-white print:min-h-0" dir="rtl">
-          {loading ? (
-            <div className="text-center py-20">جاري التحميل...</div>
-          ) : (
-            <JournalList 
-              initialEntries={entries} 
-              companySettings={companySettings} 
-            />
-          )}
+          <JournalList 
+            initialEntries={entries} 
+            companySettings={companySettings} 
+            loading={loading}
+          />
         </div>
       </>
     </PermissionGuard>

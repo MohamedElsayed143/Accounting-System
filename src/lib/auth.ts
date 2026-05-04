@@ -52,6 +52,7 @@ export const getSession = cache(async () => {
 
     return session;
   } catch (error) {
+    console.error("🚨 getSession error:", error);
     return null;
   }
 });

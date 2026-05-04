@@ -158,6 +158,7 @@ export async function createSalesInvoice(data: {
   dueDate?: string;
   printableTitle?: string;
 }) {
+  try {
   const session = await getSession();
   if (!session) throw new Error("يجب تسجيل الدخول أولاً");
 
@@ -563,6 +564,10 @@ export async function createSalesInvoice(data: {
   }
 
   return { invoice: result, stockWarnings };
+  } catch (error: any) {
+    console.error("Error in createSalesInvoice:", error);
+    return { error: error.message || "حدث خطأ أثناء حفظ الفاتورة" };
+  }
 }
 
 export async function updateSalesInvoice(
@@ -595,6 +600,7 @@ export async function updateSalesInvoice(
     printableTitle?: string;
   },
 ) {
+  try {
   const session = await getSession();
   if (!session) throw new Error("يجب تسجيل الدخول أولاً");
 
@@ -1070,6 +1076,10 @@ export async function updateSalesInvoice(
   }
 
   return { invoice: result, stockWarnings };
+  } catch (error: any) {
+    console.error("Error in updateSalesInvoice:", error);
+    return { error: error.message || "حدث خطأ أثناء تعديل الفاتورة" };
+  }
 }
 
 export async function deleteSalesInvoice(id: number) {

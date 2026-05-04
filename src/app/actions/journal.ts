@@ -12,63 +12,41 @@ import { AccountType } from "@prisma/client";
  * Fetches leaf accounts (selectable) for journal entries, including their current balance.
  */
 export async function getJournalSelectableAccounts() {
-  const accounts = await (
-    await getTenantPrisma()
-  ).account.findMany({
-    where: {
-      isTerminal: true,
-      level: 4, // Only Level-4 accounts can have journal entries posted to them
-    },
-    orderBy: { code: "asc" },
-    select: {
-      id: true,
-      code: true,
-      name: true,
-      type: true,
-      treasurySafe: {
-        select: { name: true },
-      },
-      treasuryBank: {
-        select: { name: true },
-      },
-      journalItems: {
-        select: {
-          debit: true,
-          credit: true,
-        },
-      },
-    },
-  });
+  const db = await getTenantPrisma();
+  
+  // Use a raw query to calculate balances on the DB level
+  // This is orders of magnitude faster than fetching all JournalItems into Node.js memory
+  const accountsData = await db.$queryRaw<any[]>`
+    SELECT 
+      a."id", a."code", a."name", a."type",
+      ts."name" as "safeName", tb."name" as "bankName",
+      COALESCE(SUM(ji."debit"), 0)::float as "totalDebit",
+      COALESCE(SUM(ji."credit"), 0)::float as "totalCredit"
+    FROM "Account" a
+    LEFT JOIN "TreasurySafe" ts ON ts."accountId" = a."id"
+    LEFT JOIN "TreasuryBank" tb ON tb."accountId" = a."id"
+    LEFT JOIN "JournalItem" ji ON ji."accountId" = a."id"
+    WHERE a."isTerminal" = true AND a."level" = 4
+    GROUP BY a."id", a."code", a."name", a."type", ts."name", tb."name"
+    ORDER BY a."code" ASC
+  `;
 
-  return accounts.map((acc) => {
-    // Basic balance calculation
-    const totalDebit = (acc as any).journalItems.reduce(
-      (sum: number, item: any) => sum + (Number(item.debit) || 0),
-      0,
-    );
-    const totalCredit = (acc as any).journalItems.reduce(
-      (sum: number, item: any) => sum + (Number(item.credit) || 0),
-      0,
-    );
-
+  return accountsData.map((acc) => {
     // For Assets and Expenses: Balance = Debit - Credit
     // For Liabilities, Equity, and Revenue: Balance = Credit - Debit (Standard accounting representation)
-    // However, for "money determining", a simple Debit - Credit is often what users mean for Cash/Bank.
-    // Let's stick to standard nature-based balance for correctness in a professional system.
     let balance = 0;
     if (acc.type === "ASSET" || acc.type === "EXPENSE") {
-      balance = totalDebit - totalCredit;
+      balance = acc.totalDebit - acc.totalCredit;
     } else {
-      balance = totalCredit - totalDebit;
+      balance = acc.totalCredit - acc.totalDebit;
     }
 
-    // Localize Name if linked to a Treasury Entity
     let displayName = acc.name;
-    const a = acc as any;
-    if (a.treasurySafe) {
-      displayName = `${acc.name} - ${a.treasurySafe.name}`;
-    } else if (a.treasuryBank) {
-      displayName = `${acc.name} - ${a.treasuryBank.name}`;
+    // Add safe/bank indication
+    if (acc.safeName) {
+      displayName = `${acc.name} - ${acc.safeName}`;
+    } else if (acc.bankName) {
+      displayName = `${acc.name} - ${acc.bankName}`;
     }
 
     return {
@@ -77,8 +55,8 @@ export async function getJournalSelectableAccounts() {
       name: displayName,
       type: acc.type,
       balance,
-      isTreasury: !!a.treasurySafe,
-      isBank: !!a.treasuryBank,
+      isTreasury: !!acc.safeName,
+      isBank: !!acc.bankName,
     };
   });
 }

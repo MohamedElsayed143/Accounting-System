@@ -94,7 +94,7 @@ export function COASelector({ onSelect, selectedId }: COASelectorProps) {
         <Command>
           <CommandInput placeholder="بحث عن حساب (بالاسم أو الكود)..." className="h-11" />
           <CommandList>
-            <CommandEmpty>لا يوجد نتائج</CommandEmpty>
+            <CommandEmpty>{loading ? "جاري تحميل الحسابات..." : "لا يوجد نتائج"}</CommandEmpty>
             <CommandGroup heading="الحسابات الفرعية">
               {accounts.map((account) => (
                 <CommandItem

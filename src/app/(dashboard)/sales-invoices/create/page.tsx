@@ -596,9 +596,12 @@ function InvoiceFormStep({
       setSaving(true);
       if (isEditMode && invoiceId) {
         const result = await updateSalesInvoice(Number(invoiceId), invoiceData);
+        if (result && 'error' in result) {
+          throw new Error(result.error as string);
+        }
         toast.success(`تم تحديث الفاتورة #${invoiceNumber} بنجاح`);
         if (result.stockWarnings && result.stockWarnings.length > 0) {
-          result.stockWarnings.forEach((w) => {
+          result.stockWarnings.forEach((w: any) => {
             toast.warning(`تنبيه: لا يوجد مخزون كافٍ للصنف "${w}"`, {
               duration: 6000,
             });
@@ -606,9 +609,12 @@ function InvoiceFormStep({
         }
       } else {
         const result = await createSalesInvoice(invoiceData);
+        if (result && 'error' in result) {
+          throw new Error(result.error as string);
+        }
         toast.success(`تم حفظ الفاتورة #${invoiceNumber} بنجاح`);
         if (result.stockWarnings && result.stockWarnings.length > 0) {
-          result.stockWarnings.forEach((w) => {
+          result.stockWarnings.forEach((w: any) => {
             toast.warning(`تنبيه: لا يوجد مخزون كافٍ للصنف "${w}"`, {
               duration: 6000,
             });

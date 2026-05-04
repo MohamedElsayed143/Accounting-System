@@ -52,10 +52,12 @@ interface JournalEntry {
 
 export function JournalList({ 
   initialEntries, 
-  companySettings 
+  companySettings,
+  loading = false
 }: { 
   initialEntries: JournalEntry[]; 
   companySettings?: any;
+  loading?: boolean;
 }) {
   const [searchTerm, setSearchTerm] = React.useState("");
   const { isManagementActive, toggleManagementMode, isUserAdmin } = useManagementMode();
@@ -189,7 +191,12 @@ export function JournalList({
 
         {/* Entries List */}
         <div className="space-y-4">
-          {filteredEntries.length > 0 ? (
+          {loading ? (
+            <div className="py-20 flex flex-col items-center justify-center gap-4 text-center bg-white dark:bg-slate-900 rounded-[3rem] border-2 border-dashed border-slate-100 dark:border-slate-800">
+              <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+              <h3 className="text-xl font-bold text-slate-700 dark:text-slate-300 mt-4">جاري تحميل سجل العمليات...</h3>
+            </div>
+          ) : filteredEntries.length > 0 ? (
             filteredEntries.map((entry) => (
               <Card key={entry.id} className="border-0 shadow-sm hover:shadow-md transition-all bg-white dark:bg-slate-900 ring-1 ring-slate-100 dark:ring-slate-800 rounded-[2rem] overflow-hidden group">
                 <CardContent className="p-0">
