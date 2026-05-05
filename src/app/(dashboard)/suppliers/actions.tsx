@@ -56,103 +56,93 @@ export async function saveSupplier(data: {
   address: string;
   category: string;
 }) {
-  // ✅ فحص إذا كان الكود مستخدماً من قبل مورد آخر
-  let existingSupplier;
+  try {
+    // ✅ فحص إذا كان الكود مستخدماً من قبل مورد آخر
+    let existingSupplier;
 
-  if (data.id) {
-    // تعديل → تجاهل المورد الحالي
-    existingSupplier = await (await getTenantPrisma()).supplier.findFirst({
-      where: {
-        code: data.code,
-        NOT: { id: data.id },
-      },
-    });
-  } else {
-    // إضافة جديد
-    existingSupplier = await (await getTenantPrisma()).supplier.findFirst({
-      where: {
-        code: data.code,
-      },
-    });
-  }
-
-  if (existingSupplier) {
-    throw new Error("❌ كود المورد هذا مستخدم مسبقاً، يرجى اختيار كود آخر.");
-  }
-
-  if (data.id) {
-    // تعديل
-    await (await getTenantPrisma()).supplier.update({
-      where: { id: data.id },
-      data: {
-        name: data.name,
-        code: data.code,
-        phone: data.phone,
-        address: data.address,
-        category: data.category,
-      },
-    });
-
-    // Update linked account name if it exists
-    const supplier = await (await getTenantPrisma()).supplier.findUnique({
-      where: { id: data.id },
-      include: { account: true }
-    });
-    if (supplier?.accountId) {
-      await (await getTenantPrisma()).account.update({
-        where: { id: supplier.accountId },
-        data: { name: `${supplier.code} - ${supplier.name}` }
+    if (data.id) {
+      existingSupplier = await (await getTenantPrisma()).supplier.findFirst({
+        where: { code: data.code, NOT: { id: data.id } },
+      });
+    } else {
+      existingSupplier = await (await getTenantPrisma()).supplier.findFirst({
+        where: { code: data.code },
       });
     }
 
-    const session = await getSession();
-    if (session) {
-      triggerStaffActivityAlert(
-        session.user,
-        "تعديل مورد",
-        `تم تعديل بيانات المورد: ${data.name} (كود: ${data.code})`
-      );
+    if (existingSupplier) {
+      return { error: "❌ الكود مستخدم مسبقاً، اختر كود آخر" };
     }
-  } else {
-    // إضافة جديد
-    await (await getTenantPrisma()).$transaction(async (tx) => {
-      // 1. Create the account in COA first
-      const suppParent = await tx.account.findUnique({ where: { code: '2101' } });
-      if (!suppParent) throw new Error("حساب الموردين الرئيسي (2101) غير موجود");
 
-      const accountCode = `2101${data.code.toString().padStart(4, '0')}`;
-      const account = await tx.account.create({
+    if (data.id) {
+      await (await getTenantPrisma()).supplier.update({
+        where: { id: data.id },
         data: {
-          code: accountCode,
-          name: `${data.code} - ${data.name}`,
-          type: 'LIABILITY',
-          parentId: suppParent.id,
-          level: 4,
-          isTerminal: true,
-          isSelectable: true,
-        }
-      });
-
-      // 2. Create the supplier and link to account
-      await tx.supplier.create({
-        data: {
-          ...data,
-          accountId: account.id
+          name: data.name,
+          code: data.code,
+          phone: data.phone,
+          address: data.address,
+          category: data.category,
         },
       });
-    });
 
-    const session = await getSession();
-    if (session) {
-      triggerStaffActivityAlert(
-        session.user,
-        "إضافة مورد",
-        `تم إضافة مورد جديد: ${data.name} (كود: ${data.code})`
-      );
+      const supplier = await (await getTenantPrisma()).supplier.findUnique({
+        where: { id: data.id },
+        include: { account: true }
+      });
+      if (supplier?.accountId) {
+        await (await getTenantPrisma()).account.update({
+          where: { id: supplier.accountId },
+          data: { name: `${supplier.code} - ${supplier.name}` }
+        });
+      }
+
+      const session = await getSession();
+      if (session) {
+        triggerStaffActivityAlert(
+          session.user,
+          "تعديل مورد",
+          `تم تعديل بيانات المورد: ${data.name} (كود: ${data.code})`
+        );
+      }
+    } else {
+      await (await getTenantPrisma()).$transaction(async (tx) => {
+        const suppParent = await tx.account.findUnique({ where: { code: '2101' } });
+        if (!suppParent) throw new Error("حساب الموردين الرئيسي (2101) غير موجود");
+
+        const accountCode = `2101${data.code.toString().padStart(4, '0')}`;
+        const account = await tx.account.create({
+          data: {
+            code: accountCode,
+            name: `${data.code} - ${data.name}`,
+            type: 'LIABILITY',
+            parentId: suppParent.id,
+            level: 4,
+            isTerminal: true,
+            isSelectable: true,
+          }
+        });
+
+        await tx.supplier.create({
+          data: { ...data, accountId: account.id },
+        });
+      });
+
+      const session = await getSession();
+      if (session) {
+        triggerStaffActivityAlert(
+          session.user,
+          "إضافة مورد",
+          `تم إضافة مورد جديد: ${data.name} (كود: ${data.code})`
+        );
+      }
     }
-  }
 
-  revalidatePath("/suppliers");
+    revalidatePath("/suppliers");
+    return { success: true };
+  } catch {
+    return { error: "حدث خطأ أثناء الحفظ" };
+  }
 }
 
 // حذف مورد

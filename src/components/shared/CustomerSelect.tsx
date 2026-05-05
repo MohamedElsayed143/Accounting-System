@@ -40,19 +40,29 @@ export function CustomerSelect({ onSelect, selectedId, selectedName, selectedCod
   const [loading, setLoading] = useState(true);
   const [searchValue, setSearchValue] = useState("");
 
-  useEffect(() => {
-    async function fetchCustomers() {
-      try {
-        const data = await getCustomers();
-        setCustomers(data);
-      } catch (err) {
-        console.error("Failed to fetch customers:", err);
-      } finally {
-        setLoading(false);
-      }
+  const fetchCustomers = async () => {
+    setLoading(true);
+    try {
+      const data = await getCustomers();
+      setCustomers(data);
+    } catch (err) {
+      console.error("Failed to fetch customers:", err);
+    } finally {
+      setLoading(false);
     }
+  };
+
+  // جلب أولي عند تحميل المكوّن
+  useEffect(() => {
     fetchCustomers();
   }, []);
+
+  // إعادة الجلب كلما فُتح القائمة المنسدلة — يضمن ظهور العملاء الجدد فوراً
+  useEffect(() => {
+    if (open) {
+      fetchCustomers();
+    }
+  }, [open]);
 
   const selectedCustomer = customers.find((c) => c.id === selectedId);
 

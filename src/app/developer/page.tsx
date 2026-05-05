@@ -565,6 +565,7 @@ function EditUserForm({ user, onSuccess, onCancel }: { user: UserData; onSuccess
   const [username, setUsername] = useState(user.username);
   const [password, setPassword] = useState("");
   const [email, setEmail] = useState(user.email || "");
+  const [maxDevices, setMaxDevices] = useState(user.maxDevices || 1);
   const [showPass, setShowPass] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -572,7 +573,7 @@ function EditUserForm({ user, onSuccess, onCancel }: { user: UserData; onSuccess
     e.preventDefault();
     if (!username) { toast.error("اسم المستخدم مطلوب"); return; }
     setSaving(true);
-    const res = await updateUserCredentials(user.id, { username, email: email || null, password: password || undefined });
+    const res = await updateUserCredentials(user.id, { username, email: email || null, password: password || undefined, maxDevices });
     setSaving(false);
     if (res.success) { toast.success("تم تحديث بيانات المستخدم بنجاح ✓"); onSuccess(); }
     else toast.error(res.error || "فشل في التحديث");
@@ -602,6 +603,10 @@ function EditUserForm({ user, onSuccess, onCancel }: { user: UserData; onSuccess
 
           <Field label="البريد الإلكتروني (اختياري)" icon={<Mail className="w-3.5 h-3.5" />}>
             <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="user@example.com" className={inputCls} />
+          </Field>
+
+          <Field label="عدد الأجهزة المسموح بها" icon={<Monitor className="w-3.5 h-3.5" />}>
+            <input type="number" min={1} max={10} value={maxDevices} onChange={(e) => setMaxDevices(parseInt(e.target.value) || 1)} className={inputCls} />
           </Field>
         </div>
 

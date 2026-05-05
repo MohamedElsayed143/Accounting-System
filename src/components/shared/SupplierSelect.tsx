@@ -40,19 +40,29 @@ export function SupplierSelect({ onSelect, selectedId, selectedName, selectedCod
   const [loading, setLoading] = useState(true);
   const [searchValue, setSearchValue] = useState("");
 
-  useEffect(() => {
-    async function fetchSuppliers() {
-      try {
-        const data = await getSuppliers();
-        setSuppliers(data);
-      } catch (err) {
-        console.error("Failed to fetch suppliers:", err);
-      } finally {
-        setLoading(false);
-      }
+  const fetchSuppliers = async () => {
+    setLoading(true);
+    try {
+      const data = await getSuppliers();
+      setSuppliers(data);
+    } catch (err) {
+      console.error("Failed to fetch suppliers:", err);
+    } finally {
+      setLoading(false);
     }
+  };
+
+  // جلب أولي عند تحميل المكوّن
+  useEffect(() => {
     fetchSuppliers();
   }, []);
+
+  // إعادة الجلب كلما فُتح القائمة المنسدلة — يضمن ظهور الموردين الجدد فوراً
+  useEffect(() => {
+    if (open) {
+      fetchSuppliers();
+    }
+  }, [open]);
 
   const selectedSupplier = suppliers.find((s) => s.id === selectedId);
 

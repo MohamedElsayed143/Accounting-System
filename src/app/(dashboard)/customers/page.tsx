@@ -186,7 +186,7 @@ export default function CustomersPage() {
 
     startSaving(async () => {
       try {
-        await saveCustomer({
+        const result = await saveCustomer({
           id: editingCustomer?.id,
           name: formData.name,
           code: Number(formData.code),
@@ -194,6 +194,16 @@ export default function CustomersPage() {
           address: formData.address,
           category: formData.category,
         });
+
+        // ✅ فحص إذا كان الحفظ فشل (الـ action تُعيد { error } بدل throw)
+        if (result && "error" in result) {
+          toast.error("فشل في حفظ البيانات", {
+            description: result.error as string,
+            duration: 5000,
+            icon: <AlertTriangle className="h-5 w-5" />,
+          });
+          return;
+        }
 
         await loadCustomers();
 

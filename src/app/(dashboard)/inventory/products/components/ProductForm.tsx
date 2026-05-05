@@ -85,23 +85,37 @@ export function ProductForm({
   const [updatingFromBuyPrice, setUpdatingFromBuyPrice] = useState(false);
   const [updatingFromSellPrice, setUpdatingFromSellPrice] = useState(false);
 
+  // جلب التصنيفات مرة واحدة عند التحميل
   useEffect(() => {
     getCategories().then((cats) => setCategories(cats));
   }, []);
 
-  // توليد كود افتراضي محلياً بدون استدعاء DB
+  // ✅ تهيئة النموذج وتوليد الكود في useEffect واحد لتجنب التعارض بين الـ effects
   useEffect(() => {
-    if (open && !initialValues?.id) {
-      // استخراج أكبر رقم من الأكواد الموجودة وإضافة 1
-      const prdCodes = existingCodes
+    if (!open) return;
+
+    // توليد كود تلقائي للصنف الجديد من الأكواد الموجودة
+    let autoCode = initialValues?.code ?? "";
+    if (!initialValues?.id && !autoCode) {
+      const prdCodes = (existingCodes ?? [])
         .filter((c) => c.startsWith("PRD-"))
         .map((c) => parseInt(c.replace("PRD-", ""), 10))
         .filter((n) => !isNaN(n));
       const nextNum = prdCodes.length > 0 ? Math.max(...prdCodes) + 1 : 1;
-      const nextCode = `PRD-${String(nextNum).padStart(3, "0")}`;
-      setValues((prev) => ({ ...prev, code: nextCode }));
+      autoCode = `PRD-${String(nextNum).padStart(3, "0")}`;
     }
-  }, [open, initialValues?.id, existingCodes]);
+
+    setValues({
+      ...defaultValues,
+      ...initialValues,
+      code: autoCode,                          // ✅ الكود المُولَّد أو المحدَّد مسبقاً
+      buyPrice: initialValues?.buyPrice ?? "",
+      sellPrice: initialValues?.sellPrice ?? "",
+      categoryId: initialValues?.categoryId ?? "",
+      discountPercent: "",                     // يُحسب تلقائياً بواسطة useEffect الخاص به
+      imageUrl: initialValues?.imageUrl ?? "",
+    });
+  }, [open, initialValues, existingCodes]);
 
   // حساب نسبة الخصم بناءً على سعر البيع والشراء
   useEffect(() => {
@@ -210,20 +224,8 @@ export function ProductForm({
     }
   };
 
-  useEffect(() => {
-    if (open) {
-      setValues({
-        ...defaultValues,
-        ...initialValues,
-        code: initialValues?.code ?? values.code,
-        buyPrice: initialValues?.buyPrice ?? "",
-        sellPrice: initialValues?.sellPrice ?? "",
-        categoryId: initialValues?.categoryId ?? "",
-        discountPercent: "", // سيتم حسابه تلقائياً بواسطة useEffect
-        imageUrl: initialValues?.imageUrl ?? "",
-      });
-    }
-  }, [open, initialValues]);
+
+
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
